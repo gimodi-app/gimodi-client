@@ -652,6 +652,11 @@ chatService.addEventListener('cleared', onChatCleared);
     clientNicknameMap.set(c.id, c.nickname);
   }
 
+  const tabBar = document.querySelector('.tab-bar');
+  if (tabBar) {
+    tabBar.addEventListener('wheel', onTabBarWheel, { passive: false });
+  }
+
   renderTabs();
   updateInputForTab();
 
@@ -681,6 +686,10 @@ export function cleanup() {
   chatInput.removeEventListener('input', onChatInputForTyping);
   chatInput.removeEventListener('input', onChatInputForMentions);
   chatInput.removeEventListener('input', onChatInputForCharCount);
+  const tabBar = document.querySelector('.tab-bar');
+  if (tabBar) {
+    tabBar.removeEventListener('wheel', onTabBarWheel);
+  }
   chatService.removeEventListener('message', onMessage);
   chatService.removeEventListener('link-preview', onLinkPreview);
   chatService.removeEventListener('preview-removed', onPreviewRemoved);
@@ -2069,6 +2078,16 @@ export function appendSystemMessage(text) {
 
 function scrollToBottom() {
   chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+/**
+ * @param {WheelEvent} e
+ */
+function onTabBarWheel(e) {
+  if (e.deltaY !== 0) {
+    e.preventDefault();
+    e.currentTarget.scrollLeft += e.deltaY;
+  }
 }
 
 function onChatScroll() {
