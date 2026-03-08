@@ -181,6 +181,20 @@
               <i class="bi bi-lock-fill"></i> Messages are end-to-end encrypted with OpenPGP when both parties have an identity configured.
             </div>
           </main>
+
+          <!-- Right Side Panel -->
+          <div id="side-panel" class="side-panel hidden">
+            <div class="side-panel-header">
+              <span class="side-panel-title">Search Messages</span>
+              <button id="btn-close-side-panel" class="btn-icon" title="Close"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div class="side-panel-body">
+              <div class="side-panel-search">
+                <input type="text" id="side-panel-search-input" placeholder="Search messages (min 3 chars)..." autocomplete="off">
+              </div>
+              <div id="side-panel-results" class="side-panel-results"></div>
+            </div>
+          </div>
         </div>
       </div>
 

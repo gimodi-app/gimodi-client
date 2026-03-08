@@ -125,6 +125,16 @@ class ChatService extends EventTarget {
   }
 
   /**
+   * Fetches messages surrounding a given timestamp for jump-to-message.
+   * @param {string} channelId
+   * @param {number} timestamp
+   * @returns {Promise<object>}
+   */
+  async fetchContext(channelId, timestamp) {
+    return serverService.request('chat:context', { channelId, timestamp });
+  }
+
+  /**
    * @param {string} messageId
    * @returns {Promise<object>}
    */

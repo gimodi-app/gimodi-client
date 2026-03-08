@@ -2692,6 +2692,66 @@ export function initUnreadState(channels, serverAddress) {
   }
 }
 
+/**
+ * Highlights a message element and removes the highlight after 2 seconds.
+ * @param {HTMLElement} el
+ */
+function highlightMessage(el) {
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('chat-msg-highlight');
+  setTimeout(() => el.classList.remove('chat-msg-highlight'), 2000);
+}
+
+/**
+ * Scrolls to a specific message by ID, loading context from server if needed.
+ * @param {string} messageId
+ * @param {number} timestamp
+ */
+export async function scrollToMessage(messageId, timestamp) {
+  if (!currentChannelId) return;
+
+  if (activeTab.type !== 'channel') {
+    activeTab = { type: 'channel' };
+    channelMessagesCache.length = 0;
+    renderTabs();
+    updateInputForTab();
+    await loadHistory(currentChannelId);
+  }
+
+  const existing = chatMessages.querySelector(`[data-msg-id="${messageId}"]`);
+  if (existing) {
+    highlightMessage(existing);
+    return;
+  }
+
+  try {
+    const result = await chatService.fetchContext(currentChannelId, timestamp);
+    if (!result?.messages?.length) return;
+
+    const sorted = [...result.messages];
+    sorted.sort((a, b) => a.timestamp - b.timestamp);
+
+    const userIds = sorted.map(m => m.userId).filter(Boolean);
+    if (userIds.length > 0) await resolveNicknames(userIds);
+
+    chatMessages.innerHTML = '';
+    paginationState.channel = { oldestTs: sorted[0].timestamp, allLoaded: false, loading: false };
+
+    for (const msg of sorted) {
+      appendMessage(msg);
+    }
+
+    requestAnimationFrame(() => {
+      const target = chatMessages.querySelector(`[data-msg-id="${messageId}"]`);
+      if (target) {
+        highlightMessage(target);
+      }
+    });
+  } catch (err) {
+    console.error('[chat] scrollToMessage failed:', err);
+  }
+}
+
 export function markChannelRead(channelId, serverAddress) {
   const storageKey = `gimodi:lastRead:${serverAddress}`;
   let lastReadMap = {};

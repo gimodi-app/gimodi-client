@@ -950,6 +950,7 @@ label:has(input[type="checkbox"]) {
   display: flex;
   width: 100%;
   height: 100%;
+  position: relative;
 }
 
 .sidebar {
@@ -4530,4 +4531,119 @@ input.is-invalid {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* --- Right Side Panel --- */
+
+.side-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 340px;
+  height: 100%;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+}
+
+.side-panel.open {
+  transform: translateX(0);
+}
+
+.side-panel.hidden {
+  display: none;
+}
+
+.side-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.side-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.side-panel-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.side-panel-search {
+  padding: 10px 12px;
+  flex-shrink: 0;
+}
+
+.side-panel-search input {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.side-panel-search input:focus {
+  border-color: var(--accent);
+}
+
+.side-panel-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 12px;
+}
+
+.search-result-item {
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  cursor: default;
+}
+
+.search-result-nickname {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.search-result-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+
+.search-result-snippet {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.search-result-snippet mark {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--text-primary);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.search-no-results {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 20px 0;
 }

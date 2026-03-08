@@ -8,6 +8,7 @@ import { initChatView, cleanup as cleanupChat, switchChannel as switchChatChanne
 import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoiceServerName } from './views/voice.js';
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
+import { initSidePanel } from './views/side-panel.js';
 
 const log = (...args) => console.log('[app]', ...args);
 
@@ -490,6 +491,7 @@ window.addEventListener('gimodi:connected', async (e) => {
 
   log('Initial channel:', channelId, '(lobby)');
   initChatView(channelId);
+  initSidePanel(getCurrentChannelId);
   initUnreadState(data.channels, address);
 
   // Auto-join first channel when connecting via double-click
