@@ -7,6 +7,7 @@ const nullTarget = {
   userId: null,
   permissions: new Set(),
   serverName: null,
+  serverVersion: null,
   maxFileSize: null,
   tempChannelDeleteDelay: 180,
   address: null,

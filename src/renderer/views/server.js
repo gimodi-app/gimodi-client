@@ -4558,7 +4558,8 @@ export function showUnifiedAdminDialog(initialTab) {
   // Header
   const header = document.createElement('div');
   header.className = 'admin-dialog-header';
-  header.innerHTML = `<h2>Server Admin</h2>`;
+  const versionText = serverService.serverVersion ? ` <span class="admin-dialog-version">v${serverService.serverVersion}</span>` : '';
+  header.innerHTML = `<h2>Server Admin${versionText}</h2>`;
   const closeBtn = document.createElement('button');
   closeBtn.className = 'admin-dialog-close';
   closeBtn.innerHTML = '<i class="bi bi-x-lg"></i>';

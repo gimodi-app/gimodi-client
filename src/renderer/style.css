@@ -4287,6 +4287,20 @@ label:has(input[type="checkbox"]) {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-dialog-version {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  letter-spacing: 0.02em;
 }
 
 .admin-dialog-close {

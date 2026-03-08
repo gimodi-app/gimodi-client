@@ -114,6 +114,7 @@ export class ServerService extends EventTarget {
           this.userId = data.userId || null;
           this.permissions = new Set(data.permissions || []);
           this.serverName = data.serverName;
+          this.serverVersion = data.serverVersion || null;
           this.maxFileSize = data.maxFileSize || null;
           this.tempChannelDeleteDelay = data.tempChannelDeleteDelay || 180;
           this.address = address;
