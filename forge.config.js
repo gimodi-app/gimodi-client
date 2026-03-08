@@ -87,7 +87,7 @@ module.exports = {
       name: '@electron-forge/maker-squirrel',
       platforms: ['win32'],
       config: {
-        name: 'gimodi',
+        name: 'Gimodi',
         authors: 'Gimodi',
         description: 'Gimodi client for Linux, macOS, and Windows',
         setupIcon: 'assets/icon.ico',
@@ -105,11 +105,14 @@ module.exports = {
       platforms: ['linux'],
       config: {
         options: {
+          name: 'gimodi',
+          productName: 'Gimodi',
           maintainer: 'Gimodi',
-          homepage: 'https://github.com/gimodi-app',
+          homepage: 'https://gimodi.com',
           icon: 'assets/icon.png',
           categories: ['Network', 'Chat'],
           mimeType: [],
+          bin: 'gimodi',
         },
       },
     },
@@ -118,7 +121,13 @@ module.exports = {
     {
       name: '@reforged/maker-appimage',
       platforms: ['linux'],
-      config: {},
+      config: {
+        options: {
+          name: 'gimodi',
+          productName: 'Gimodi',
+          bin: 'gimodi',
+        },
+      },
     },
 
     // ── All platforms: .zip ──────────────────────────────────────────────────
