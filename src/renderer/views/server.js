@@ -3390,7 +3390,7 @@ async function showManageBansModal() {
   document.addEventListener('keydown', onEscape);
 }
 
-function showRedeemTokenModal() {
+export function showRedeemTokenModal() {
   const existing = document.querySelector('.modal-redeem-token');
   if (existing) existing.remove();
 
@@ -3434,10 +3434,7 @@ function showRedeemTokenModal() {
         serverService.permissions = new Set(result.permissions);
       }
       window.gimodi.setAdminStatus(serverService.hasPermission('server.admin_menu'));
-      statusEl.textContent = `Token redeemed! You are now ${result.role}.`;
-      statusEl.style.color = 'var(--success, #4caf50)';
-      modal.querySelector('.modal-redeem-btn').disabled = true;
-      input.disabled = true;
+      closeModal();
     } catch (err) {
       statusEl.textContent = err.message;
       statusEl.style.color = 'var(--danger, #f44336)';
