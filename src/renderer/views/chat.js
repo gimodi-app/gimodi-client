@@ -2482,6 +2482,7 @@ function renderTabs() {
     tab.appendChild(closeBtn);
 
     tab.addEventListener('click', () => switchToTab({ type: 'dm', userId: dt.userId, persistentUserId: dt.persistentUserId, nickname: dt.nickname }));
+    tab.addEventListener('contextmenu', (e) => showTabContextMenu(e, { type: 'dm', userId: dt.userId }));
     tabBar.appendChild(tab);
   }
 
@@ -2511,8 +2512,82 @@ function renderTabs() {
     tab.appendChild(closeBtn);
 
     tab.addEventListener('click', () => switchToTab({ type: 'channel-view', channelId: cv.channelId, channelName: cv.channelName }));
+    tab.addEventListener('contextmenu', (e) => showTabContextMenu(e, { type: 'channel-view', channelId: cv.channelId }));
     tabBar.appendChild(tab);
   }
+}
+
+function showTabContextMenu(e, tabInfo) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const existing = document.querySelector('.tab-context-menu');
+  if (existing) existing.remove();
+
+  const menu = document.createElement('div');
+  menu.className = 'context-menu tab-context-menu';
+  menu.style.left = `${e.clientX}px`;
+  menu.style.top = `${e.clientY}px`;
+
+  const closeItem = document.createElement('div');
+  closeItem.className = 'context-menu-item';
+  closeItem.textContent = 'Close Tab';
+  closeItem.addEventListener('click', () => {
+    menu.remove();
+    if (tabInfo.type === 'dm') {
+      closeDmTab(tabInfo.userId);
+    } else {
+      closeChannelViewTab(tabInfo.channelId);
+    }
+  });
+  menu.appendChild(closeItem);
+
+  const closeAllItem = document.createElement('div');
+  closeAllItem.className = 'context-menu-item';
+  closeAllItem.textContent = 'Close All Tabs';
+  closeAllItem.addEventListener('click', () => {
+    menu.remove();
+    for (const t of [...dmTabs]) closeDmTab(t.userId);
+    for (const t of [...channelViewTabs]) closeChannelViewTab(t.channelId);
+  });
+  menu.appendChild(closeAllItem);
+
+  const closeOthersItem = document.createElement('div');
+  closeOthersItem.className = 'context-menu-item';
+  closeOthersItem.textContent = 'Close Other Tabs';
+  closeOthersItem.addEventListener('click', () => {
+    menu.remove();
+    if (tabInfo.type === 'dm') {
+      for (const t of [...dmTabs]) {
+        if (t.userId !== tabInfo.userId) closeDmTab(t.userId);
+      }
+      for (const t of [...channelViewTabs]) closeChannelViewTab(t.channelId);
+    } else {
+      for (const t of [...dmTabs]) closeDmTab(t.userId);
+      for (const t of [...channelViewTabs]) {
+        if (t.channelId !== tabInfo.channelId) closeChannelViewTab(t.channelId);
+      }
+    }
+  });
+  menu.appendChild(closeOthersItem);
+
+  document.body.appendChild(menu);
+
+  const onClickOutside = (ev) => {
+    if (!menu.contains(ev.target)) {
+      menu.remove();
+      document.removeEventListener('click', onClickOutside, true);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', onClickOutside, true), 0);
+
+  const onEscape = (ev) => {
+    if (ev.key === 'Escape') {
+      menu.remove();
+      document.removeEventListener('keydown', onEscape);
+    }
+  };
+  document.addEventListener('keydown', onEscape);
 }
 
 function addTabDragListeners(tab, type, index) {
