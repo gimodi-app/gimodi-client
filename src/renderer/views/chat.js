@@ -300,6 +300,7 @@ function onNickContextMenu(ev) {
   if (!msgEl) return;
   const clientId = msgEl.dataset.clientId;
   const userId = msgEl.dataset.userId;
+  if (clientId === serverService.clientId || userId === serverService.userId) return;
   const nickname = msgEl.dataset.nickname;
   const onlineClient = window.gimodiClients?.find(c =>
     (clientId && c.id === clientId) || (userId && c.userId === userId)
