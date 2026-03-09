@@ -1250,6 +1250,41 @@ export function updateChatBadges(userId, badge) {
   }
 }
 
+/**
+ * Updates nickname colors for all messages from a given user across all tabs.
+ * @param {string} userId
+ * @param {string|null} roleColor
+ */
+export function updateChatNickColors(userId, roleColor) {
+  if (!userId) return;
+  const color = roleColor || nicknameColor();
+
+  const applyColor = (msgEl) => {
+    if (!msgEl.classList?.contains('chat-msg') || msgEl.dataset.userId !== userId) return;
+    msgEl.dataset.roleColor = roleColor || '';
+    for (const nick of msgEl.querySelectorAll('.chat-msg-nick, .compact-nick')) {
+      nick.style.color = color;
+    }
+  };
+
+  for (const msgEl of chatMessages.querySelectorAll(`.chat-msg[data-user-id="${CSS.escape(userId)}"]`)) {
+    applyColor(msgEl);
+  }
+  for (const node of channelMessagesCache) applyColor(node);
+  for (const nodes of channelViewMessagesCache.values()) {
+    for (const node of nodes) applyColor(node);
+  }
+
+  for (const msg of channelMessagesPending) {
+    if (msg.userId === userId) msg.roleColor = roleColor;
+  }
+  for (const msgs of channelViewMessagesPending.values()) {
+    for (const msg of msgs) {
+      if (msg.userId === userId) msg.roleColor = roleColor;
+    }
+  }
+}
+
 // --- Desktop Notifications ---
 
 function resolveMentionsText(text) {
@@ -1386,19 +1421,23 @@ function onMessageDeleted(e) {
       const nickname = (nextUserId && getCachedNickname(nextUserId)) || next.dataset.nickname;
       const headerTime = formatRelativeTime(Number(next.dataset.timestamp));
 
-      // Look up badge for promoted message: prefer live client, fall back to stored dataset value
       let badge = next.dataset.badge || null;
+      let promoteRoleColor = next.dataset.roleColor || null;
       if (window.gimodiClients) {
         const liveClient = (nextClientId && window.gimodiClients.find(c => c.id === nextClientId))
           || (nextUserId && window.gimodiClients.find(c => c.userId === nextUserId));
-        if (liveClient) badge = liveClient.badge || null;
+        if (liveClient) {
+          badge = liveClient.badge || null;
+          promoteRoleColor = liveClient.roleColor || null;
+        }
       }
       const badgeHtml = badge ? `<span class="admin-badge">${escapeHtml(badge)}</span>` : '';
+      const promoteNickColor = promoteRoleColor || nicknameColor();
 
       const header = document.createElement('div');
       header.className = 'chat-msg-header';
       header.innerHTML = `
-        <span class="chat-msg-nick-group"><span class="chat-msg-nick" style="color:${nicknameColor()}">${escapeHtml(nickname)}</span>${badgeHtml}</span>
+        <span class="chat-msg-nick-group"><span class="chat-msg-nick" style="color:${promoteNickColor}">${escapeHtml(nickname)}</span>${badgeHtml}</span>
         <span class="chat-msg-time">${headerTime}</span>
       `;
       next.insertBefore(header, next.firstChild);
@@ -1694,6 +1733,7 @@ function buildMessageEl(msg, prevEl) {
   el.dataset.clientId = msg.clientId || '';
   el.dataset.userId = msg.userId || '';
   el.dataset.badge = msg.badge || '';
+  el.dataset.roleColor = msg.roleColor || '';
   el.dataset.timestamp = msg.timestamp;
   el.dataset.content = msg.content || '';
 
@@ -1729,13 +1769,18 @@ function buildMessageEl(msg, prevEl) {
     bodyHtml = renderMarkdown(msg.content);
   }
 
-  // Look up badge: prefer live client list (up-to-date), fall back to msg.badge (e.g. from history)
+  // Look up badge and role color: prefer live client list (up-to-date), fall back to msg data
   let badge = msg.badge || null;
+  let roleColor = msg.roleColor || null;
   if (window.gimodiClients) {
     const liveClient = (msg.clientId && window.gimodiClients.find(c => c.id === msg.clientId))
       || (msg.userId && window.gimodiClients.find(c => c.userId === msg.userId));
-    if (liveClient) badge = liveClient.badge || null;
+    if (liveClient) {
+      badge = liveClient.badge || null;
+      roleColor = liveClient.roleColor || null;
+    }
   }
+  const nickColor = roleColor || nicknameColor();
 
   const badgeHtml = badge ? `<span class="admin-badge">${escapeHtml(badge)}</span>` : '';
 
@@ -1757,7 +1802,7 @@ function buildMessageEl(msg, prevEl) {
   }
 
   // Compact inline row (hidden in default mode, shown in compact mode)
-  const compactHtml = `<span class="compact-row"><span class="compact-time" title="${escapeHtml(fullTime)}">${compactTime}</span> <span class="compact-nick" style="color:${nicknameColor()}" title="${badge ? escapeHtml(badge) : ''}">${escapeHtml(displayNickname)}</span></span>`;
+  const compactHtml = `<span class="compact-row"><span class="compact-time" title="${escapeHtml(fullTime)}">${compactTime}</span> <span class="compact-nick" style="color:${nickColor}" title="${badge ? escapeHtml(badge) : ''}">${escapeHtml(displayNickname)}</span></span>`;
 
   if (isGrouped) {
     el.classList.add('chat-msg-grouped');
@@ -1773,7 +1818,7 @@ function buildMessageEl(msg, prevEl) {
       ${compactHtml}
       <span class="chat-msg-hover-time">${time}</span>
       <div class="chat-msg-header">
-        <span class="chat-msg-nick-group"><span class="chat-msg-nick" style="color:${nicknameColor()}">${escapeHtml(displayNickname)}</span>${badgeHtml}</span>
+        <span class="chat-msg-nick-group"><span class="chat-msg-nick" style="color:${nickColor}">${escapeHtml(displayNickname)}</span>${badgeHtml}</span>
         <span class="chat-msg-time">${headerTime}</span>${editedLabel}
       </div>
       ${replyRefHtml}
@@ -2439,22 +2484,26 @@ function buildDmMessageEl(msg) {
     || msg.fromNickname
     || '[Anonymous]';
 
-  // Look up badge: prefer live client, fall back to msg.badge (e.g. from history)
   let badge = msg.badge || null;
+  let dmRoleColor = null;
   if (window.gimodiClients) {
     const liveClient = (msg.fromUserId && window.gimodiClients.find(c => c.userId === msg.fromUserId))
       || (msg.fromId && window.gimodiClients.find(c => c.id === msg.fromId));
-    if (liveClient) badge = liveClient.badge || null;
+    if (liveClient) {
+      badge = liveClient.badge || null;
+      dmRoleColor = liveClient.roleColor || null;
+    }
   }
   const badgeHtml = badge ? `<span class="admin-badge">${escapeHtml(badge)}</span>` : '';
+  const dmNickColor = dmRoleColor || '#FFD700';
 
   const fullTime = formatDateTime(msg.timestamp);
   const compactTime = formatTimeShort(msg.timestamp);
-  const compactHtml = `<span class="compact-row"><span class="compact-time" title="${escapeHtml(fullTime)}">${compactTime}</span> <span class="compact-nick" style="color:#FFD700" title="${badge ? escapeHtml(badge) : ''}">${escapeHtml(nickname)}:</span></span>`;
+  const compactHtml = `<span class="compact-row"><span class="compact-time" title="${escapeHtml(fullTime)}">${compactTime}</span> <span class="compact-nick" style="color:${dmNickColor}" title="${badge ? escapeHtml(badge) : ''}">${escapeHtml(nickname)}:</span></span>`;
   el.innerHTML = `
     ${compactHtml}
     <div class="chat-msg-header">
-      <span class="chat-msg-nick-group"><span class="chat-msg-nick" style="color:#FFD700">${escapeHtml(nickname)}</span>${badgeHtml}</span>
+      <span class="chat-msg-nick-group"><span class="chat-msg-nick" style="color:${dmNickColor}">${escapeHtml(nickname)}</span>${badgeHtml}</span>
       <span class="chat-msg-time">${headerTime}</span>
     </div>
     <div class="chat-msg-body">${renderMarkdown(msg.content)}</div>

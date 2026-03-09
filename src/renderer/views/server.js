@@ -2,7 +2,7 @@ import serverService from '../services/server.js';
 import voiceService from '../services/voice.js';
 import screenShareService from '../services/screen.js';
 import { getServerIcon } from '../services/iconCache.js';
-import { setChannelName, openChannelViewTab, switchToChannelTab, updateChatBadges, isChannelUnread } from './chat.js';
+import { setChannelName, openChannelViewTab, switchToChannelTab, updateChatBadges, updateChatNickColors, isChannelUnread } from './chat.js';
 import { setNickname } from '../services/nicknameCache.js';
 import { customAlert, customConfirm, customPrompt } from '../services/dialogs.js';
 
@@ -148,6 +148,7 @@ export function initServerView(data) {
   serverService.addEventListener('channel:updated', onChannelUpdated);
   serverService.addEventListener('channel:joined', onForceJoined);
   serverService.addEventListener('server:admin-changed', onAdminChanged);
+  serverService.addEventListener('role:color-changed', onRoleColorChanged);
 
   // Voice activity
   voiceService.addEventListener('talking-changed', onTalkingChanged);
@@ -208,6 +209,7 @@ export function cleanup() {
   serverService.removeEventListener('channel:updated', onChannelUpdated);
   serverService.removeEventListener('channel:joined', onForceJoined);
   serverService.removeEventListener('server:admin-changed', onAdminChanged);
+  serverService.removeEventListener('role:color-changed', onRoleColorChanged);
   voiceService.removeEventListener('talking-changed', onTalkingChanged);
   serverService.removeEventListener('webcam:started', onWebcamStarted);
   serverService.removeEventListener('webcam:stopped', onWebcamStopped);
@@ -309,6 +311,7 @@ export function restoreState(state) {
   serverService.addEventListener('channel:updated', onChannelUpdated);
   serverService.addEventListener('channel:joined', onForceJoined);
   serverService.addEventListener('server:admin-changed', onAdminChanged);
+  serverService.addEventListener('role:color-changed', onRoleColorChanged);
   voiceService.addEventListener('talking-changed', onTalkingChanged);
   serverService.addEventListener('webcam:started', onWebcamStarted);
   serverService.addEventListener('webcam:stopped', onWebcamStopped);
@@ -640,8 +643,8 @@ function onForceJoined(e) {
 }
 
 function onClientJoined(e) {
-  const { clientId, userId, nickname, channelId, badge } = e.detail;
-  const newClient = { id: clientId, userId: userId || null, nickname, channelId, badge: badge || null };
+  const { clientId, userId, nickname, channelId, badge, roleColor } = e.detail;
+  const newClient = { id: clientId, userId: userId || null, nickname, channelId, badge: badge || null, roleColor: roleColor || null };
   clients.push(newClient);
   window.gimodiClients = clients;
   renderChannelTree();
@@ -665,13 +668,23 @@ function onClientLeft(e) {
 }
 
 function onAdminChanged(e) {
-  const { clientId, badge } = e.detail;
+  const { clientId, badge, roleColor } = e.detail;
   const client = clients.find(c => c.id === clientId);
   if (client) {
     client.badge = badge ?? null;
+    client.roleColor = roleColor ?? null;
     updateChatBadges(client.userId, badge ?? null);
+    updateChatNickColors(client.userId, roleColor ?? null);
   }
   renderChannelTree();
+}
+
+function onRoleColorChanged(e) {
+  const { roleColor, userIds } = e.detail;
+  if (!userIds || !Array.isArray(userIds)) return;
+  for (const userId of userIds) {
+    updateChatNickColors(userId, roleColor ?? null);
+  }
 }
 
 function onPermissionsChanged(e) {
@@ -3535,6 +3548,11 @@ async function renderRolesPanel(container) {
         <div class="roles-detail-content" style="display:none;flex:1;flex-direction:column;min-height:0">
           <div style="padding:12px 16px 8px;border-bottom:1px solid var(--border)">
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+              <div style="width:36px">
+                <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px">Color</label>
+                <div class="roles-color-swatch" style="width:36px;height:28px;border-radius:6px;border:2px solid var(--border);cursor:pointer;background:#FFD700;transition:border-color 0.15s" title="Pick color"></div>
+                <input class="roles-color-input" type="color" value="#FFD700" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none">
+              </div>
               <div style="flex:1">
                 <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px">Role Name</label>
                 <input class="roles-name-input" type="text" style="width:100%;box-sizing:border-box">
@@ -3571,6 +3589,13 @@ async function _initRolesLogic(root) {
   const rolesDetailContent = root.querySelector('.roles-detail-content');
   const nameInput = root.querySelector('.roles-name-input');
   const badgeInput = root.querySelector('.roles-badge-input');
+  const colorInput = root.querySelector('.roles-color-input');
+  const colorSwatch = root.querySelector('.roles-color-swatch');
+
+  colorSwatch.addEventListener('click', () => colorInput.click());
+  colorInput.addEventListener('input', () => { colorSwatch.style.background = colorInput.value; });
+  colorSwatch.addEventListener('mouseenter', () => { colorSwatch.style.borderColor = 'var(--text-muted)'; });
+  colorSwatch.addEventListener('mouseleave', () => { colorSwatch.style.borderColor = 'var(--border)'; });
   const membersContainer = root.querySelector('.roles-members-list');
   const membersSection = root.querySelector('.roles-members-section');
   const permsContainer = root.querySelector('.roles-perms-list');
@@ -3582,6 +3607,7 @@ async function _initRolesLogic(root) {
   let pendingPerms = new Set();
   let pendingName = '';
   let pendingBadge = '';
+  let pendingColor = '';
 
   const renderRolesList = () => {
     rolesList.innerHTML = '';
@@ -3593,6 +3619,11 @@ async function _initRolesLogic(root) {
       if (role.id === selectedRoleId) {
         item.style.background = '#232323';
         item.style.color = '#fff';
+      }
+      if (role.color) {
+        const dot = document.createElement('span');
+        dot.style.cssText = `width:10px;height:10px;border-radius:50%;background:${role.color};flex-shrink:0`;
+        item.appendChild(dot);
       }
       const nameSpan = document.createElement('span');
       nameSpan.style.flex = '1';
@@ -3640,9 +3671,12 @@ async function _initRolesLogic(root) {
     nameInput.value = role.name;
     nameInput.disabled = isStatic;
     badgeInput.value = role.badge || '';
+    colorInput.value = role.color || '#FFD700';
+    colorSwatch.style.background = colorInput.value;
     pendingPerms = new Set(role.permissions || []);
     pendingName = role.name;
     pendingBadge = role.badge || '';
+    pendingColor = role.color || '';
 
     renderPerms(role.id === 'admin');
 
@@ -3880,12 +3914,13 @@ async function _initRolesLogic(root) {
     const isStatic = role.id === 'admin' || role.id === 'user';
     const newName = nameInput.value.trim();
     const newBadge = badgeInput.value.trim() || null;
+    const newColor = colorInput.value || null;
     if (!isStatic && !newName) { await customAlert('Role name cannot be empty.'); return; }
     try {
       if (isStatic) {
-        await serverService.request('role:update', { roleId: role.id, badge: newBadge });
+        await serverService.request('role:update', { roleId: role.id, badge: newBadge, color: newColor });
       } else {
-        await serverService.request('role:update', { roleId: role.id, name: newName, badge: newBadge });
+        await serverService.request('role:update', { roleId: role.id, name: newName, badge: newBadge, color: newColor });
         role.name = newName;
       }
       if (role.id !== 'admin') {
@@ -3893,6 +3928,7 @@ async function _initRolesLogic(root) {
         role.permissions = [...pendingPerms];
       }
       role.badge = newBadge;
+      role.color = newColor;
       renderRolesList();
     } catch (err) { await customAlert(err.message); }
   });
