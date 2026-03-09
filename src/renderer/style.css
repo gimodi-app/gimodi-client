@@ -4448,12 +4448,16 @@ label:has(input[type="checkbox"]) {
   margin-top: 4px;
 }
 
+.form-row + .form-section-header {
+  margin-top: 8px;
+}
+
 .input-footer-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  min-height: 20px;
-  margin-top: 5px;
+  min-height: 16px;
+  margin-top: 2px;
 }
 
 .input-error-msg {
@@ -4591,6 +4595,34 @@ input.is-invalid {
 
 .role-chip i {
   font-size: 14px;
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.form-row > .form-group {
+  margin-bottom: 0;
+}
+
+.form-group-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.form-group-max-users {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.form-group-max-users input {
+  text-align: center;
+}
+
+.acl-password-group {
+  margin-top: 12px;
 }
 
 .moderation-card {

@@ -1844,30 +1844,34 @@ async function showEditChannelModal(ch) {
       <h2>Edit Channel</h2>
 
       <div class="form-section-header">Basic Info</div>
-      <div class="form-group">
-        <label for="edit-ch-name-${uid}">Channel Name</label>
-        <input type="text" id="edit-ch-name-${uid}" class="edit-channel-name"
-               value="${escapeHtml(ch.name)}" maxlength="50" autocomplete="off">
-        <div class="input-footer-row">
-          <span class="input-error-msg" id="edit-ch-name-err-${uid}" role="alert"></span>
-          <span class="char-counter" id="edit-ch-name-ctr-${uid}">${ch.name.length} / 50</span>
+      <div class="form-row">
+        <div class="form-group form-group-grow">
+          <label for="edit-ch-name-${uid}">Channel Name</label>
+          <input type="text" id="edit-ch-name-${uid}" class="edit-channel-name"
+                 value="${escapeHtml(ch.name)}" maxlength="50" autocomplete="off">
+          <div class="input-footer-row">
+            <span class="input-error-msg" id="edit-ch-name-err-${uid}" role="alert"></span>
+            <span class="char-counter" id="edit-ch-name-ctr-${uid}">${ch.name.length} / 50</span>
+          </div>
+        </div>
+        <div class="form-group form-group-max-users">
+          <label for="edit-ch-max-${uid}">Max Users</label>
+          <input type="number" id="edit-ch-max-${uid}" class="edit-channel-max-users"
+                 min="1" placeholder="∞" value="${ch.maxUsers || ''}">
         </div>
       </div>
-      <div class="form-group">
-        <label for="edit-ch-max-${uid}">Max Users <span class="form-hint">(blank = unlimited)</span></label>
-        <input type="number" id="edit-ch-max-${uid}" class="edit-channel-max-users"
-               min="1" placeholder="Unlimited" value="${ch.maxUsers || ''}">
-      </div>
-
-      <div class="form-section-header">Security</div>
-      <div class="form-group">
-        <label for="edit-ch-pw-${uid}">New Password <span class="form-hint">(blank = keep unchanged)</span></label>
-        <input type="password" id="edit-ch-pw-${uid}" class="edit-channel-password"
-               placeholder="Enter new password" autocomplete="new-password">
-      </div>
-      ${removePwHtml}
 
       ${rolesHtml}
+
+      ${!rolesHtml ? '<div class="form-section-header">Access Control</div>' : ''}
+      <div class="acl-password-group">
+        <div class="form-group">
+          <label for="edit-ch-pw-${uid}">Channel Password <span class="form-hint">(blank = keep unchanged)</span></label>
+          <input type="password" id="edit-ch-pw-${uid}" class="edit-channel-password"
+                 placeholder="Enter new password" autocomplete="new-password">
+        </div>
+        ${removePwHtml}
+      </div>
 
       <div class="form-section-header">Voice Power</div>
       <div class="moderation-card">
