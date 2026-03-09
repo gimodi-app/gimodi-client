@@ -65,7 +65,7 @@ const sndScreenStart = new Audio('../../assets/screen-share-start.mp3');
 const sndScreenStop = new Audio('../../assets/screen-share-stop.mp3');
 const sndWebcamStart = new Audio('../../assets/webcam-start.mp3');
 const sndWebcamStop = new Audio('../../assets/webcam-stop.mp3');
-let feedbackVolume = 1;
+let feedbackVolume = 0.1;
 
 function playSound(audio) {
   console.log('playSound', audio);

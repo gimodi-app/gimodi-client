@@ -845,7 +845,7 @@ async function openSettings(tab = 'audio') {
 
   rangeVoiceActivation.value = voiceService.voiceActivationLevel;
   voiceActivationValue.textContent = voiceService.voiceActivationLevel === 0 ? 'Off' : voiceService.voiceActivationLevel;
-  const fbVol = appSettings.feedbackVolume ?? 100;
+  const fbVol = appSettings.feedbackVolume ?? 10;
   rangeFeedbackVolume.value = fbVol;
   feedbackVolumeValue.textContent = fbVol;
   checkboxNoiseSuppression.checked = !!appSettings.noiseSuppression;
