@@ -47,7 +47,7 @@ function openSearchPanel() {
   panel.classList.remove('hidden');
   requestAnimationFrame(() => {
     panel.classList.add('open');
-    searchInput.focus();
+    searchInput.focus({ preventScroll: true });
     searchInput.select();
   });
 }
