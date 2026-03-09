@@ -15,6 +15,7 @@ let dropTarget = null;
 
 // Store connect callback for use in renderSidebar and helper functions
 let _connectCallback = null;
+let _editServerCallback = null;
 
 
 /** @returns {Array} Flattened array of all servers (ungrouped). */
@@ -47,7 +48,7 @@ function removeItem(item) {
  * @param {string} address
  * @param {string} nickname
  */
-function removeServerByIdentity(address, nickname) {
+export function removeServerByIdentity(address, nickname) {
   for (let i = servers.length - 1; i >= 0; i--) {
     const item = servers[i];
     if (item.type === 'group') {
@@ -94,6 +95,26 @@ export function addOrUpdateServer(server) {
   if (!updateServerInList(server)) {
     servers.push(server);
   }
+}
+
+/**
+ * Replaces a server in-place by old address+nickname, preserving its position.
+ * @param {string} oldAddress
+ * @param {string} oldNickname
+ * @param {Object} newServer
+ * @returns {boolean}
+ */
+export function replaceServerInPlace(oldAddress, oldNickname, newServer) {
+  for (let i = 0; i < servers.length; i++) {
+    const item = servers[i];
+    if (item.type === 'group') {
+      const idx = item.servers.findIndex(s => s.address === oldAddress && s.nickname === oldNickname);
+      if (idx >= 0) { item.servers[idx] = newServer; return true; }
+    } else if (item.address === oldAddress && item.nickname === oldNickname) {
+      servers[i] = newServer; return true;
+    }
+  }
+  return false;
 }
 
 /** Clears all drag-and-drop visual indicators. */
@@ -705,6 +726,16 @@ function showServerContextMenu(e, server, isConnected) {
     contextMenuEl.appendChild(removeFromGroupItem);
   }
 
+  const editItem = document.createElement('div');
+  editItem.className = 'context-menu-item';
+  editItem.textContent = 'Edit Server';
+  editItem.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    dismissContextMenu();
+    if (_editServerCallback) _editServerCallback(server, isConnected);
+  });
+  contextMenuEl.appendChild(editItem);
+
   const removeItemEl = document.createElement('div');
   removeItemEl.className = 'context-menu-item';
   removeItemEl.textContent = 'Remove';
@@ -794,8 +825,9 @@ export function clearActiveServer() {
  * @param {function} connectCallback - Called with (server, options?) to initiate a connection.
  * @param {function} onAddServer - Called when the add-server button is clicked.
  */
-export async function initSidebar(connectCallback, onAddServer) {
+export async function initSidebar(connectCallback, onAddServer, onEditServer) {
   _connectCallback = connectCallback;
+  _editServerCallback = onEditServer;
   servers = await window.gimodi.servers.list() || [];
   renderSidebar();
 

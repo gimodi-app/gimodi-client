@@ -6,6 +6,8 @@ import {
   clearActiveServer,
   updateServerInList,
   addOrUpdateServer,
+  removeServerByIdentity,
+  replaceServerInPlace,
 } from './sidebar.js';
 
 export { renderSidebar, setActiveServer, clearActiveServer };
@@ -19,6 +21,19 @@ const addServerError = document.getElementById('add-server-error');
 const btnConfirmAddServer = document.getElementById('btn-confirm-add-server');
 const btnCancelAddServer = document.getElementById('btn-cancel-add-server');
 const modalAddServer = document.getElementById('modal-add-server');
+
+const modalEditServer = document.getElementById('modal-edit-server');
+const editServerAddress = document.getElementById('edit-server-address');
+const editServerNickname = document.getElementById('edit-server-nickname');
+const editServerPassword = document.getElementById('edit-server-password');
+const editServerIdentityGroup = document.getElementById('edit-server-identity-group');
+const editServerIdentity = document.getElementById('edit-server-identity');
+const editServerError = document.getElementById('edit-server-error');
+const btnConfirmEditServer = document.getElementById('btn-confirm-edit-server');
+const btnCancelEditServer = document.getElementById('btn-cancel-edit-server');
+
+let editingServer = null;
+let editingServerWasConnected = false;
 
 const modalConnectError = document.getElementById('modal-connect-error');
 const connectErrorMessage = document.getElementById('connect-error-message');
@@ -107,7 +122,7 @@ export async function initConnectView() {
 /** Initializes the server sidebar with connect callback and modal. */
 export async function initSidebar() {
   await loadIdentities();
-  await _initSidebar(connectToServer, openAddServerModal);
+  await _initSidebar(connectToServer, openAddServerModal, openEditServerModal);
 
   btnConfirmAddServer.addEventListener('click', handleAddServer);
   btnCancelAddServer.addEventListener('click', closeAddServerModal);
@@ -118,6 +133,18 @@ export async function initSidebar() {
   for (const input of [addServerAddress, addServerNickname, addServerPassword]) {
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') handleAddServer();
+    });
+  }
+
+  btnConfirmEditServer.addEventListener('click', handleEditServer);
+  btnCancelEditServer.addEventListener('click', closeEditServerModal);
+  modalEditServer.addEventListener('click', (e) => {
+    if (e.target === modalEditServer) closeEditServerModal();
+  });
+
+  for (const input of [editServerAddress, editServerNickname, editServerPassword]) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleEditServer();
     });
   }
 }
@@ -228,6 +255,91 @@ async function handleAddServer() {
   } finally {
     btnConfirmAddServer.disabled = false;
     btnConfirmAddServer.textContent = 'Add & Connect';
+  }
+}
+
+/**
+ * @param {Object} server
+ * @param {boolean} isConnected
+ */
+function openEditServerModal(server, isConnected) {
+  editingServer = server;
+  editingServerWasConnected = isConnected;
+  editServerAddress.value = server.address || '';
+  editServerNickname.value = server.nickname || '';
+  editServerPassword.value = server.password || '';
+  editServerError.textContent = '';
+  populateIdentitySelect(editServerIdentity, editServerIdentityGroup, server.identityFingerprint);
+  modalEditServer.classList.remove('hidden');
+  editServerAddress.focus();
+}
+
+/** Closes the Edit Server modal. */
+function closeEditServerModal() {
+  modalEditServer.classList.add('hidden');
+  editingServer = null;
+}
+
+/** Saves edited server settings and reconnects if needed. */
+async function handleEditServer() {
+  let address = editServerAddress.value.trim();
+  const nickname = editServerNickname.value.trim();
+  const password = editServerPassword.value;
+
+  if (!address) {
+    editServerError.textContent = 'Server address is required.';
+    return;
+  }
+  if (!address.startsWith('ws://') && !address.startsWith('wss://')) {
+    const hostPart = address.startsWith('[') ? address.slice(address.indexOf(']') + 1) : address;
+    if (!hostPart.includes(':')) {
+      address += ':6833';
+    }
+  }
+  if (!nickname) {
+    editServerError.textContent = 'Nickname is required.';
+    return;
+  }
+
+  const oldAddress = editingServer.address;
+  const oldNickname = editingServer.nickname;
+  const wasConnected = editingServerWasConnected;
+
+  const selectedIdentity = getSelectedIdentityFrom(editServerIdentity);
+  const identityFingerprint = selectedIdentity ? selectedIdentity.fingerprint : null;
+
+  if (wasConnected) {
+    window.dispatchEvent(new CustomEvent('gimodi:disconnect-server', {
+      detail: { address: oldAddress },
+    }));
+  }
+
+  const updatedServer = {
+    name: editingServer.name,
+    address,
+    nickname,
+    password: password || null,
+    identityFingerprint,
+  };
+
+  replaceServerInPlace(oldAddress, oldNickname, updatedServer);
+  const items = await window.gimodi.servers.list();
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.type === 'group') {
+      const idx = item.servers.findIndex(s => s.address === oldAddress && s.nickname === oldNickname);
+      if (idx >= 0) { item.servers[idx] = updatedServer; break; }
+    } else if (item.address === oldAddress && item.nickname === oldNickname) {
+      items[i] = updatedServer; break;
+    }
+  }
+  await window.gimodi.servers.save(items);
+
+  closeEditServerModal();
+  renderSidebar();
+
+  if (wasConnected) {
+    connectToServer(updatedServer);
   }
 }
 
