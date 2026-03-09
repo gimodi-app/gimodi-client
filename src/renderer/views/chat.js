@@ -290,6 +290,33 @@ function onChannelMentionClick(e) {
   }
 }
 
+/**
+ * @param {MouseEvent} ev
+ */
+function onNickContextMenu(ev) {
+  const nickEl = ev.target.closest('.chat-msg-nick, .compact-nick');
+  if (!nickEl) return;
+  const msgEl = nickEl.closest('.chat-msg');
+  if (!msgEl) return;
+  const clientId = msgEl.dataset.clientId;
+  const userId = msgEl.dataset.userId;
+  const nickname = msgEl.dataset.nickname;
+  const onlineClient = window.gimodiClients?.find(c =>
+    (clientId && c.id === clientId) || (userId && c.userId === userId)
+  );
+  const user = onlineClient || {
+    id: clientId || userId,
+    userId: userId || null,
+    nickname: nickname || '[Unknown]',
+    badge: msgEl.dataset.badge || null
+  };
+  ev.preventDefault();
+  ev.stopPropagation();
+  window.dispatchEvent(new CustomEvent('gimodi:user-context-menu', {
+    detail: { clientX: ev.clientX, clientY: ev.clientY, user }
+  }));
+}
+
 function showChannelAutocomplete(channels) {
   if (!mentionAutocomplete) {
     mentionAutocomplete = document.createElement('div');
@@ -624,6 +651,7 @@ export function initChatView(channelId) {
   chatMessages.addEventListener('drop', onDrop);
   chatMessages.addEventListener('scroll', onChatScroll);
   chatMessages.addEventListener('click', onChannelMentionClick);
+  chatMessages.addEventListener('contextmenu', onNickContextMenu);
   chatInput.addEventListener('paste', onPaste);
   chatInput.addEventListener('input', onChatInputForTyping);
   chatInput.addEventListener('input', onChatInputForMentions);
@@ -682,6 +710,7 @@ export function cleanup() {
   chatMessages.removeEventListener('drop', onDrop);
   chatMessages.removeEventListener('scroll', onChatScroll);
   chatMessages.removeEventListener('click', onChannelMentionClick);
+  chatMessages.removeEventListener('contextmenu', onNickContextMenu);
   chatInput.removeEventListener('paste', onPaste);
   chatInput.removeEventListener('input', onChatInputForTyping);
   chatInput.removeEventListener('input', onChatInputForMentions);
@@ -1776,11 +1805,11 @@ function buildMessageEl(msg, prevEl) {
       if (onlineClient) {
         openDmTab(onlineClient.id, displayNickname, msg.userId);
       } else {
-        // User is offline - open tab for history only
         openDmTab(msg.userId, displayNickname, msg.userId);
       }
     });
   }
+
 
   // Add copy button to code blocks
   for (const pre of el.querySelectorAll('.chat-msg-body pre')) {

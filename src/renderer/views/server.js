@@ -192,6 +192,9 @@ export function initServerView(data) {
 
   // Re-render channel tree when unread state changes
   window.addEventListener('gimodi:channel-unread-changed', onChannelUnreadChanged);
+
+  // User context menu from chat nicknames
+  window.addEventListener('gimodi:user-context-menu', onUserContextMenuEvent);
 }
 
 export function cleanup() {
@@ -226,6 +229,7 @@ export function cleanup() {
   serverService.removeEventListener('server:permissions-changed', onPermissionsChanged);
   window.removeEventListener('gimodi:channel-access-error', onChannelAccessError);
   window.removeEventListener('gimodi:channel-unread-changed', onChannelUnreadChanged);
+  window.removeEventListener('gimodi:user-context-menu', onUserContextMenuEvent);
   btnDisconnect.removeEventListener('click', handleDisconnect);
   btnCreateChannel.removeEventListener('click', onCreateChannelClick);
   document.getElementById('create-dropdown').classList.add('hidden');
@@ -2096,7 +2100,7 @@ function showDeleteChannelConfirm(ch) {
   document.addEventListener('keydown', onEscape);
 }
 
-function showBanModal(user) {
+function showBanModal(user, options = {}) {
   const existing = document.querySelector('.modal-ban-user');
   if (existing) existing.remove();
 
@@ -2142,7 +2146,11 @@ function showBanModal(user) {
     const reason = reasonInput.value.trim();
     const duration = parseInt(durationSelect.value);
     try {
-      await serverService.request('admin:ban', { clientId: user.id, reason, duration });
+      if (options.fromChat && user.userId) {
+        await serverService.request('admin:ban-user', { userId: user.userId, reason, duration });
+      } else {
+        await serverService.request('admin:ban', { clientId: user.id, reason, duration });
+      }
       closeModal();
     } catch (err) {
       await customAlert(err.message);
@@ -2280,7 +2288,15 @@ function dismissContextMenu() {
   if (existing) existing.remove();
 }
 
-function showUserContextMenu(e, user) {
+/**
+ * @param {CustomEvent} e
+ */
+function onUserContextMenuEvent(e) {
+  const { clientX, clientY, user } = e.detail;
+  showUserContextMenu({ preventDefault() {}, clientX, clientY }, user, { fromChat: true });
+}
+
+export function showUserContextMenu(e, user, options = {}) {
   e.preventDefault();
   dismissContextMenu();
 
@@ -2318,8 +2334,8 @@ function showUserContextMenu(e, user) {
     }
   }
 
-  // Per-user volume control (only for other users with persistent identity)
-  if (user.id !== serverService.clientId && user.userId) {
+  // Per-user volume control (only for other users with persistent identity, not from chat)
+  if (!options.fromChat && user.id !== serverService.clientId && user.userId) {
     const volSep = document.createElement('div');
     volSep.style.cssText = 'border-top:1px solid var(--border);margin:4px 0';
     menu.appendChild(volSep);
@@ -2359,15 +2375,16 @@ function showUserContextMenu(e, user) {
     menu.appendChild(volContainer);
   }
 
-  const item = document.createElement('div');
-  item.className = 'context-menu-item';
-  item.textContent = 'Connection Details';
-  item.addEventListener('click', () => {
-    dismissContextMenu();
-    showConnectionDetails(user);
-  });
-
-  menu.appendChild(item);
+  if (!options.fromChat) {
+    const item = document.createElement('div');
+    item.className = 'context-menu-item';
+    item.textContent = 'Connection Details';
+    item.addEventListener('click', () => {
+      dismissContextMenu();
+      showConnectionDetails(user);
+    });
+    menu.appendChild(item);
+  }
 
   // Voice moderation items
   const currentChannel = channels.find(c => c.id === currentChannelId);
@@ -2444,7 +2461,7 @@ function showUserContextMenu(e, user) {
     const sep = document.createElement('div');
     sep.style.cssText = 'border-top:1px solid var(--border);margin:4px 0';
     menu.appendChild(sep);
-    if (serverService.hasPermission('user.kick')) {
+    if (!options.fromChat && serverService.hasPermission('user.kick')) {
       const kickItem = document.createElement('div');
       kickItem.className = 'context-menu-item danger';
       kickItem.textContent = 'Kick';
@@ -2465,7 +2482,7 @@ function showUserContextMenu(e, user) {
       banItem.textContent = 'Ban';
       banItem.addEventListener('click', () => {
         dismissContextMenu();
-        showBanModal(user);
+        showBanModal(user, options);
       });
       menu.appendChild(banItem);
     }
@@ -2482,7 +2499,7 @@ function showUserContextMenu(e, user) {
     roleItem.textContent = 'Set Role...';
     roleItem.addEventListener('click', async () => {
       dismissContextMenu();
-      await showSetRoleMenu(user, e.clientX, e.clientY);
+      await showSetRoleMenu(user, e.clientX, e.clientY, options);
     });
     menu.appendChild(roleItem);
   }
@@ -2508,16 +2525,21 @@ function showUserContextMenu(e, user) {
   document.addEventListener('keydown', onEscape);
 }
 
-async function showSetRoleMenu(user, x, y) {
+async function showSetRoleMenu(user, x, y, options = {}) {
+  const useByUserId = options.fromChat && user.userId;
   let result;
   try {
-    result = await serverService.request('admin:get-user-roles', { clientId: user.id });
+    if (useByUserId) {
+      result = await serverService.request('admin:get-user-roles-by-userid', { userId: user.userId });
+    } else {
+      result = await serverService.request('admin:get-user-roles', { clientId: user.id });
+    }
   } catch (err) {
     await customAlert(err.message);
     return;
   }
 
-  if (!result.userId) {
+  if (!result.userId && !useByUserId) {
     await customAlert('This user has no persistent identity and cannot be assigned a role.\nThey must connect with a cryptographic key.');
     return;
   }
@@ -2548,9 +2570,17 @@ async function showSetRoleMenu(user, x, y) {
       submenu.remove();
       try {
         if (isActive) {
-          await serverService.request('admin:remove-role', { clientId: user.id, roleId });
+          if (useByUserId) {
+            await serverService.request('admin:remove-role-by-userid', { userId: user.userId, roleId });
+          } else {
+            await serverService.request('admin:remove-role', { clientId: user.id, roleId });
+          }
         } else {
-          await serverService.request('admin:assign-role', { clientId: user.id, roleId });
+          if (useByUserId) {
+            await serverService.request('admin:assign-role-by-userid', { userId: user.userId, roleId });
+          } else {
+            await serverService.request('admin:assign-role', { clientId: user.id, roleId });
+          }
         }
       } catch (err) {
         await customAlert(err.message);
@@ -2581,7 +2611,11 @@ async function showSetRoleMenu(user, x, y) {
     noneRow.addEventListener('click', async () => {
       submenu.remove();
       try {
-        await serverService.request('admin:remove-role', { clientId: user.id, roleId: currentRole.id });
+        if (useByUserId) {
+          await serverService.request('admin:remove-role-by-userid', { userId: user.userId, roleId: currentRole.id });
+        } else {
+          await serverService.request('admin:remove-role', { clientId: user.id, roleId: currentRole.id });
+        }
       } catch (err) { await customAlert(err.message); }
     });
   }
@@ -3343,6 +3377,10 @@ async function renderBansPanel(container) {
         row.style.opacity = '0.5';
       }
 
+      const nick = document.createElement('span');
+      nick.style.cssText = 'flex:0 0 100px;font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      nick.textContent = ban.nickname || '—';
+
       const ip = document.createElement('code');
       ip.style.cssText = 'flex:0 0 130px;font-size:12px';
       ip.textContent = ban.ip;
@@ -3376,7 +3414,7 @@ async function renderBansPanel(container) {
         }
       });
 
-      row.append(ip, reason, expiry, unbanBtn);
+      row.append(nick, ip, reason, expiry, unbanBtn);
       banList.appendChild(row);
     }
   };
