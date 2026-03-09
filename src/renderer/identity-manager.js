@@ -22,10 +22,12 @@ async function render() {
     const fpDisplay = fp.slice(0, 8) + '...' + fp.slice(-8);
     const date = new Date(id.createdAt).toLocaleDateString();
 
+    el.dataset.fp = id.fingerprint;
+    el.dataset.name = id.name;
     el.innerHTML = `
       <div class="identity-info">
         <div class="identity-name">
-          ${escapeHtml(id.name)}
+          <span class="identity-name-text">${escapeHtml(id.name)}</span>
           ${id.isDefault ? '<span class="identity-default-badge">DEFAULT</span>' : ''}
         </div>
         <div class="identity-fingerprint">${fpDisplay} &middot; ${date}</div>
@@ -57,6 +59,48 @@ async function render() {
       } catch (err) {
         statusEl.textContent = err.message || 'Export failed.';
       }
+    });
+  }
+
+  for (const nameEl of listEl.querySelectorAll('.identity-name')) {
+    nameEl.style.cursor = 'default';
+    nameEl.querySelector('.identity-name-text').addEventListener('click', () => {
+      const item = nameEl.closest('.identity-item');
+      const fp = item.dataset.fp;
+      const currentName = item.dataset.name;
+      const nameTextEl = nameEl.querySelector('.identity-name-text');
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = currentName;
+      input.maxLength = 64;
+      input.style.cssText = 'background:var(--bg-input);color:var(--text-primary);border:1px solid var(--accent);border-radius:4px;padding:2px 6px;font-size:14px;font-weight:500;outline:none;';
+
+      nameTextEl.replaceWith(input);
+      input.focus();
+      input.select();
+
+      let done = false;
+      /** @param {boolean} save */
+      async function finish(save) {
+        if (done) return;
+        done = true;
+        const newName = input.value.trim();
+        if (save && newName && newName !== currentName) {
+          try {
+            await window.gimodi.identity.rename(fp, newName);
+          } catch (err) {
+            statusEl.textContent = err.message || 'Rename failed.';
+          }
+        }
+        render();
+      }
+
+      input.addEventListener('blur', () => finish(true));
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      });
     });
   }
 

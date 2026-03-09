@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('gimodi', {
     loadAll: () => ipcRenderer.invoke('identity:load-all'),
     create: (name) => ipcRenderer.invoke('identity:create', name),
     delete: (fingerprint) => ipcRenderer.invoke('identity:delete', fingerprint),
+    rename: (fingerprint, newName) => ipcRenderer.invoke('identity:rename', fingerprint, newName),
     setDefault: (fingerprint) => ipcRenderer.invoke('identity:set-default', fingerprint),
     getDefault: () => ipcRenderer.invoke('identity:get-default'),
     encrypt: (recipientPublicKeys, plaintext) => ipcRenderer.invoke('identity:encrypt', recipientPublicKeys, plaintext),

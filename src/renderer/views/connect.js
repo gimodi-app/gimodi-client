@@ -10,7 +10,16 @@ import {
   replaceServerInPlace,
 } from './sidebar.js';
 
-export { renderSidebar, setActiveServer, clearActiveServer };
+export { renderSidebar, setActiveServer, clearActiveServer, refreshIdentitySelects };
+
+/**
+ * Reloads identities and repopulates both add/edit server identity dropdowns.
+ */
+async function refreshIdentitySelects() {
+  await loadIdentities();
+  populateIdentitySelect(addServerIdentity, addServerIdentityGroup);
+  populateIdentitySelect(editServerIdentity, editServerIdentityGroup);
+}
 
 const addServerAddress = document.getElementById('add-server-address');
 const addServerNickname = document.getElementById('add-server-nickname');

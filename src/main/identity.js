@@ -120,6 +120,19 @@ function deleteIdentity(fingerprint) {
   saveIdentities(identities);
 }
 
+/**
+ * @param {string} fingerprint
+ * @param {string} newName
+ */
+function renameIdentity(fingerprint, newName) {
+  const identities = loadIdentities();
+  const identity = identities.find(i => i.fingerprint === fingerprint);
+  if (!identity) throw new Error('Identity not found.');
+  identity.name = newName;
+  saveIdentities(identities);
+  return sanitizeIdentity(identity);
+}
+
 function setDefaultIdentity(fingerprint) {
   const identities = loadIdentities();
   let found = false;
@@ -359,6 +372,7 @@ module.exports = {
   loadIdentities: loadAllSanitized,
   createIdentity,
   deleteIdentity,
+  renameIdentity,
   setDefaultIdentity,
   getDefaultIdentity,
   ensureDefaultIdentity,

@@ -2,7 +2,7 @@ import serverService from './services/server.js';
 import connectionManager from './services/connectionManager.js';
 import voiceService from './services/voice.js';
 import notificationService from './services/notifications.js';
-import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar } from './views/connect.js';
+import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects } from './views/connect.js';
 import { initServerView, cleanup as cleanupServer, getCurrentChannelId, getFirstChannelId, setFeedbackVolume, isCurrentChannelModerated, hasVoiceGrant, showUnifiedAdminDialog, showRedeemTokenModal, switchChannel, saveState as saveServerState, restoreState as restoreServerState } from './views/server.js';
 import { initChatView, cleanup as cleanupChat, switchChannel as switchChatChannel, appendSystemMessage, refreshTimestamps, setChatDisplayMode, openChannelViewTab, getChannelViewTabsState, restoreChannelViewTabs, saveState as saveChatState, restoreState as restoreChatState, initUnreadState } from './views/chat.js';
 import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoiceServerName } from './views/voice.js';
@@ -934,13 +934,46 @@ async function loadSettingsIdentities() {
     info.className = 'identity-info';
     const name = document.createElement('div');
     name.className = 'identity-name';
-    name.textContent = id.name;
+    const nameText = document.createElement('span');
+    nameText.className = 'identity-name-text';
+    nameText.textContent = id.name;
+    name.appendChild(nameText);
     if (id.isDefault) {
       const badge = document.createElement('span');
       badge.className = 'identity-default-badge';
       badge.textContent = ' ✓ Default';
       name.appendChild(badge);
     }
+    nameText.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = id.name;
+      input.maxLength = 64;
+      input.className = 'identity-rename-input';
+      nameText.replaceWith(input);
+      input.focus();
+      input.select();
+      let done = false;
+      async function finish(save) {
+        if (done) return;
+        done = true;
+        const newName = input.value.trim();
+        if (save && newName && newName !== id.name) {
+          try {
+            await window.gimodi.identity.rename(id.fingerprint, newName);
+            refreshIdentitySelects();
+          } catch (err) {
+            identityStatus.textContent = err.message || 'Rename failed.';
+          }
+        }
+        loadSettingsIdentities();
+      }
+      input.addEventListener('blur', () => finish(true));
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      });
+    });
     const fp = document.createElement('div');
     fp.className = 'identity-fingerprint';
     fp.textContent = id.fingerprint;

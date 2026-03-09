@@ -3704,6 +3704,31 @@ label:has(input[type="checkbox"]) {
   text-overflow: ellipsis;
 }
 
+.identity-name-text {
+  cursor: text;
+  padding: 1px 4px;
+  margin: -1px -4px;
+  border-radius: 3px;
+  transition: background-color 0.15s;
+}
+
+.identity-name-text:hover {
+  background-color: var(--bg-hover, rgba(255, 255, 255, 0.08));
+}
+
+.identity-rename-input {
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+}
+
 .identity-default-badge {
   font-size: 11px;
   color: var(--success);

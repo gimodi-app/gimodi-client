@@ -603,6 +603,7 @@ ipcMain.handle('settings:save', (event, settings) => {
 ipcMain.handle('identity:load-all', () => identity.loadIdentities());
 ipcMain.handle('identity:create', (event, name) => identity.createIdentity(name));
 ipcMain.handle('identity:delete', (event, fingerprint) => identity.deleteIdentity(fingerprint));
+ipcMain.handle('identity:rename', (event, fingerprint, newName) => identity.renameIdentity(fingerprint, newName));
 ipcMain.handle('identity:set-default', (event, fingerprint) => identity.setDefaultIdentity(fingerprint));
 ipcMain.handle('identity:get-default', () => identity.getDefaultIdentity());
 ipcMain.handle('identity:encrypt', (event, recipientPublicKeys, plaintext) =>
