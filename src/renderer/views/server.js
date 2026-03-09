@@ -65,6 +65,7 @@ const sndScreenStart = new Audio('../../assets/screen-share-start.mp3');
 const sndScreenStop = new Audio('../../assets/screen-share-stop.mp3');
 const sndWebcamStart = new Audio('../../assets/webcam-start.mp3');
 const sndWebcamStop = new Audio('../../assets/webcam-stop.mp3');
+const sndPoke = new Audio('../../assets/poke.mp3');
 let feedbackVolume = 0.1;
 
 function playSound(audio) {
@@ -383,6 +384,7 @@ function handleDisconnect() {
 }
 
 async function onPoked(e) {
+  playSound(sndPoke);
   const { fromNickname, message } = e.detail;
   if (message) {
     await customAlert(`You were poked by ${fromNickname}:\n${message}`);
