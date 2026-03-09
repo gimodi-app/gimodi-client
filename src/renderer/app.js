@@ -1403,7 +1403,7 @@ function stopMicLoopback() {
 let _cameraPreviewStream = null;
 
 btnTestCamera.addEventListener('click', () => {
-  if (_cameraPreviewStream) {
+  if (_cameraPreviewStream || btnTestCamera.classList.contains('playing')) {
     stopCameraPreview();
   } else {
     startCameraPreview();
@@ -1485,7 +1485,10 @@ async function populateDeviceSelectors() {
       selectMic.appendChild(opt);
     }
 
-    selectCamera.innerHTML = '<option value="">None</option>';
+    selectCamera.innerHTML = '';
+    if (cameras.length === 0) {
+      selectCamera.innerHTML = '<option value="">None</option>';
+    }
     for (const d of cameras) {
       const opt = document.createElement('option');
       opt.value = d.deviceId;

@@ -536,9 +536,9 @@ class VoiceService extends EventTarget {
   async getAudioDevices() {
     const devices = await navigator.mediaDevices.enumerateDevices();
     return {
-      microphones: devices.filter(d => d.kind === 'audioinput'),
-      speakers: devices.filter(d => d.kind === 'audiooutput'),
-      cameras: devices.filter(d => d.kind === 'videoinput'),
+      microphones: devices.filter(d => d.kind === 'audioinput' && d.deviceId !== 'default'),
+      speakers: devices.filter(d => d.kind === 'audiooutput' && d.deviceId !== 'default'),
+      cameras: devices.filter(d => d.kind === 'videoinput' && d.deviceId !== 'default'),
     };
   }
 
