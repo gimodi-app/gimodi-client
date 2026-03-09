@@ -2316,7 +2316,7 @@ export function showUserContextMenu(e, user, options = {}) {
     });
     menu.appendChild(dmItem);
 
-    if (serverService.hasPermission('user.poke')) {
+    if (!options.fromChat && serverService.hasPermission('user.poke')) {
       const pokeItem = document.createElement('div');
       pokeItem.className = 'context-menu-item';
       pokeItem.textContent = 'Poke';

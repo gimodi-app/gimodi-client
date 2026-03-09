@@ -1798,17 +1798,17 @@ function buildMessageEl(msg, prevEl) {
   }
 
   // Click on nickname → open DM tab (only for identified users, not self)
-  const nickEl = el.querySelector('.chat-msg-nick');
-  if (nickEl && msg.userId && msg.userId !== serverService.userId) {
-    nickEl.style.cursor = 'pointer';
-    nickEl.addEventListener('click', () => {
-      const onlineClient = window.gimodiClients?.find(c => c.userId === msg.userId);
-      if (onlineClient) {
-        openDmTab(onlineClient.id, displayNickname, msg.userId);
-      } else {
-        openDmTab(msg.userId, displayNickname, msg.userId);
-      }
-    });
+  if (msg.userId && msg.userId !== serverService.userId) {
+    for (const nEl of el.querySelectorAll('.chat-msg-nick, .compact-nick')) {
+      nEl.addEventListener('click', () => {
+        const onlineClient = window.gimodiClients?.find(c => c.userId === msg.userId);
+        if (onlineClient) {
+          openDmTab(onlineClient.id, displayNickname, msg.userId);
+        } else {
+          openDmTab(msg.userId, displayNickname, msg.userId);
+        }
+      });
+    }
   }
 
 

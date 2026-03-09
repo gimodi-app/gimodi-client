@@ -2319,6 +2319,7 @@ label:has(input[type="checkbox"]) {
 .chat-msg-nick {
   font-weight: 600;
   font-size: 15px;
+  cursor: pointer;
 }
 
 .chat-msg-time {
@@ -2361,7 +2362,7 @@ label:has(input[type="checkbox"]) {
 .compact-nick {
   font-weight: 600;
   font-size: 14px;
-  cursor: default;
+  cursor: pointer;
 }
 
 /* Compact mode active */
