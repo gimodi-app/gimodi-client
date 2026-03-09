@@ -30,7 +30,7 @@ let currentChannelName = 'Lobby';
 let channelPinnedMessages = new Map(); // channelId → [messageIds]
 let pinnedCollapsed = true;
 
-function getViewingChannelId() {
+export function getViewingChannelId() {
   if (activeTab.type === 'channel') return currentChannelId;
   if (activeTab.type === 'channel-view') return activeTab.channelId;
   return null;

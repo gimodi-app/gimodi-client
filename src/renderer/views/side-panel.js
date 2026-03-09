@@ -1,7 +1,7 @@
 import serverService from '../services/server.js';
 import { resolveNicknames, getCachedNickname } from '../services/nicknameCache.js';
 import { formatDateTime } from '../services/timeFormat.js';
-import { escapeHtml } from './chat-markdown.js';
+import { escapeHtml, highlightMentions } from './chat-markdown.js';
 import { scrollToMessage } from './chat.js';
 
 const panel = document.getElementById('side-panel');
@@ -135,7 +135,8 @@ function createSnippet(content, query) {
   const escaped = escapeHtml(content);
   const escapedQuery = escapeHtml(query);
   const regex = new RegExp(`(${escapedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-  let snippet = escaped.replace(regex, '<mark>$1</mark>');
+  let snippet = highlightMentions(escaped);
+  snippet = snippet.replace(regex, '<mark>$1</mark>');
   if (snippet.length > 200) {
     const idx = snippet.toLowerCase().indexOf(escapedQuery.toLowerCase());
     const start = Math.max(0, idx - 60);

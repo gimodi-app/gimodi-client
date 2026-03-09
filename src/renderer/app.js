@@ -4,7 +4,7 @@ import voiceService from './services/voice.js';
 import notificationService from './services/notifications.js';
 import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects } from './views/connect.js';
 import { initServerView, cleanup as cleanupServer, getCurrentChannelId, getFirstChannelId, setFeedbackVolume, isCurrentChannelModerated, hasVoiceGrant, showUnifiedAdminDialog, showRedeemTokenModal, switchChannel, saveState as saveServerState, restoreState as restoreServerState } from './views/server.js';
-import { initChatView, cleanup as cleanupChat, switchChannel as switchChatChannel, appendSystemMessage, refreshTimestamps, setChatDisplayMode, openChannelViewTab, getChannelViewTabsState, restoreChannelViewTabs, saveState as saveChatState, restoreState as restoreChatState, initUnreadState } from './views/chat.js';
+import { initChatView, cleanup as cleanupChat, switchChannel as switchChatChannel, appendSystemMessage, refreshTimestamps, setChatDisplayMode, openChannelViewTab, getChannelViewTabsState, restoreChannelViewTabs, saveState as saveChatState, restoreState as restoreChatState, initUnreadState, getViewingChannelId } from './views/chat.js';
 import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoiceServerName } from './views/voice.js';
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
@@ -491,7 +491,7 @@ window.addEventListener('gimodi:connected', async (e) => {
 
   log('Initial channel:', channelId, '(lobby)');
   initChatView(channelId);
-  initSidePanel(getCurrentChannelId);
+  initSidePanel(getViewingChannelId);
   initUnreadState(data.channels, address);
 
   // Auto-join first channel when connecting via double-click
