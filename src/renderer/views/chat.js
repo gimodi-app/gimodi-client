@@ -3020,13 +3020,22 @@ function renderPinnedMessages() {
       const clone = msgEl.cloneNode(true);
       clone.classList.add('pinned-message-preview');
 
-      // If this is a grouped message (no header), inject the author name
+      const actionsEl = clone.querySelector('.chat-msg-actions');
+      if (actionsEl) actionsEl.remove();
+      const hoverTimeEl = clone.querySelector('.chat-msg-hover-time');
+      if (hoverTimeEl) hoverTimeEl.remove();
+
+      // If this is a grouped message (no header), inject the author name with badge and time
       if (clone.classList.contains('chat-msg-grouped')) {
         clone.classList.remove('chat-msg-grouped');
         const nickname = msgEl.dataset.nickname || 'Unknown';
+        const badge = msgEl.dataset.badge || '';
+        const badgeHtml = badge ? `<span class="admin-badge">${escapeHtml(badge)}</span>` : '';
+        const ts = Number(msgEl.dataset.timestamp);
+        const timeStr = formatRelativeTime(ts);
         const headerDiv = document.createElement('div');
         headerDiv.className = 'chat-msg-header';
-        headerDiv.innerHTML = `<span class="chat-msg-nick-group"><span class="chat-msg-nick">${escapeHtml(nickname)}</span></span>`;
+        headerDiv.innerHTML = `<span class="chat-msg-nick-group"><span class="chat-msg-nick">${escapeHtml(nickname)}</span>${badgeHtml}</span><span class="chat-msg-time">${timeStr}</span>`;
         const body = clone.querySelector('.chat-msg-body');
         if (body) clone.insertBefore(headerDiv, body);
       }
