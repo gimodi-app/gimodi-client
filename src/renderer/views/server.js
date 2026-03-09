@@ -3533,7 +3533,7 @@ async function renderRolesPanel(container) {
   container.style.cssText = 'display:flex;flex-direction:column;height:100%;';
   container.innerHTML = `
     <div style="display:flex;flex:1;min-height:0">
-      <div class="roles-sidebar" style="width:180px;border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0">
+      <div class="roles-sidebar" style="width:220px;border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0">
         <div style="padding:12px 12px 8px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Roles</div>
         <div class="roles-list" style="flex:1;overflow-y:auto"></div>
         <div style="display:flex;border-top:1px solid var(--border);padding:6px">
@@ -3541,6 +3541,7 @@ async function renderRolesPanel(container) {
           <button class="btn-icon roles-remove-btn" title="Remove role" style="flex:1;font-size:18px;line-height:1">\u2212</button>
         </div>
       </div>
+      <div class="roles-resize-handle" style="width:4px;cursor:col-resize;flex-shrink:0;background:transparent;transition:background 0.15s"></div>
       <div class="roles-detail" style="flex:1;display:flex;flex-direction:column;min-width:0">
         <div class="roles-detail-empty" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px">
           Select a role to edit its permissions
@@ -3596,6 +3597,37 @@ async function _initRolesLogic(root) {
   colorInput.addEventListener('input', () => { colorSwatch.style.background = colorInput.value; });
   colorSwatch.addEventListener('mouseenter', () => { colorSwatch.style.borderColor = 'var(--text-muted)'; });
   colorSwatch.addEventListener('mouseleave', () => { colorSwatch.style.borderColor = 'var(--border)'; });
+
+  const rolesSidebar = root.querySelector('.roles-sidebar');
+  const resizeHandle = root.querySelector('.roles-resize-handle');
+  const savedWidth = (await window.gimodi.settings.load())?.rolesSidebarWidth;
+  if (savedWidth) rolesSidebar.style.width = savedWidth + 'px';
+
+  resizeHandle.addEventListener('mouseenter', () => { resizeHandle.style.background = 'var(--border)'; });
+  resizeHandle.addEventListener('mouseleave', () => { if (!resizeHandle._dragging) resizeHandle.style.background = 'transparent'; });
+  resizeHandle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    resizeHandle._dragging = true;
+    resizeHandle.style.background = 'var(--accent)';
+    const startX = e.clientX;
+    const startW = rolesSidebar.offsetWidth;
+    const onMove = (ev) => {
+      const w = Math.max(140, Math.min(400, startW + ev.clientX - startX));
+      rolesSidebar.style.width = w + 'px';
+    };
+    const onUp = async () => {
+      resizeHandle._dragging = false;
+      resizeHandle.style.background = 'transparent';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      const settings = await window.gimodi.settings.load() || {};
+      settings.rolesSidebarWidth = rolesSidebar.offsetWidth;
+      window.gimodi.settings.save(settings);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
   const membersContainer = root.querySelector('.roles-members-list');
   const membersSection = root.querySelector('.roles-members-section');
   const permsContainer = root.querySelector('.roles-perms-list');
