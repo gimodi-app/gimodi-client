@@ -1797,43 +1797,39 @@ async function showEditChannelModal(ch) {
     const currentAllowed = ch.allowedRoles || [];
     const currentWrite = ch.writeRoles || [];
     const currentRead = ch.readRoles || [];
-    const accessCheckboxes = roles.map(r => {
-      const checked = currentAllowed.includes(r.id) ? 'checked' : '';
-      return `<label class="checkbox-label" for="edit-ch-role-${r.id}-${uid}">
-        <input type="checkbox" class="edit-ch-role" data-role-id="${r.id}"
-               id="edit-ch-role-${r.id}-${uid}" ${checked}>
+    const makeChips = (cls, current) => roles.map(r => {
+      const active = current.includes(r.id) ? ' active' : '';
+      return `<button type="button" class="role-chip ${cls}${active}" data-role-id="${r.id}">
+        <i class="bi ${active ? 'bi-check-circle-fill' : 'bi-circle'}"></i>
         ${escapeHtml(r.name)}
-      </label>`;
-    }).join('');
-    const writeCheckboxes = roles.map(r => {
-      const checked = currentWrite.includes(r.id) ? 'checked' : '';
-      return `<label class="checkbox-label" for="edit-ch-write-role-${r.id}-${uid}">
-        <input type="checkbox" class="edit-ch-write-role" data-role-id="${r.id}"
-               id="edit-ch-write-role-${r.id}-${uid}" ${checked}>
-        ${escapeHtml(r.name)}
-      </label>`;
-    }).join('');
-    const readCheckboxes = roles.map(r => {
-      const checked = currentRead.includes(r.id) ? 'checked' : '';
-      return `<label class="checkbox-label" for="edit-ch-read-role-${r.id}-${uid}">
-        <input type="checkbox" class="edit-ch-read-role" data-role-id="${r.id}"
-               id="edit-ch-read-role-${r.id}-${uid}" ${checked}>
-        ${escapeHtml(r.name)}
-      </label>`;
+      </button>`;
     }).join('');
     rolesHtml = `
       <div class="form-section-header">Access Control</div>
-      <div class="form-group">
-        <label>Allowed Roles <span class="form-hint">(empty = open to all)</span></label>
-        <div class="roles-list">${accessCheckboxes}</div>
-      </div>
-      <div class="form-group">
-        <label>Read Roles <span class="form-hint">(empty = everyone can read)</span></label>
-        <div class="roles-list">${readCheckboxes}</div>
-      </div>
-      <div class="form-group">
-        <label>Write Roles <span class="form-hint">(empty = everyone can write)</span></label>
-        <div class="roles-list">${writeCheckboxes}</div>
+      <div class="acl-card">
+        <div class="acl-tabs">
+          <button type="button" class="acl-tab active" data-tab="join">
+            <i class="bi bi-door-open"></i> Join
+          </button>
+          <button type="button" class="acl-tab" data-tab="read">
+            <i class="bi bi-eye"></i> Read
+          </button>
+          <button type="button" class="acl-tab" data-tab="write">
+            <i class="bi bi-pencil"></i> Write
+          </button>
+        </div>
+        <div class="acl-tab-panel active" data-panel="join">
+          <div class="acl-hint">Select roles that can join this channel. None selected means open to all.</div>
+          <div class="role-chips">${makeChips('edit-ch-role', currentAllowed)}</div>
+        </div>
+        <div class="acl-tab-panel" data-panel="read">
+          <div class="acl-hint">Select roles that can read messages. None selected means everyone can read.</div>
+          <div class="role-chips">${makeChips('edit-ch-read-role', currentRead)}</div>
+        </div>
+        <div class="acl-tab-panel" data-panel="write">
+          <div class="acl-hint">Select roles that can send messages. None selected means everyone can write.</div>
+          <div class="role-chips">${makeChips('edit-ch-write-role', currentWrite)}</div>
+        </div>
       </div>`;
   }
 
@@ -1873,16 +1869,22 @@ async function showEditChannelModal(ch) {
 
       ${rolesHtml}
 
-      <div class="form-section-header">Moderation</div>
-      <div class="form-group">
-        <label class="checkbox-label" for="edit-ch-mod-${uid}">
-          <input type="checkbox" class="edit-channel-moderated"
-                 id="edit-ch-mod-${uid}" ${ch.moderated ? 'checked' : ''}>
-          <div>
-            Moderated channel
-            <span class="checkbox-hint">Users need voice permission to speak</span>
+      <div class="form-section-header">Voice Power</div>
+      <div class="moderation-card">
+        <div class="moderation-card-content">
+          <div class="moderation-card-icon">
+            <i class="bi bi-shield-check"></i>
           </div>
-        </label>
+          <div class="moderation-card-text">
+            <span class="moderation-card-title">Voice Power</span>
+            <span class="moderation-card-desc">Users must be granted voice permission before they can speak</span>
+          </div>
+          <label class="toggle-switch" for="edit-ch-mod-${uid}">
+            <input type="checkbox" class="edit-channel-moderated"
+                   id="edit-ch-mod-${uid}" ${ch.moderated ? 'checked' : ''}>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
       </div>
 
       <div class="modal-buttons modal-buttons-end">
@@ -1912,16 +1914,14 @@ async function showEditChannelModal(ch) {
   };
 
   function getFormState() {
-    const roleCheckboxes = modal.querySelectorAll('.edit-ch-role');
-    const readRoleCheckboxes = modal.querySelectorAll('.edit-ch-read-role');
-    const writeRoleCheckboxes = modal.querySelectorAll('.edit-ch-write-role');
+    const activeChips = (cls) => [...modal.querySelectorAll(`.role-chip.${cls}.active`)].map(c => c.dataset.roleId).sort();
     return {
       name: nameInput.value.trim(),
       maxUsers: modal.querySelector('.edit-channel-max-users').value,
       moderated: modal.querySelector('.edit-channel-moderated').checked,
-      allowedRoles: JSON.stringify([...roleCheckboxes].filter(cb => cb.checked).map(cb => cb.dataset.roleId).sort()),
-      readRoles: JSON.stringify([...readRoleCheckboxes].filter(cb => cb.checked).map(cb => cb.dataset.roleId).sort()),
-      writeRoles: JSON.stringify([...writeRoleCheckboxes].filter(cb => cb.checked).map(cb => cb.dataset.roleId).sort()),
+      allowedRoles: JSON.stringify(activeChips('edit-ch-role')),
+      readRoles: JSON.stringify(activeChips('edit-ch-read-role')),
+      writeRoles: JSON.stringify(activeChips('edit-ch-write-role')),
     };
   }
 
@@ -1965,6 +1965,24 @@ async function showEditChannelModal(ch) {
     input.addEventListener('change', updateSaveBtn);
   });
 
+  modal.querySelectorAll('.acl-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      modal.querySelectorAll('.acl-tab').forEach(t => t.classList.remove('active'));
+      modal.querySelectorAll('.acl-tab-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      modal.querySelector(`.acl-tab-panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
+    });
+  });
+
+  modal.querySelectorAll('.role-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      chip.classList.toggle('active');
+      const icon = chip.querySelector('i');
+      icon.className = chip.classList.contains('active') ? 'bi bi-check-circle-fill' : 'bi bi-circle';
+      updateSaveBtn();
+    });
+  });
+
   nameInput.addEventListener('input', () => {
     updateCounter();
     if (nameInput.classList.contains('is-invalid')) validateName();
@@ -2002,17 +2020,18 @@ async function showEditChannelModal(ch) {
     const maxUsers = parseInt(maxUsersInput.value);
     payload.maxUsers = (maxUsers > 0) ? maxUsers : null;
     payload.moderated = modal.querySelector('.edit-channel-moderated').checked;
-    const roleCheckboxes = modal.querySelectorAll('.edit-ch-role');
-    if (roleCheckboxes.length > 0) {
-      payload.allowedRoles = [...roleCheckboxes].filter(cb => cb.checked).map(cb => cb.dataset.roleId);
+    const activeChips = (cls) => [...modal.querySelectorAll(`.role-chip.${cls}.active`)].map(c => c.dataset.roleId);
+    const joinChips = modal.querySelectorAll('.role-chip.edit-ch-role');
+    if (joinChips.length > 0) {
+      payload.allowedRoles = activeChips('edit-ch-role');
     }
-    const readRoleCheckboxes = modal.querySelectorAll('.edit-ch-read-role');
-    if (readRoleCheckboxes.length > 0) {
-      payload.readRoles = [...readRoleCheckboxes].filter(cb => cb.checked).map(cb => cb.dataset.roleId);
+    const readChips = modal.querySelectorAll('.role-chip.edit-ch-read-role');
+    if (readChips.length > 0) {
+      payload.readRoles = activeChips('edit-ch-read-role');
     }
-    const writeRoleCheckboxes = modal.querySelectorAll('.edit-ch-write-role');
-    if (writeRoleCheckboxes.length > 0) {
-      payload.writeRoles = [...writeRoleCheckboxes].filter(cb => cb.checked).map(cb => cb.dataset.roleId);
+    const writeChips = modal.querySelectorAll('.role-chip.edit-ch-write-role');
+    if (writeChips.length > 0) {
+      payload.writeRoles = activeChips('edit-ch-write-role');
     }
     saveBtn.classList.add('btn-save-loading');
     saveBtn.disabled = true;
