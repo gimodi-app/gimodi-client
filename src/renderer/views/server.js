@@ -3020,7 +3020,7 @@ async function renderUsersPanel(container) {
     const tr = document.createElement('tr');
     tr.style.cssText = '';
     tr.dataset.userId = user.userId.toLowerCase();
-    tr.dataset.nickname = user.nickname.toLowerCase();
+    tr.dataset.nickname = (user.registeredNicknames || [user.nickname]).join(' ').toLowerCase();
     tr.dataset.roles = user.roles.map(r => r.name).join(', ').toLowerCase();
     tr.addEventListener('contextmenu', (e) => showAdminUserContextMenu(e, user, container));
 
@@ -3047,10 +3047,18 @@ async function renderUsersPanel(container) {
       : '<span style="color:#888;font-size:10px" title="Offline">●</span>';
     tr.appendChild(statusTd);
 
-    // Nickname
     const nickTd = document.createElement('td');
     nickTd.style.cssText = 'padding:6px 8px';
-    nickTd.textContent = user.nickname;
+    const nicks = user.registeredNicknames && user.registeredNicknames.length > 0
+      ? user.registeredNicknames
+      : [user.nickname];
+    nickTd.textContent = nicks[0];
+    if (nicks.length > 1) {
+      const extra = document.createElement('span');
+      extra.style.cssText = 'margin-left:6px;font-size:11px;color:var(--text-muted)';
+      extra.textContent = nicks.slice(1).map(n => n).join(', ');
+      nickTd.appendChild(extra);
+    }
     tr.appendChild(nickTd);
 
     // Role
@@ -3181,13 +3189,27 @@ function showAdminUserContextMenu(e, user, panelContainer) {
     });
     menu.appendChild(banItem);
 
-    // Delete User
+    if (user.registeredNicknames && user.registeredNicknames.length > 0) {
+      const nickSep = document.createElement('div');
+      nickSep.style.cssText = 'border-top:1px solid var(--border);margin:4px 0';
+      menu.appendChild(nickSep);
+
+      const nickItem = document.createElement('div');
+      nickItem.className = 'context-menu-item';
+      nickItem.textContent = 'Manage Nicknames...';
+      nickItem.addEventListener('click', () => {
+        dismissContextMenu();
+        showManageNicknamesModal(user, panelContainer);
+      });
+      menu.appendChild(nickItem);
+    }
+
     const deleteItem = document.createElement('div');
     deleteItem.className = 'context-menu-item danger';
     deleteItem.textContent = 'Delete User';
     deleteItem.addEventListener('click', async () => {
       dismissContextMenu();
-      if (!await customConfirm(`Are you sure you want to permanently delete user "${user.nickname}"?\n\nThis will remove their identity, roles, and all DM history.`)) return;
+      if (!await customConfirm(`Are you sure you want to permanently delete user "${user.nickname}"?\n\nThis will remove their identity, roles, all registered nicknames, and all DM history.`)) return;
       try {
         await serverService.request('admin:delete-user', { userId: user.userId });
         renderUsersPanel(panelContainer);
@@ -3213,6 +3235,76 @@ function showAdminUserContextMenu(e, user, panelContainer) {
     }
   };
   document.addEventListener('keydown', onEscape);
+}
+
+/**
+ * @param {object} user
+ * @param {HTMLElement} panelContainer
+ */
+async function showManageNicknamesModal(user, panelContainer) {
+  const existing = document.querySelector('.modal-manage-nicknames');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.className = 'modal modal-manage-nicknames';
+
+  /**
+   * @returns {void}
+   */
+  const renderList = () => {
+    const nicks = user.registeredNicknames || [];
+    const list = modal.querySelector('.nickname-list');
+    list.innerHTML = '';
+
+    if (nicks.length === 0) {
+      list.innerHTML = '<div style="padding:8px;color:var(--text-muted)">No registered nicknames</div>';
+      return;
+    }
+
+    for (const nick of nicks) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-bottom:1px solid var(--border)';
+
+      const label = document.createElement('span');
+      label.textContent = nick;
+      row.appendChild(label);
+
+      if (nicks.length > 1) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn-secondary danger';
+        delBtn.style.cssText = 'padding:2px 8px;font-size:12px;color:var(--danger-color, #e74c3c)';
+        delBtn.innerHTML = '<i class="bi bi-trash"></i>';
+        delBtn.title = 'Delete this nickname';
+        delBtn.addEventListener('click', async () => {
+          if (!await customConfirm(`Delete nickname "${nick}" from this user?\n\nThis will free the nickname for others to use.`)) return;
+          try {
+            await serverService.request('admin:delete-nickname', { userId: user.userId, nickname: nick });
+            user.registeredNicknames = user.registeredNicknames.filter(n => n.toLowerCase() !== nick.toLowerCase());
+            renderList();
+            renderUsersPanel(panelContainer);
+          } catch (err) { await customAlert(err.message); }
+        });
+        row.appendChild(delBtn);
+      }
+
+      list.appendChild(row);
+    }
+  };
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:400px">
+      <h3 style="margin:0 0 12px">Registered Nicknames — ${escapeHtml(user.nickname)}</h3>
+      <div class="nickname-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:4px"></div>
+      <div class="modal-buttons" style="margin-top:12px">
+        <button class="btn-secondary modal-close-btn">Close</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  renderList();
+
+  modal.querySelector('.modal-close-btn').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
 }
 
 async function showSetRoleMenuByUserId(user, x, y, panelContainer) {
