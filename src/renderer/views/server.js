@@ -1,4 +1,5 @@
 import serverService from '../services/server.js';
+import connectionManager from '../services/connectionManager.js';
 import voiceService from '../services/voice.js';
 import screenShareService from '../services/screen.js';
 import { getServerIcon } from '../services/iconCache.js';
@@ -384,9 +385,8 @@ function getChannelName(id) {
 
 function handleDisconnect() {
   playSound(sndDisconnect);
-  const address = serverService.address;
   window.dispatchEvent(new CustomEvent('gimodi:disconnect-server', {
-    detail: { address },
+    detail: { connKey: connectionManager.activeKey },
   }));
 }
 
