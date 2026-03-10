@@ -1816,6 +1816,7 @@ async function showEditChannelModal(ch) {
     const currentAllowed = ch.allowedRoles || [];
     const currentWrite = ch.writeRoles || [];
     const currentRead = ch.readRoles || [];
+    const currentVisibility = ch.visibilityRoles || [];
     const makeChips = (cls, current) => roles.map(r => {
       const active = current.includes(r.id) ? ' active' : '';
       return `<button type="button" class="role-chip ${cls}${active}" data-role-id="${r.id}">
@@ -1836,6 +1837,9 @@ async function showEditChannelModal(ch) {
           <button type="button" class="acl-tab" data-tab="write">
             <i class="bi bi-pencil"></i> Write
           </button>
+          <button type="button" class="acl-tab" data-tab="visibility">
+            <i class="bi bi-eye-slash"></i> Visibility
+          </button>
         </div>
         <div class="acl-tab-panel active" data-panel="join">
           <div class="acl-hint">Select roles that can join this channel. None selected means open to all.</div>
@@ -1848,6 +1852,10 @@ async function showEditChannelModal(ch) {
         <div class="acl-tab-panel" data-panel="write">
           <div class="acl-hint">Select roles that can send messages. None selected means everyone can write.</div>
           <div class="role-chips">${makeChips('edit-ch-write-role', currentWrite)}</div>
+        </div>
+        <div class="acl-tab-panel" data-panel="visibility">
+          <div class="acl-hint">Select roles that can see this channel. None selected means visible to everyone.</div>
+          <div class="role-chips">${makeChips('edit-ch-visibility-role', currentVisibility)}</div>
         </div>
       </div>`;
   }
@@ -1934,6 +1942,7 @@ async function showEditChannelModal(ch) {
     allowedRoles: JSON.stringify((ch.allowedRoles || []).slice().sort()),
     readRoles: JSON.stringify((ch.readRoles || []).slice().sort()),
     writeRoles: JSON.stringify((ch.writeRoles || []).slice().sort()),
+    visibilityRoles: JSON.stringify((ch.visibilityRoles || []).slice().sort()),
   };
 
   function getFormState() {
@@ -1945,6 +1954,7 @@ async function showEditChannelModal(ch) {
       allowedRoles: JSON.stringify(activeChips('edit-ch-role')),
       readRoles: JSON.stringify(activeChips('edit-ch-read-role')),
       writeRoles: JSON.stringify(activeChips('edit-ch-write-role')),
+      visibilityRoles: JSON.stringify(activeChips('edit-ch-visibility-role')),
     };
   }
 
@@ -1957,7 +1967,8 @@ async function showEditChannelModal(ch) {
       || cur.moderated !== initial.moderated
       || cur.allowedRoles !== initial.allowedRoles
       || cur.readRoles !== initial.readRoles
-      || cur.writeRoles !== initial.writeRoles;
+      || cur.writeRoles !== initial.writeRoles
+      || cur.visibilityRoles !== initial.visibilityRoles;
   }
 
   function validateName() {
@@ -2055,6 +2066,10 @@ async function showEditChannelModal(ch) {
     const writeChips = modal.querySelectorAll('.role-chip.edit-ch-write-role');
     if (writeChips.length > 0) {
       payload.writeRoles = activeChips('edit-ch-write-role');
+    }
+    const visibilityChips = modal.querySelectorAll('.role-chip.edit-ch-visibility-role');
+    if (visibilityChips.length > 0) {
+      payload.visibilityRoles = activeChips('edit-ch-visibility-role');
     }
     saveBtn.classList.add('btn-save-loading');
     saveBtn.disabled = true;
