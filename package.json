@@ -1,7 +1,7 @@
 {
   "name": "@gimodi/client",
   "description": "A voice and video chat application.",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "main": "src/main/index.js",
   "scripts": {
