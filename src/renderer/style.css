@@ -974,6 +974,29 @@ label:has(input[type="checkbox"]) {
   z-index: 10;
 }
 
+.col-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: col-resize;
+  z-index: 1;
+}
+
+.col-resize-handle:hover,
+.col-resize-handle:active {
+  background: var(--accent);
+}
+
+.admin-users-table td,
+.admin-users-table th {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
 .sidebar-resize-handle:hover,
 .sidebar-resize-handle.active {
   background: var(--accent);

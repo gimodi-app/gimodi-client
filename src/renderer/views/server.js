@@ -2877,6 +2877,39 @@ function onMenuAction(action) {
   }
 }
 
+/**
+ * Initializes column resize handles on the admin users table.
+ * @param {HTMLTableElement} table
+ */
+function initUsersTableResize(table) {
+  for (const th of table.querySelectorAll('th[data-col]')) {
+    const handle = th.querySelector('.col-resize-handle');
+    if (!handle) continue;
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = th.offsetWidth;
+
+      const onMouseMove = (ev) => {
+        th.style.width = Math.max(30, startWidth + (ev.clientX - startX)) + 'px';
+      };
+
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+  }
+}
+
 async function renderUsersPanel(container) {
   container.innerHTML = '<div style="padding:12px;color:var(--text-muted)">Loading users...</div>';
 
@@ -2906,21 +2939,23 @@ async function renderUsersPanel(container) {
     <div style="margin:0 0 10px">
       <input type="text" class="users-search-input" placeholder="Search by nickname, role or user ID..." style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg-input);color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box">
     </div>
-    <table style="width:100%;border-collapse:collapse">
+    <div class="admin-users-table-wrap" style="overflow-x:auto">
+    <table class="admin-users-table" style="min-width:100%;border-collapse:collapse;table-layout:fixed">
       <thead>
         <tr style="text-align:left;color:var(--text-secondary);font-size:12px">
           <th class="checkbox-col" style="padding:6px 8px;border-bottom:1px solid var(--border);width:28px">
             <input type="checkbox" class="select-all-cb" title="Select all">
           </th>
           <th style="padding:6px 8px;border-bottom:1px solid var(--border);width:24px"></th>
-          <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Nickname</th>
-          <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Role</th>
-          <th style="padding:6px 8px;border-bottom:1px solid var(--border)">Last Seen</th>
-          <th style="padding:6px 8px;border-bottom:1px solid var(--border)">User ID</th>
+          <th data-col="nickname" style="padding:6px 8px;border-bottom:1px solid var(--border);position:relative">Nickname<span class="col-resize-handle"></span></th>
+          <th data-col="role" style="padding:6px 8px;border-bottom:1px solid var(--border);position:relative">Role<span class="col-resize-handle"></span></th>
+          <th data-col="lastSeen" style="padding:6px 8px;border-bottom:1px solid var(--border);position:relative">Last Seen<span class="col-resize-handle"></span></th>
+          <th data-col="userId" style="padding:6px 8px;border-bottom:1px solid var(--border)">User ID</th>
         </tr>
       </thead>
       <tbody></tbody>
     </table>
+    </div>
     <div class="users-selection-bar" style="display:none;position:absolute;bottom:12px;right:12px;align-items:center;gap:8px;font-size:0.8rem;padding:8px 14px;background:var(--bg-secondary, #2a2a2a);border:1px solid var(--border);border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,0.3);z-index:10">
       <span class="selection-count" style="color:var(--text-muted, #888)"></span>
       <button class="btn-secondary bulk-delete-btn danger" style="padding:4px 10px;font-size:0.78rem;color:var(--danger-color, #e74c3c)"><i class="bi bi-trash"></i> Delete</button>
@@ -2935,6 +2970,8 @@ async function renderUsersPanel(container) {
   const cancelSelectionBtn = container.querySelector('.cancel-selection-btn');
   const selectAllCb = container.querySelector('.select-all-cb');
   const searchInput = container.querySelector('.users-search-input');
+
+  initUsersTableResize(container.querySelector('.admin-users-table'));
 
   /**
    * @param {string} query - Search query to filter user rows by
