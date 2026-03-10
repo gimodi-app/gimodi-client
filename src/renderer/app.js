@@ -492,7 +492,7 @@ window.addEventListener('gimodi:connected', async (e) => {
   log('Initial channel:', channelId, '(lobby)');
   initChatView(channelId);
   initSidePanel(getViewingChannelId);
-  initUnreadState(data.channels, key);
+  initUnreadState(data.channels, serverService.address);
 
   // Auto-join first channel when connecting via double-click
   if (data.autoJoin) {
