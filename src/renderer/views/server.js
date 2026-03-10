@@ -359,6 +359,14 @@ export function restoreState(state) {
   btnCreateChannel.style.display = (canCreate || canCreateTemp || canCreateGroup) ? '' : 'none';
 
   renderChannelTree();
+
+  serverService.request('channel:list', {}).then(result => {
+    if (result && result.channels) {
+      channels = result.channels;
+      window.gimodiChannels = channels;
+      renderChannelTree();
+    }
+  }).catch(() => {});
 }
 
 export function getCurrentChannelId() {
@@ -742,7 +750,12 @@ function onChannelDeleted(e) {
 function onChannelUpdated(e) {
   const { channel } = e.detail;
   const idx = channels.findIndex(c => c.id === channel.id);
-  if (idx >= 0) channels[idx] = { ...channels[idx], ...channel };
+  if (idx >= 0) {
+    channels[idx] = { ...channels[idx], ...channel };
+  } else {
+    channels.push(channel);
+    window.gimodiChannels = channels;
+  }
   // If current channel became unmoderated, clear voice state
   if (channel.id === currentChannelId && !channel.moderated) {
     voiceGrantedClients.clear();
@@ -2261,23 +2274,80 @@ function showGroupContextMenu(e, group) {
   document.addEventListener('keydown', onEscape);
 }
 
-function showEditGroupModal(group) {
+async function showEditGroupModal(group) {
   const existing = document.querySelector('.modal-edit-group');
   if (existing) existing.remove();
 
+  let roles = null;
+  try {
+    const result = await serverService.request('role:list', {});
+    if (result && result.roles) roles = result.roles;
+  } catch { /* no permission or error - skip roles section */ }
+
   const modal = document.createElement('div');
   modal.className = 'modal modal-edit-group';
+
+  let rolesHtml = '';
+  if (roles && roles.length > 0) {
+    const currentAllowed = group.allowedRoles || [];
+    const currentWrite = group.writeRoles || [];
+    const currentRead = group.readRoles || [];
+    const currentVisibility = group.visibilityRoles || [];
+    const makeChips = (cls, current) => roles.map(r => {
+      const active = current.includes(r.id) ? ' active' : '';
+      return `<button type="button" class="role-chip ${cls}${active}" data-role-id="${r.id}">
+        <i class="bi ${active ? 'bi-check-circle-fill' : 'bi-circle'}"></i>
+        ${escapeHtml(r.name)}
+      </button>`;
+    }).join('');
+    rolesHtml = `
+      <div class="form-section-header">Access Control</div>
+      <div class="acl-hint" style="margin-bottom:8px;">Group-level restrictions override individual channel settings.</div>
+      <div class="acl-card">
+        <div class="acl-tabs">
+          <button type="button" class="acl-tab active" data-tab="join">
+            <i class="bi bi-door-open"></i> Join
+          </button>
+          <button type="button" class="acl-tab" data-tab="read">
+            <i class="bi bi-eye"></i> Read
+          </button>
+          <button type="button" class="acl-tab" data-tab="write">
+            <i class="bi bi-pencil"></i> Write
+          </button>
+          <button type="button" class="acl-tab" data-tab="visibility">
+            <i class="bi bi-eye-slash"></i> Visibility
+          </button>
+        </div>
+        <div class="acl-tab-panel active" data-panel="join">
+          <div class="acl-hint">Select roles that can join channels in this group. None selected means open to all.</div>
+          <div class="role-chips">${makeChips('edit-grp-role', currentAllowed)}</div>
+        </div>
+        <div class="acl-tab-panel" data-panel="read">
+          <div class="acl-hint">Select roles that can read messages in channels of this group. None selected means everyone can read.</div>
+          <div class="role-chips">${makeChips('edit-grp-read-role', currentRead)}</div>
+        </div>
+        <div class="acl-tab-panel" data-panel="write">
+          <div class="acl-hint">Select roles that can send messages in channels of this group. None selected means everyone can write.</div>
+          <div class="role-chips">${makeChips('edit-grp-write-role', currentWrite)}</div>
+        </div>
+        <div class="acl-tab-panel" data-panel="visibility">
+          <div class="acl-hint">Select roles that can see this group and its channels. None selected means visible to everyone.</div>
+          <div class="role-chips">${makeChips('edit-grp-visibility-role', currentVisibility)}</div>
+        </div>
+      </div>`;
+  }
 
   modal.innerHTML = `
     <div class="modal-content">
       <h2>Edit Group</h2>
       <div class="form-group">
         <label>Group Name</label>
-        <input type="text" class="edit-group-name" value="${escapeHtml(group.name)}">
+        <input type="text" class="edit-group-name" value="${escapeHtml(group.name)}" maxlength="50">
       </div>
-      <div class="modal-buttons">
-        <button class="btn-primary modal-save-btn">Save</button>
+      ${rolesHtml}
+      <div class="modal-buttons modal-buttons-end">
         <button class="btn-secondary modal-cancel-btn">Cancel</button>
+        <button class="btn-primary modal-save-btn" disabled>Save Changes</button>
       </div>
     </div>
   `;
@@ -2285,6 +2355,62 @@ function showEditGroupModal(group) {
   document.body.appendChild(modal);
 
   const nameInput = modal.querySelector('.edit-group-name');
+  const saveBtn = modal.querySelector('.modal-save-btn');
+
+  const initial = {
+    name: group.name,
+    allowedRoles: JSON.stringify((group.allowedRoles || []).slice().sort()),
+    readRoles: JSON.stringify((group.readRoles || []).slice().sort()),
+    writeRoles: JSON.stringify((group.writeRoles || []).slice().sort()),
+    visibilityRoles: JSON.stringify((group.visibilityRoles || []).slice().sort()),
+  };
+
+  function getFormState() {
+    const activeChips = (cls) => [...modal.querySelectorAll(`.role-chip.${cls}.active`)].map(c => c.dataset.roleId).sort();
+    return {
+      name: nameInput.value.trim(),
+      allowedRoles: JSON.stringify(activeChips('edit-grp-role')),
+      readRoles: JSON.stringify(activeChips('edit-grp-read-role')),
+      writeRoles: JSON.stringify(activeChips('edit-grp-write-role')),
+      visibilityRoles: JSON.stringify(activeChips('edit-grp-visibility-role')),
+    };
+  }
+
+  function isDirty() {
+    const cur = getFormState();
+    return cur.name !== initial.name
+      || cur.allowedRoles !== initial.allowedRoles
+      || cur.readRoles !== initial.readRoles
+      || cur.writeRoles !== initial.writeRoles
+      || cur.visibilityRoles !== initial.visibilityRoles;
+  }
+
+  function updateSaveBtn() {
+    saveBtn.disabled = !isDirty();
+  }
+
+  modal.querySelectorAll('input').forEach(input => {
+    input.addEventListener('input', updateSaveBtn);
+  });
+
+  modal.querySelectorAll('.acl-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      modal.querySelectorAll('.acl-tab').forEach(t => t.classList.remove('active'));
+      modal.querySelectorAll('.acl-tab-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      modal.querySelector(`.acl-tab-panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
+    });
+  });
+
+  modal.querySelectorAll('.role-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      chip.classList.toggle('active');
+      const icon = chip.querySelector('i');
+      icon.className = chip.classList.contains('active') ? 'bi bi-check-circle-fill' : 'bi bi-circle';
+      updateSaveBtn();
+    });
+  });
+
   nameInput.focus();
   nameInput.select();
 
@@ -2296,7 +2422,23 @@ function showEditGroupModal(group) {
   const save = () => {
     const name = nameInput.value.trim();
     if (!name) return;
-    serverService.send('channel:update', { channelId: group.id, name });
+    const payload = { channelId: group.id, name };
+    const activeChips = (cls) => [...modal.querySelectorAll(`.role-chip.${cls}.active`)].map(c => c.dataset.roleId);
+    if (modal.querySelectorAll('.role-chip.edit-grp-role').length > 0) {
+      payload.allowedRoles = activeChips('edit-grp-role');
+    }
+    if (modal.querySelectorAll('.role-chip.edit-grp-read-role').length > 0) {
+      payload.readRoles = activeChips('edit-grp-read-role');
+    }
+    if (modal.querySelectorAll('.role-chip.edit-grp-write-role').length > 0) {
+      payload.writeRoles = activeChips('edit-grp-write-role');
+    }
+    if (modal.querySelectorAll('.role-chip.edit-grp-visibility-role').length > 0) {
+      payload.visibilityRoles = activeChips('edit-grp-visibility-role');
+    }
+    saveBtn.classList.add('btn-save-loading');
+    saveBtn.disabled = true;
+    serverService.send('channel:update', payload);
     closeModal();
   };
 
