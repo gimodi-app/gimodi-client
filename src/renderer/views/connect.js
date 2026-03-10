@@ -1,4 +1,4 @@
-import connectionManager from '../services/connectionManager.js';
+import connectionManager, { connKey } from '../services/connectionManager.js';
 import {
   initSidebar as _initSidebar,
   renderSidebar,
@@ -246,7 +246,8 @@ async function handleAddServer() {
 
   try {
     const publicKey = selectedIdentity ? selectedIdentity.publicKeyArmored : undefined;
-    const data = await connectionManager.connect(address, nickname, password || undefined, publicKey);
+    const key = connKey(address, identityFingerprint);
+    const data = await connectionManager.connect(key, address, nickname, password || undefined, publicKey);
 
     server.name = data.serverName || address;
 
@@ -256,7 +257,7 @@ async function handleAddServer() {
     await saveToHistory(address, nickname, password, data.serverName, identityFingerprint);
 
     closeAddServerModal();
-    data._address = address;
+    data._connKey = key;
     renderSidebar();
     window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: data }));
   } catch (err) {
@@ -312,6 +313,7 @@ async function handleEditServer() {
 
   const oldAddress = editingServer.address;
   const oldNickname = editingServer.nickname;
+  const oldIdentityFingerprint = editingServer.identityFingerprint || null;
   const wasConnected = editingServerWasConnected;
 
   const selectedIdentity = getSelectedIdentityFrom(editServerIdentity);
@@ -319,7 +321,7 @@ async function handleEditServer() {
 
   if (wasConnected) {
     window.dispatchEvent(new CustomEvent('gimodi:disconnect-server', {
-      detail: { address: oldAddress },
+      detail: { connKey: connKey(oldAddress, oldIdentityFingerprint) },
     }));
   }
 
@@ -331,14 +333,16 @@ async function handleEditServer() {
     identityFingerprint,
   };
 
-  replaceServerInPlace(oldAddress, oldNickname, updatedServer);
+  const oldFp = oldIdentityFingerprint;
+  const matchesOld = s => s.address === oldAddress && s.nickname === oldNickname && (s.identityFingerprint || null) === oldFp;
+  replaceServerInPlace(oldAddress, oldNickname, oldIdentityFingerprint, updatedServer);
   const items = await window.gimodi.servers.list();
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     if (item.type === 'group') {
-      const idx = item.servers.findIndex(s => s.address === oldAddress && s.nickname === oldNickname);
+      const idx = item.servers.findIndex(matchesOld);
       if (idx >= 0) { item.servers[idx] = updatedServer; break; }
-    } else if (item.address === oldAddress && item.nickname === oldNickname) {
+    } else if (matchesOld(item)) {
       items[i] = updatedServer; break;
     }
   }
@@ -358,9 +362,10 @@ async function handleEditServer() {
  * @param {boolean} [options.autoJoin=false]
  */
 async function connectToServer(server, { autoJoin = false } = {}) {
-  if (connectionManager.isConnected(server.address)) {
+  const key = connKey(server.address, server.identityFingerprint);
+  if (connectionManager.isConnected(key)) {
     window.dispatchEvent(new CustomEvent('gimodi:switch-server', {
-      detail: { address: server.address },
+      detail: { connKey: key },
     }));
     return;
   }
@@ -377,6 +382,7 @@ async function connectToServer(server, { autoJoin = false } = {}) {
 
   try {
     const data = await connectionManager.connect(
+      key,
       server.address,
       server.nickname,
       server.password || undefined,
@@ -391,7 +397,7 @@ async function connectToServer(server, { autoJoin = false } = {}) {
 
     await saveToHistory(server.address, server.nickname, server.password, data.serverName, server.identityFingerprint);
 
-    data._address = server.address;
+    data._connKey = key;
     window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: { ...data, autoJoin } }));
   } catch (err) {
     console.error('[connect] Failed to connect:', err.message);

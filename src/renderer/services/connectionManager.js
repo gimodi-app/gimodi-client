@@ -1,14 +1,32 @@
 import { ServerService } from './serverConnection.js';
 
+/**
+ * @param {string} address
+ * @param {string|null} [identityFingerprint]
+ * @returns {string}
+ */
+export function connKey(address, identityFingerprint) {
+  return identityFingerprint ? address + '\0' + identityFingerprint : address;
+}
+
+/**
+ * @param {string} key
+ * @returns {string}
+ */
+export function addressFromKey(key) {
+  const idx = key.indexOf('\0');
+  return idx >= 0 ? key.slice(0, idx) : key;
+}
+
 class ConnectionManager extends EventTarget {
   constructor() {
     super();
     /** @type {Map<string, ServerService>} */
     this._connections = new Map();
     /** @type {string|null} */
-    this._activeAddress = null;
+    this._activeKey = null;
     /** @type {string|null} */
-    this._voiceAddress = null;
+    this._voiceKey = null;
     /** @type {Array<{type: string, listener: Function, options: any}>} */
     this._proxyListeners = [];
     /** @type {Map<string, {server: object, chat: object}>} */
@@ -18,69 +36,70 @@ class ConnectionManager extends EventTarget {
   }
 
   /**
+   * @param {string} key
    * @param {string} address
    * @param {string} nickname
    * @param {string} [password]
    * @param {string} [publicKey]
    * @returns {Promise<object>}
    */
-  async connect(address, nickname, password, publicKey) {
-    if (this._connections.has(address)) {
-      this.switchView(address);
-      const conn = this._connections.get(address);
-      return { clientId: conn.clientId, serverName: conn.serverName, _address: address };
+  async connect(key, address, nickname, password, publicKey) {
+    if (this._connections.has(key)) {
+      this.switchView(key);
+      const conn = this._connections.get(key);
+      return { clientId: conn.clientId, serverName: conn.serverName, _connKey: key };
     }
 
     const conn = new ServerService();
     const data = await conn.connect(address, nickname, password, publicKey);
 
-    this._connections.set(address, conn);
-    this._credentials.set(address, { nickname, password, publicKey });
+    this._connections.set(key, conn);
+    this._credentials.set(key, { nickname, password, publicKey });
 
     conn.addEventListener('disconnected', (e) => {
-      this._onConnectionLost(address, e.detail?.reason);
+      this._onConnectionLost(key, e.detail?.reason);
     });
 
     return data;
   }
 
   /**
-   * @param {string} address
+   * @param {string} key
    */
-  switchView(address) {
-    if (address === this._activeAddress) return;
-    if (!this._connections.has(address)) return;
+  switchView(key) {
+    if (key === this._activeKey) return;
+    if (!this._connections.has(key)) return;
 
-    const oldAddress = this._activeAddress;
-    const oldConn = oldAddress ? this._connections.get(oldAddress) : null;
-    const newConn = this._connections.get(address);
+    const oldKey = this._activeKey;
+    const oldConn = oldKey ? this._connections.get(oldKey) : null;
+    const newConn = this._connections.get(key);
 
     this._rebindProxyListeners(oldConn, newConn);
-    this._activeAddress = address;
+    this._activeKey = key;
 
     this.dispatchEvent(new CustomEvent('view-switched', {
-      detail: { from: oldAddress, to: address },
+      detail: { from: oldKey, to: key },
     }));
   }
 
   /**
-   * @param {string} address
+   * @param {string} key
    */
-  disconnect(address) {
-    const conn = this._connections.get(address);
+  disconnect(key) {
+    const conn = this._connections.get(key);
     if (!conn) return;
 
     conn.disconnect();
-    this._connections.delete(address);
-    this._serverStates.delete(address);
-    this._credentials.delete(address);
+    this._connections.delete(key);
+    this._serverStates.delete(key);
+    this._credentials.delete(key);
 
-    if (this._voiceAddress === address) {
-      this._voiceAddress = null;
+    if (this._voiceKey === key) {
+      this._voiceKey = null;
     }
 
-    if (this._activeAddress === address) {
-      this._activeAddress = null;
+    if (this._activeKey === key) {
+      this._activeKey = null;
       const remaining = [...this._connections.keys()];
       if (remaining.length > 0) {
         this.switchView(remaining[0]);
@@ -91,7 +110,7 @@ class ConnectionManager extends EventTarget {
     }
 
     this.dispatchEvent(new CustomEvent('connection-removed', {
-      detail: { address },
+      detail: { key },
     }));
   }
 
@@ -99,35 +118,35 @@ class ConnectionManager extends EventTarget {
    * @returns {void}
    */
   disconnectAll() {
-    for (const [address, conn] of this._connections) {
+    for (const [, conn] of this._connections) {
       conn.disconnect();
     }
-    const oldActive = this._activeAddress ? this._connections.get(this._activeAddress) : null;
+    const oldActive = this._activeKey ? this._connections.get(this._activeKey) : null;
     if (oldActive) this._unbindProxyListeners(oldActive);
     this._connections.clear();
     this._serverStates.clear();
     this._credentials.clear();
-    this._activeAddress = null;
-    this._voiceAddress = null;
+    this._activeKey = null;
+    this._voiceKey = null;
     this.dispatchEvent(new CustomEvent('all-disconnected'));
   }
 
   /**
    * @private
-   * @param {string} address
+   * @param {string} key
    * @param {string} [reason]
    */
-  _onConnectionLost(address, reason) {
-    this._connections.delete(address);
-    this._serverStates.delete(address);
+  _onConnectionLost(key, reason) {
+    this._connections.delete(key);
+    this._serverStates.delete(key);
 
-    const hadVoice = this._voiceAddress === address;
+    const hadVoice = this._voiceKey === key;
     if (hadVoice) {
-      this._voiceAddress = null;
+      this._voiceKey = null;
     }
 
-    if (this._activeAddress === address) {
-      this._activeAddress = null;
+    if (this._activeKey === key) {
+      this._activeKey = null;
       const remaining = [...this._connections.keys()];
       if (remaining.length > 0) {
         this.switchView(remaining[0]);
@@ -137,17 +156,17 @@ class ConnectionManager extends EventTarget {
     }
 
     this.dispatchEvent(new CustomEvent('connection-lost', {
-      detail: { address, reason, hadVoice },
+      detail: { key, reason, hadVoice },
     }));
   }
 
   /**
-   * @param {string} address
+   * @param {string} key
    */
-  setVoiceServer(address) {
-    this._voiceAddress = address;
+  setVoiceServer(key) {
+    this._voiceKey = key;
     this.dispatchEvent(new CustomEvent('voice-server-changed', {
-      detail: { address },
+      detail: { key },
     }));
   }
 
@@ -155,9 +174,9 @@ class ConnectionManager extends EventTarget {
    * @returns {void}
    */
   clearVoiceServer() {
-    this._voiceAddress = null;
+    this._voiceKey = null;
     this.dispatchEvent(new CustomEvent('voice-server-changed', {
-      detail: { address: null },
+      detail: { key: null },
     }));
   }
 
@@ -165,39 +184,39 @@ class ConnectionManager extends EventTarget {
    * @returns {ServerService|null}
    */
   getActive() {
-    if (!this._activeAddress) return null;
-    return this._connections.get(this._activeAddress) || null;
+    if (!this._activeKey) return null;
+    return this._connections.get(this._activeKey) || null;
   }
 
   /**
    * @returns {ServerService|null}
    */
   getVoice() {
-    if (!this._voiceAddress) return null;
-    return this._connections.get(this._voiceAddress) || null;
+    if (!this._voiceKey) return null;
+    return this._connections.get(this._voiceKey) || null;
   }
 
   /**
-   * @param {string} address
+   * @param {string} key
    * @returns {ServerService|null}
    */
-  getConnection(address) {
-    return this._connections.get(address) || null;
+  getConnection(key) {
+    return this._connections.get(key) || null;
   }
 
   /** @returns {string|null} */
-  get activeAddress() {
-    return this._activeAddress;
+  get activeKey() {
+    return this._activeKey;
   }
 
-  /** @param {string|null} addr */
-  set activeAddress(addr) {
-    this._activeAddress = addr;
+  /** @param {string|null} key */
+  set activeKey(key) {
+    this._activeKey = key;
   }
 
   /** @returns {string|null} */
-  get voiceAddress() {
-    return this._voiceAddress;
+  get voiceKey() {
+    return this._voiceKey;
   }
 
   /** @returns {Map<string, ServerService>} */
@@ -211,36 +230,36 @@ class ConnectionManager extends EventTarget {
   }
 
   /**
-   * @param {string} address
+   * @param {string} key
    * @returns {boolean}
    */
-  isConnected(address) {
-    const conn = this._connections.get(address);
+  isConnected(key) {
+    const conn = this._connections.get(key);
     return conn ? !!conn.connected : false;
   }
 
   /**
-   * @param {string} address
+   * @param {string} key
    * @returns {{nickname: string, password: string|undefined, publicKey: string|undefined}|null}
    */
-  getCredentials(address) {
-    return this._credentials.get(address) || null;
+  getCredentials(key) {
+    return this._credentials.get(key) || null;
   }
 
   /**
-   * @param {string} address
+   * @param {string} key
    * @param {object} state
    */
-  saveServerState(address, state) {
-    this._serverStates.set(address, state);
+  saveServerState(key, state) {
+    this._serverStates.set(key, state);
   }
 
   /**
-   * @param {string} address
+   * @param {string} key
    * @returns {object|null}
    */
-  getServerState(address) {
-    return this._serverStates.get(address) || null;
+  getServerState(key) {
+    return this._serverStates.get(key) || null;
   }
 
   /**
@@ -275,7 +294,6 @@ class ConnectionManager extends EventTarget {
   }
 
   /**
-   * @private
    * @param {ServerService|null} oldConn
    * @param {ServerService|null} newConn
    */

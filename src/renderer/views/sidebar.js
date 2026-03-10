@@ -1,4 +1,4 @@
-import connectionManager from '../services/connectionManager.js';
+import connectionManager, { connKey } from '../services/connectionManager.js';
 import { getServerIcon } from '../services/iconCache.js';
 
 const iconUrlCache = new Map();
@@ -7,7 +7,7 @@ const sidebarList = document.getElementById('server-sidebar-list');
 const connectWelcomeHint = document.getElementById('connect-welcome-hint');
 
 let servers = [];
-let activeServerAddress = null;
+let activeServerKey = null;
 let contextMenuEl = null;
 
 let dragData = null;
@@ -47,14 +47,17 @@ function removeItem(item) {
 /**
  * @param {string} address
  * @param {string} nickname
+ * @param {string|null} [identityFingerprint]
  */
-export function removeServerByIdentity(address, nickname) {
+export function removeServerByIdentity(address, nickname, identityFingerprint) {
+  const fp = identityFingerprint || null;
+  const matches = s => s.address === address && s.nickname === nickname && (s.identityFingerprint || null) === fp;
   for (let i = servers.length - 1; i >= 0; i--) {
     const item = servers[i];
     if (item.type === 'group') {
-      const idx = item.servers.findIndex(s => s.address === address && s.nickname === nickname);
+      const idx = item.servers.findIndex(matches);
       if (idx >= 0) { item.servers.splice(idx, 1); return; }
-    } else if (item.address === address && item.nickname === nickname) {
+    } else if (matches(item)) {
       servers.splice(i, 1); return;
     }
   }
@@ -75,12 +78,14 @@ function cleanupGroups() {
  * @returns {boolean} True if the server was found and updated.
  */
 export function updateServerInList(serverData) {
+  const fp = serverData.identityFingerprint || null;
+  const matches = s => s.address === serverData.address && s.nickname === serverData.nickname && (s.identityFingerprint || null) === fp;
   for (let i = 0; i < servers.length; i++) {
     const item = servers[i];
     if (item.type === 'group') {
-      const idx = item.servers.findIndex(s => s.address === serverData.address && s.nickname === serverData.nickname);
+      const idx = item.servers.findIndex(matches);
       if (idx >= 0) { Object.assign(item.servers[idx], serverData); return true; }
-    } else if (item.address === serverData.address && item.nickname === serverData.nickname) {
+    } else if (matches(item)) {
       Object.assign(servers[i], serverData); return true;
     }
   }
@@ -98,19 +103,22 @@ export function addOrUpdateServer(server) {
 }
 
 /**
- * Replaces a server in-place by old address+nickname, preserving its position.
+ * Replaces a server in-place by old address+nickname+identity, preserving its position.
  * @param {string} oldAddress
  * @param {string} oldNickname
+ * @param {string|null} oldIdentityFingerprint
  * @param {Object} newServer
  * @returns {boolean}
  */
-export function replaceServerInPlace(oldAddress, oldNickname, newServer) {
+export function replaceServerInPlace(oldAddress, oldNickname, oldIdentityFingerprint, newServer) {
+  const fp = oldIdentityFingerprint || null;
+  const matches = s => s.address === oldAddress && s.nickname === oldNickname && (s.identityFingerprint || null) === fp;
   for (let i = 0; i < servers.length; i++) {
     const item = servers[i];
     if (item.type === 'group') {
-      const idx = item.servers.findIndex(s => s.address === oldAddress && s.nickname === oldNickname);
+      const idx = item.servers.findIndex(matches);
       if (idx >= 0) { item.servers[idx] = newServer; return true; }
-    } else if (item.address === oldAddress && item.nickname === oldNickname) {
+    } else if (matches(item)) {
       servers[i] = newServer; return true;
     }
   }
@@ -227,9 +235,10 @@ function createServerButton(server, pathStr) {
   btn.className = 'server-sidebar-btn';
   btn.draggable = true;
   btn.dataset.path = pathStr;
-  const isActive = activeServerAddress && server.address === activeServerAddress;
-  const isConnected = connectionManager.isConnected(server.address);
-  const isVoice = connectionManager.voiceAddress === server.address;
+  const key = connKey(server.address, server.identityFingerprint);
+  const isActive = activeServerKey && key === activeServerKey;
+  const isConnected = connectionManager.isConnected(key);
+  const isVoice = connectionManager.voiceKey === key;
 
   if (isActive) btn.classList.add('active');
   if (isConnected) btn.classList.add('connected');
@@ -266,7 +275,7 @@ function createServerButton(server, pathStr) {
       clickTimer = null;
       if (isConnected && !isActive) {
         window.dispatchEvent(new CustomEvent('gimodi:switch-server', {
-          detail: { address: server.address },
+          detail: { connKey: connKey(server.address, server.identityFingerprint) },
         }));
       } else if (!isConnected) {
         _connectCallback(server);
@@ -280,7 +289,7 @@ function createServerButton(server, pathStr) {
     } else {
       if (!isActive) {
         window.dispatchEvent(new CustomEvent('gimodi:switch-server', {
-          detail: { address: server.address },
+          detail: { connKey: connKey(server.address, server.identityFingerprint) },
         }));
       }
       window.dispatchEvent(new CustomEvent('gimodi:auto-join-voice'));
@@ -628,7 +637,7 @@ function showTooltip(e, server) {
   tooltipEl.appendChild(name);
   const addr = document.createElement('div');
   addr.className = 'tooltip-addr';
-  const isConnected = connectionManager.isConnected(server.address);
+  const isConnected = connectionManager.isConnected(connKey(server.address, server.identityFingerprint));
   addr.textContent = `${server.address} · ${server.nickname}${isConnected ? ' · Connected' : ''}`;
   tooltipEl.appendChild(addr);
   document.body.appendChild(tooltipEl);
@@ -688,7 +697,7 @@ function showServerContextMenu(e, server, isConnected) {
       ev.stopPropagation();
       dismissContextMenu();
       window.dispatchEvent(new CustomEvent('gimodi:disconnect-server', {
-        detail: { address: server.address },
+        detail: { connKey: connKey(server.address, server.identityFingerprint) },
       }));
     });
     contextMenuEl.appendChild(disconnectItem);
@@ -744,11 +753,11 @@ function showServerContextMenu(e, server, isConnected) {
     dismissContextMenu();
     if (isConnected) {
       window.dispatchEvent(new CustomEvent('gimodi:disconnect-server', {
-        detail: { address: server.address },
+        detail: { connKey: connKey(server.address, server.identityFingerprint) },
       }));
     }
-    await window.gimodi.servers.remove(server.address, server.nickname);
-    removeServerByIdentity(server.address, server.nickname);
+    await window.gimodi.servers.remove(server.address, server.nickname, server.identityFingerprint);
+    removeServerByIdentity(server.address, server.nickname, server.identityFingerprint);
     cleanupGroups();
     renderSidebar();
   });
@@ -809,14 +818,14 @@ function dismissContextMenu() {
   }
 }
 
-/** @param {string|null} address */
-export function setActiveServer(address) {
-  activeServerAddress = address || null;
+/** @param {string|null} key */
+export function setActiveServer(key) {
+  activeServerKey = key || null;
 }
 
 /** Clears the active server and re-renders the sidebar. */
 export function clearActiveServer() {
-  activeServerAddress = null;
+  activeServerKey = null;
   renderSidebar();
 }
 

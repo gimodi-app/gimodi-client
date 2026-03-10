@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('gimodi', {
   servers: {
     list: () => ipcRenderer.invoke('servers:list'),
     add: (server) => ipcRenderer.invoke('servers:add', server),
-    remove: (address, nickname) => ipcRenderer.invoke('servers:remove', address, nickname),
+    remove: (address, nickname, identityFingerprint) => ipcRenderer.invoke('servers:remove', address, nickname, identityFingerprint),
     reorder: (fromIndex, toIndex) => ipcRenderer.invoke('servers:reorder', fromIndex, toIndex),
     save: (items) => ipcRenderer.invoke('servers:save', items),
   },

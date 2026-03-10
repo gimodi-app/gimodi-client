@@ -1,5 +1,5 @@
 import serverService from './services/server.js';
-import connectionManager from './services/connectionManager.js';
+import connectionManager, { connKey, addressFromKey } from './services/connectionManager.js';
 import voiceService from './services/voice.js';
 import notificationService from './services/notifications.js';
 import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects } from './views/connect.js';
@@ -314,10 +314,10 @@ loadSettings();
 
 // Menu: Disconnect (disconnects the currently viewed server)
 window.gimodi.onDisconnect(() => {
-  const addr = connectionManager.activeAddress;
-  log('Menu disconnect clicked, active:', addr);
-  if (addr) {
-    disconnectServer(addr);
+  const key = connectionManager.activeKey;
+  log('Menu disconnect clicked, active:', key);
+  if (key) {
+    disconnectServer(key);
   }
 });
 
@@ -336,26 +336,26 @@ function showView(id) {
 
 // --- Multi-server helpers ---
 
-function saveCurrentViewState(address) {
-  if (!address) return;
+function saveCurrentViewState(key) {
+  if (!key) return;
   const serverState = saveServerState();
   const chatState = saveChatState();
-  connectionManager.saveServerState(address, { server: serverState, chat: chatState });
+  connectionManager.saveServerState(key, { server: serverState, chat: chatState });
 }
 
-function switchToServer(address) {
-  if (!connectionManager.isConnected(address)) return;
+function switchToServer(key) {
+  if (!connectionManager.isConnected(key)) return;
 
-  const prevAddress = connectionManager.activeAddress;
-  if (prevAddress === address) return;
+  const prevKey = connectionManager.activeKey;
+  if (prevKey === key) return;
 
   // Save current view state
-  if (prevAddress && connectionManager.isConnected(prevAddress)) {
-    saveCurrentViewState(prevAddress);
+  if (prevKey && connectionManager.isConnected(prevKey)) {
+    saveCurrentViewState(prevKey);
   }
 
   // Clean up current views (but keep voice alive if active on another server)
-  const voiceActive = !!connectionManager.voiceAddress;
+  const voiceActive = !!connectionManager.voiceKey;
   if (!voiceActive) {
     cleanupVoice();
   }
@@ -366,13 +366,13 @@ function switchToServer(address) {
   }
 
   // Switch active connection
-  const oldConn = prevAddress ? connectionManager.getConnection(prevAddress) : null;
-  const newConn = connectionManager.getConnection(address);
+  const oldConn = prevKey ? connectionManager.getConnection(prevKey) : null;
+  const newConn = connectionManager.getConnection(key);
   connectionManager._rebindProxyListeners(oldConn, newConn);
-  connectionManager.activeAddress = address;
+  connectionManager.activeKey = key;
 
   // Restore saved state or re-init
-  const saved = connectionManager.getServerState(address);
+  const saved = connectionManager.getServerState(key);
   if (saved) {
     restoreServerState(saved.server);
     restoreChatState(saved.chat);
@@ -381,7 +381,7 @@ function switchToServer(address) {
     }
   }
 
-  setActiveServer(address);
+  setActiveServer(key);
   rerenderSidebar();
   showView('view-server');
 
@@ -392,16 +392,16 @@ function switchToServer(address) {
   // Always show voice controls when viewing a connected server
   setVoiceControlsVisible(true);
 
-  log('Switched view to', address);
+  log('Switched view to', key);
 }
 
 // Listen for view-switch requests from sidebar
 window.addEventListener('gimodi:switch-server', (e) => {
-  switchToServer(e.detail.address);
+  switchToServer(e.detail.connKey);
 });
 
 window.addEventListener('gimodi:disconnect-server', (e) => {
-  disconnectServer(e.detail.address);
+  disconnectServer(e.detail.connKey);
 });
 
 window.addEventListener('gimodi:auto-join-voice', () => {
@@ -411,17 +411,17 @@ window.addEventListener('gimodi:auto-join-voice', () => {
   }
 });
 
-function disconnectServer(address) {
-  if (!address) return;
-  const conn = connectionManager.getConnection(address);
+function disconnectServer(key) {
+  if (!key) return;
+  const conn = connectionManager.getConnection(key);
   if (!conn) return;
 
   // Save tabs before cleanup
-  const wasActive = connectionManager.activeAddress === address;
+  const wasActive = connectionManager.activeKey === key;
   if (wasActive) saveChannelTabs();
 
   // If this server has voice, clean it up
-  if (connectionManager.voiceAddress === address) {
+  if (connectionManager.voiceKey === key) {
     voiceService.cleanup();
     connectionManager.clearVoiceServer();
   }
@@ -429,7 +429,7 @@ function disconnectServer(address) {
   conn.disconnect();
 
   window.dispatchEvent(new CustomEvent('gimodi:disconnected', {
-    detail: { address },
+    detail: { connKey: key },
   }));
 }
 
@@ -439,10 +439,10 @@ let suppressTabSave = false;
 
 function saveChannelTabs() {
   if (suppressTabSave) return;
-  const address = serverService.address;
-  if (!address) return;
+  const key = connectionManager.activeKey;
+  if (!key) return;
   if (!appSettings.channelTabs) appSettings.channelTabs = {};
-  appSettings.channelTabs[address] = getChannelViewTabsState();
+  appSettings.channelTabs[key] = getChannelViewTabsState();
   saveSettings();
 }
 
@@ -450,14 +450,14 @@ window.addEventListener('gimodi:channel-tabs-changed', saveChannelTabs);
 
 window.addEventListener('gimodi:connected', async (e) => {
   const data = e.detail;
-  const address = data._address; // set by connect flow
-  log('Connected to', data.serverName, 'as', data.clientId, 'at', address);
+  const key = data._connKey; // set by connect flow
+  log('Connected to', data.serverName, 'as', data.clientId, 'key', key);
 
   // If we were viewing a different server, save its state first
-  const prevAddress = connectionManager.activeAddress;
-  if (prevAddress && prevAddress !== address && connectionManager.isConnected(prevAddress)) {
-    saveCurrentViewState(prevAddress);
-    if (!connectionManager.voiceAddress) {
+  const prevKey = connectionManager.activeKey;
+  if (prevKey && prevKey !== key && connectionManager.isConnected(prevKey)) {
+    saveCurrentViewState(prevKey);
+    if (!connectionManager.voiceKey) {
       cleanupVoice();
     }
     cleanupChat();
@@ -465,19 +465,19 @@ window.addEventListener('gimodi:connected', async (e) => {
   }
 
   // Set this as the active (viewed) server
-  const prevConn = prevAddress ? connectionManager.getConnection(prevAddress) : null;
-  const newConn = connectionManager.getConnection(address);
-  connectionManager.activeAddress = address;
+  const prevConn = prevKey ? connectionManager.getConnection(prevKey) : null;
+  const newConn = connectionManager.getConnection(key);
+  connectionManager.activeKey = key;
   // Bind all proxy listeners (chatService, etc.) to the new connection
   connectionManager._rebindProxyListeners(prevConn, newConn);
 
   window.gimodi.setAdminStatus(serverService.hasPermission('server.admin_menu'), true);
-  setActiveServer(address);
+  setActiveServer(key);
   rerenderSidebar();
   showView('view-server');
 
   initServerView(data);
-  if (!connectionManager.voiceAddress) {
+  if (!connectionManager.voiceKey) {
     initVoiceView(data.clients, data.serverName);
   }
 
@@ -492,7 +492,7 @@ window.addEventListener('gimodi:connected', async (e) => {
   log('Initial channel:', channelId, '(lobby)');
   initChatView(channelId);
   initSidePanel(getViewingChannelId);
-  initUnreadState(data.channels, address);
+  initUnreadState(data.channels, key);
 
   // Auto-join first channel when connecting via double-click
   if (data.autoJoin) {
@@ -505,8 +505,8 @@ window.addEventListener('gimodi:connected', async (e) => {
   // overwrites appSettings.channelTabs[address] before we read it below.
   suppressTabSave = true;
 
-  // Restore persisted channel-view tabs for this server
-  const saved = appSettings.channelTabs?.[address];
+  // Restore persisted channel-view tabs for this server+identity
+  const saved = appSettings.channelTabs?.[key];
   if (saved?.tabs?.length) {
     const validChannelIds = new Set(data.channels.map(c => c.id));
     // Use current channel names from server in case they changed
@@ -552,17 +552,17 @@ window.addEventListener('gimodi:connected', async (e) => {
 });
 
 window.addEventListener('gimodi:disconnected', (e) => {
-  const address = e.detail?.address;
-  log('Disconnected from', address || 'unknown');
+  const key = e.detail?.connKey;
+  log('Disconnected from', key || 'unknown');
   try {
     // Save channel tabs before cleanup clears them
     saveChannelTabs();
 
     // If there are other connected servers, handle gracefully
-    const remaining = [...connectionManager.connections.keys()].filter(a => a !== address);
+    const remaining = [...connectionManager.connections.keys()].filter(k => k !== key);
     if (remaining.length > 0) {
-      const isActiveServer = connectionManager.activeAddress === address;
-      const isVoiceServer = connectionManager.voiceAddress === address;
+      const isActiveServer = connectionManager.activeKey === key;
+      const isVoiceServer = connectionManager.voiceKey === key;
 
       if (isVoiceServer) {
         voiceService.cleanup();
@@ -571,17 +571,17 @@ window.addEventListener('gimodi:disconnected', (e) => {
       }
 
       // Remove the disconnected connection
-      connectionManager.connections.delete(address);
-      connectionManager._serverStates?.delete(address);
+      connectionManager.connections.delete(key);
+      connectionManager._serverStates?.delete(key);
 
       if (isActiveServer) {
         // Disconnected server was the one we're viewing - clean up and switch
-        if (isVoiceServer || !connectionManager.voiceAddress) {
+        if (isVoiceServer || !connectionManager.voiceKey) {
           cleanupVoice();
         }
         cleanupChat();
         cleanupServer();
-        connectionManager.activeAddress = null;
+        connectionManager.activeKey = null;
         switchToServer(remaining[0]);
       }
 
@@ -610,9 +610,9 @@ window.addEventListener('gimodi:disconnected', (e) => {
     newChannelPassword.value = '';
     newChannelMaxUsers.value = '';
     newGroupName.value = '';
-    connectionManager.activeAddress = null;
-    connectionManager.connections.delete(address);
-    connectionManager._serverStates?.delete(address);
+    connectionManager.activeKey = null;
+    connectionManager.connections.delete(key);
+    connectionManager._serverStates?.delete(key);
     rerenderSidebar();
   } catch (err) {
     console.error('Error during disconnect cleanup:', err);
@@ -626,15 +626,15 @@ window.addEventListener('gimodi:channel-changed', async (e) => {
   switchChatChannel(channelId);
 
   // If voice is active on a different server, disconnect from that server first
-  const activeAddr = connectionManager.activeAddress;
-  const voiceAddr = connectionManager.voiceAddress;
-  if (voiceAddr && voiceAddr !== activeAddr) {
-    log('Voice active on different server, disconnecting from', voiceAddr);
-    disconnectServer(voiceAddr);
+  const activeKey = connectionManager.activeKey;
+  const voiceKey = connectionManager.voiceKey;
+  if (voiceKey && voiceKey !== activeKey) {
+    log('Voice active on different server, disconnecting from', voiceKey);
+    disconnectServer(voiceKey);
   }
 
   // Set this server as the voice server
-  connectionManager.setVoiceServer(activeAddr);
+  connectionManager.setVoiceServer(activeKey);
   const serverName = document.getElementById('server-name')?.textContent || '';
   setVoiceServerName(serverName);
   await setupVoice();
@@ -1227,26 +1227,26 @@ connectionManager.addEventListener('voice-server-changed', () => {
 let _reconnectAbort = null;
 
 connectionManager.addEventListener('connection-lost', (e) => {
-  const { address, reason, hadVoice } = e.detail;
-  log('Connection lost:', address, reason);
+  const { key, reason, hadVoice } = e.detail;
+  log('Connection lost:', key, reason);
 
   // Auto-reconnect on server shutdown (not kick/ban)
   // Capture channel state before disconnect cleanup clears it
-  const creds = connectionManager.getCredentials(address);
+  const creds = connectionManager.getCredentials(key);
   const previousChannelId = (reason && reason.startsWith('Server shut down:') && creds && hadVoice)
     ? getCurrentChannelId() : null;
 
   window.dispatchEvent(new CustomEvent('gimodi:disconnected', {
-    detail: { address, reason },
+    detail: { connKey: key, reason },
   }));
 
   if (reason && reason.startsWith('Server shut down:') && creds) {
-    attemptReconnect(address, creds, previousChannelId);
+    attemptReconnect(key, creds, previousChannelId);
     return;
   }
 
   // Clean up stored credentials since we won't reconnect
-  connectionManager._credentials.delete(address);
+  connectionManager._credentials.delete(key);
 
   if (reason) {
     const errorEl = document.getElementById('connect-error');
@@ -1266,7 +1266,7 @@ btnCancelReconnect.addEventListener('click', () => {
   modalReconnect.classList.add('hidden');
 });
 
-async function attemptReconnect(address, creds, previousChannelId) {
+async function attemptReconnect(key, creds, previousChannelId) {
   const controller = new AbortController();
   _reconnectAbort = controller;
 
@@ -1283,7 +1283,9 @@ async function attemptReconnect(address, creds, previousChannelId) {
     if (controller.signal.aborted) break;
 
     try {
+      const address = addressFromKey(key);
       const data = await connectionManager.connect(
+        key,
         address,
         creds.nickname,
         creds.password,
@@ -1292,9 +1294,9 @@ async function attemptReconnect(address, creds, previousChannelId) {
       // Success
       _reconnectAbort = null;
       modalReconnect.classList.add('hidden');
-      data._address = address;
+      data._connKey = key;
       window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: data }));
-      log('Reconnected to', address);
+      log('Reconnected to', key);
 
       // Rejoin previous channel (which also sets up voice)
       if (previousChannelId) {
@@ -1313,7 +1315,7 @@ async function attemptReconnect(address, creds, previousChannelId) {
   // All attempts failed or cancelled
   _reconnectAbort = null;
   modalReconnect.classList.add('hidden');
-  connectionManager._credentials.delete(address);
+  connectionManager._credentials.delete(key);
 
   if (!controller.signal.aborted) {
     const errorEl = document.getElementById('connect-error');
@@ -1332,9 +1334,10 @@ function escapeHtml(text) {
 window.gimodi.onConnectServer(async (server) => {
   log('Menu connect-server:', server.address, server.nickname);
   try {
+    const key = connKey(server.address, server.identityFingerprint);
     // If already connected to this server, just switch view
-    if (connectionManager.isConnected(server.address)) {
-      switchToServer(server.address);
+    if (connectionManager.isConnected(key)) {
+      switchToServer(key);
       return;
     }
 
@@ -1351,13 +1354,14 @@ window.gimodi.onConnectServer(async (server) => {
     }
 
     const data = await connectionManager.connect(
+      key,
       server.address,
       server.nickname,
       server.password || undefined,
       publicKey
     );
 
-    data._address = server.address;
+    data._connKey = key;
     window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: data }));
   } catch (err) {
     log('Menu connect-server failed:', err.message);

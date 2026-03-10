@@ -525,17 +525,19 @@ ipcMain.handle('servers:add', (event, server) => {
   try {
     items = JSON.parse(fs.readFileSync(serversPath, 'utf-8'));
   } catch { /* empty */ }
+  const fp = server.identityFingerprint || null;
+  const matches = s => s.address === server.address && s.nickname === server.nickname && (s.identityFingerprint || null) === fp;
   let found = false;
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     if (item.type === 'group') {
-      const idx = item.servers.findIndex(s => s.address === server.address && s.nickname === server.nickname);
+      const idx = item.servers.findIndex(matches);
       if (idx >= 0) {
         item.servers[idx] = { ...item.servers[idx], ...server };
         found = true;
         break;
       }
-    } else if (item.address === server.address && item.nickname === server.nickname) {
+    } else if (matches(item)) {
       items[i] = { ...items[i], ...server };
       found = true;
       break;
@@ -562,18 +564,20 @@ ipcMain.handle('servers:save', (event, items) => {
   fs.writeFileSync(serversPath, JSON.stringify(items, null, 2));
 });
 
-ipcMain.handle('servers:remove', (event, address, nickname) => {
+ipcMain.handle('servers:remove', (event, address, nickname, identityFingerprint) => {
   let items = [];
   try {
     items = JSON.parse(fs.readFileSync(serversPath, 'utf-8'));
   } catch { /* empty */ }
+  const fp = identityFingerprint || null;
+  const matches = s => s.address === address && s.nickname === nickname && (s.identityFingerprint || null) === fp;
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i];
     if (item.type === 'group') {
-      item.servers = item.servers.filter(s => !(s.address === address && s.nickname === nickname));
+      item.servers = item.servers.filter(s => !matches(s));
       if (item.servers.length === 0) items.splice(i, 1);
       else if (item.servers.length === 1) items[i] = item.servers[0];
-    } else if (item.address === address && item.nickname === nickname) {
+    } else if (matches(item)) {
       items.splice(i, 1);
     }
   }
