@@ -653,8 +653,8 @@ function onForceJoined(e) {
 }
 
 function onClientJoined(e) {
-  const { clientId, userId, nickname, channelId, badge, roleColor } = e.detail;
-  const newClient = { id: clientId, userId: userId || null, nickname, channelId, badge: badge || null, roleColor: roleColor || null };
+  const { clientId, userId, nickname, channelId, badge, roleColor, rolePosition } = e.detail;
+  const newClient = { id: clientId, userId: userId || null, nickname, channelId, badge: badge || null, roleColor: roleColor || null, rolePosition: rolePosition ?? Infinity };
   clients.push(newClient);
   window.gimodiClients = clients;
   renderChannelTree();
@@ -678,11 +678,12 @@ function onClientLeft(e) {
 }
 
 function onAdminChanged(e) {
-  const { clientId, badge, roleColor } = e.detail;
+  const { clientId, badge, roleColor, rolePosition } = e.detail;
   const client = clients.find(c => c.id === clientId);
   if (client) {
     client.badge = badge ?? null;
     client.roleColor = roleColor ?? null;
+    if (rolePosition !== undefined) client.rolePosition = rolePosition;
     updateChatBadges(client.userId, badge ?? null);
     updateChatNickColors(client.userId, roleColor ?? null);
   }
@@ -1251,7 +1252,8 @@ function renderChannel(ch, isChild, groupId) {
   channelTree.appendChild(el);
 
   // Show users in this channel
-  const usersInChannel = clients.filter(c => c.channelId === ch.id);
+  const usersInChannel = clients.filter(c => c.channelId === ch.id)
+    .sort((a, b) => (a.rolePosition ?? Infinity) - (b.rolePosition ?? Infinity) || a.nickname.localeCompare(b.nickname));
   if (usersInChannel.length > 0) {
     const usersEl = document.createElement('div');
     usersEl.className = 'channel-users';
@@ -3952,6 +3954,9 @@ async function _initRolesLogic(root) {
   let pendingBadge = '';
   let pendingColor = '';
 
+  let draggedRoleId = null;
+  let dragOverRoleId = null;
+
   const renderRolesList = () => {
     rolesList.innerHTML = '';
     for (const role of roles) {
@@ -3963,6 +3968,77 @@ async function _initRolesLogic(root) {
         item.style.background = '#232323';
         item.style.color = '#fff';
       }
+
+      // Drag & drop for reordering (admin role is not draggable)
+      if (role.id !== 'admin') {
+        item.draggable = true;
+        item.addEventListener('dragstart', (e) => {
+          draggedRoleId = role.id;
+          e.dataTransfer.effectAllowed = 'move';
+          item.style.opacity = '0.4';
+        });
+        item.addEventListener('dragend', () => {
+          draggedRoleId = null;
+          dragOverRoleId = null;
+          item.style.opacity = '';
+          rolesList.querySelectorAll('.roles-list-item').forEach(el => {
+            el.style.borderTop = '';
+            el.style.borderBottom = '';
+          });
+        });
+      }
+
+      item.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (!draggedRoleId || draggedRoleId === role.id) return;
+        if (role.id === 'admin') return;
+        e.dataTransfer.dropEffect = 'move';
+        dragOverRoleId = role.id;
+        rolesList.querySelectorAll('.roles-list-item').forEach(el => {
+          el.style.borderTop = '';
+          el.style.borderBottom = '';
+        });
+        const rect = item.getBoundingClientRect();
+        const mid = rect.top + rect.height / 2;
+        if (e.clientY < mid) {
+          item.style.borderTop = '2px solid var(--accent, #5865f2)';
+        } else {
+          item.style.borderBottom = '2px solid var(--accent, #5865f2)';
+        }
+      });
+
+      item.addEventListener('dragleave', () => {
+        item.style.borderTop = '';
+        item.style.borderBottom = '';
+      });
+
+      item.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        item.style.borderTop = '';
+        item.style.borderBottom = '';
+        if (!draggedRoleId || draggedRoleId === role.id) return;
+        if (role.id === 'admin') return;
+
+        const fromIdx = roles.findIndex(r => r.id === draggedRoleId);
+        if (fromIdx < 0) return;
+        const [moved] = roles.splice(fromIdx, 1);
+        let toIdx = roles.findIndex(r => r.id === role.id);
+        const rect = item.getBoundingClientRect();
+        const mid = rect.top + rect.height / 2;
+        if (e.clientY >= mid) toIdx++;
+        // Ensure nothing goes above admin (index 0)
+        if (toIdx < 1) toIdx = 1;
+        roles.splice(toIdx, 0, moved);
+
+        // Update positions
+        for (let i = 0; i < roles.length; i++) roles[i].position = i;
+        renderRolesList();
+
+        try {
+          await serverService.request('role:reorder', { order: roles.map(r => r.id) });
+        } catch (err) { await customAlert(err.message); }
+      });
+
       if (role.color) {
         const dot = document.createElement('span');
         dot.style.cssText = `width:10px;height:10px;border-radius:50%;background:${role.color};flex-shrink:0`;
