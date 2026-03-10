@@ -86,6 +86,11 @@ export function initServerView(data) {
   // User starts in lobby - no channel until they explicitly join one
   currentChannelId = null;
 
+  voiceGrantedClients.clear();
+  for (const c of (data.voiceGrantedClients || [])) voiceGrantedClients.add(c);
+  voiceRequestClients.clear();
+  for (const c of (data.voiceRequestClients || [])) voiceRequestClients.add(c);
+
   // Make client and channel lists globally accessible for chat mentions
   window.gimodiClients = clients;
   window.gimodiChannels = channels;
@@ -585,11 +590,11 @@ export async function switchChannel(channelId) {
     currentChannelId = channelId;
     updateChannelTabLabel(channelId);
 
-    // Reset voice moderation state for new channel
-    voiceGrantedClients.clear();
-    voiceRequestClients.clear();
     if (data.moderated && data.voiceGranted) {
       for (const id of data.voiceGranted) voiceGrantedClients.add(id);
+    }
+    if (data.moderated && data.voiceRequests) {
+      for (const id of data.voiceRequests) voiceRequestClients.add(id);
     }
 
     // Save password on successful join
@@ -628,9 +633,6 @@ function onForceJoined(e) {
   if (screenShareService.isSharing) screenShareService.stopSharing();
   voiceService.cleanup();
 
-  // Reset voice moderation state for new channel
-  voiceGrantedClients.clear();
-  voiceRequestClients.clear();
   if (moderated && voiceGranted) {
     for (const id of voiceGranted) voiceGrantedClients.add(id);
   }
@@ -756,10 +758,12 @@ function onChannelUpdated(e) {
     channels.push(channel);
     window.gimodiChannels = channels;
   }
-  // If current channel became unmoderated, clear voice state
-  if (channel.id === currentChannelId && !channel.moderated) {
-    voiceGrantedClients.clear();
-    voiceRequestClients.clear();
+  if (!channel.moderated) {
+    const channelClients = clients.filter(c => c.channelId === channel.id);
+    for (const c of channelClients) {
+      voiceGrantedClients.delete(c.id);
+      voiceRequestClients.delete(c.id);
+    }
   }
   // If current channel became moderated, dispatch event so app.js can handle mic
   if (channel.id === currentChannelId && channel.moderated) {
@@ -866,11 +870,13 @@ function onVoiceRevoked(e) {
 function onVoiceRequested(e) {
   const { clientId } = e.detail;
   voiceRequestClients.add(clientId);
+  renderChannelTree();
 }
 
 function onVoiceRequestCancelled(e) {
   const { clientId } = e.detail;
   voiceRequestClients.delete(clientId);
+  renderChannelTree();
 }
 
 function updateMuteIcons(clientId) {
@@ -1270,13 +1276,18 @@ function renderChannel(ch, isChild, groupId) {
         userEl.appendChild(roleBadge);
       }
 
-      // Voice granted icon in moderated channels
       if (ch.moderated && voiceGrantedClients.has(u.id)) {
         const micIcon = document.createElement('span');
         micIcon.className = 'voice-granted-icon';
         micIcon.title = 'Voice granted';
         micIcon.innerHTML = '<i class="bi bi-mic"></i>';
         userEl.appendChild(micIcon);
+      } else if (ch.moderated && voiceRequestClients.has(u.id)) {
+        const handIcon = document.createElement('span');
+        handIcon.className = 'voice-granted-icon';
+        handIcon.title = 'Voice requested';
+        handIcon.innerHTML = '<i class="bi bi-megaphone"></i>';
+        userEl.appendChild(handIcon);
       }
 
       // Mute/deafen status icon
@@ -2606,6 +2617,7 @@ export function showUserContextMenu(e, user, options = {}) {
             try {
               await serverService.request('voice:cancel-request');
               voiceRequestClients.delete(user.id);
+              renderChannelTree();
             } catch (err) { await customAlert(err.message); }
           });
           menu.appendChild(cancelItem);
@@ -2618,6 +2630,7 @@ export function showUserContextMenu(e, user, options = {}) {
             try {
               await serverService.request('voice:request');
               voiceRequestClients.add(user.id);
+              renderChannelTree();
             } catch (err) { await customAlert(err.message); }
           });
           menu.appendChild(requestItem);
