@@ -15,6 +15,89 @@ let updateChannel = 'stable';
 
 if (require('electron-squirrel-startup')) app.quit();
 
+// --- Custom Protocol (gimodi://) ---
+
+const PROTOCOL = 'gimodi';
+
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL);
+}
+
+/**
+ * Parses a gimodi:// URL and returns server connection params.
+ * Supported format: gimodi://add-server?host=<host>&port=<port>&nickname=<nick>&password=<pw>
+ * @param {string} rawUrl
+ * @returns {{ address: string, nickname?: string, password?: string } | null}
+ */
+function parseProtocolUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol !== `${PROTOCOL}:`) return null;
+    if (url.hostname !== 'add-server') return null;
+
+    const host = url.searchParams.get('host');
+    if (!host) return null;
+
+    const port = url.searchParams.get('port');
+    const address = port ? `${host}:${port}` : host;
+
+    const result = { address };
+    const nickname = url.searchParams.get('nickname');
+    if (nickname) result.nickname = nickname;
+    const password = url.searchParams.get('password');
+    if (password) result.password = password;
+
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+let pendingProtocolUrl = null;
+
+/**
+ * Sends a parsed protocol URL to the renderer, or queues it if the window isn't ready.
+ * @param {string} rawUrl
+ */
+function handleProtocolUrl(rawUrl) {
+  const parsed = parseProtocolUrl(rawUrl);
+  if (!parsed) return;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('protocol:add-server', parsed);
+  } else {
+    pendingProtocolUrl = parsed;
+  }
+}
+
+// Single instance lock — on second launch, focus existing window and handle URL
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, argv) => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    // On Windows/Linux, the protocol URL is passed as the last argument
+    const protocolArg = argv.find(arg => arg.startsWith(`${PROTOCOL}://`));
+    if (protocolArg) handleProtocolUrl(protocolArg);
+  });
+}
+
+// macOS: handle protocol URL when app is already running
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleProtocolUrl(url);
+});
+
 function getPlatformKey() {
   switch (process.platform) {
     case 'win32': return 'win';
@@ -375,6 +458,12 @@ function buildMenu(isAdmin, connected) {
 app.whenReady().then(async () => {
   await identity.ensureDefaultIdentity();
 
+  // Handle protocol URL from cold start (Windows/Linux pass it as argv)
+  const launchUrl = process.argv.find(arg => arg.startsWith(`${PROTOCOL}://`));
+  if (launchUrl) {
+    pendingProtocolUrl = parseProtocolUrl(launchUrl);
+  }
+
   // Restore saved settings before building the first menu
   const savedSettings = loadSettingsSync();
   if (savedSettings.devMode) lastDevMode = true;
@@ -399,6 +488,12 @@ app.whenReady().then(async () => {
   mainWindow.webContents.once('did-finish-load', () => {
     buildMenu(false, false);
     checkForUpdates();
+
+    // Flush any protocol URL received before the window was ready
+    if (pendingProtocolUrl) {
+      mainWindow.webContents.send('protocol:add-server', pendingProtocolUrl);
+      pendingProtocolUrl = null;
+    }
   });
 });
 

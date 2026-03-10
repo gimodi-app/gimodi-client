@@ -108,6 +108,7 @@ contextBridge.exposeInMainWorld('gimodi', {
     upload: (address, clientId, contentType, buffer) => ipcRenderer.invoke('icon-cache:upload', address, clientId, contentType, buffer),
     delete: (address, clientId) => ipcRenderer.invoke('icon-cache:delete', address, clientId),
   },
+  onProtocolAddServer: (cb) => ipcRenderer.on('protocol:add-server', (_, data) => cb(data)),
   showNotification: (options) => ipcRenderer.invoke('show-notification', options),
   onNotificationClicked: (cb) => ipcRenderer.on('notification:clicked', (_, action) => cb(action)),
   removeNotificationListener: () => ipcRenderer.removeAllListeners('notification:clicked'),

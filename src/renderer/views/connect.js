@@ -156,6 +156,10 @@ export async function initSidebar() {
       if (e.key === 'Enter') handleEditServer();
     });
   }
+
+  window.gimodi.onProtocolAddServer((data) => {
+    openAddServerModal(data);
+  });
 }
 
 /** Loads all available identities from the main process. */
@@ -192,15 +196,22 @@ function getSelectedIdentityFrom(selectEl) {
   return identities.find(i => i.fingerprint === fp) || identities[0];
 }
 
-/** Opens the Add Server modal and resets its fields. */
-function openAddServerModal() {
-  addServerAddress.value = '';
-  addServerNickname.value = '';
-  addServerPassword.value = '';
+/**
+ * Opens the Add Server modal, optionally pre-filling fields.
+ * @param {{ address?: string, nickname?: string, password?: string }} [prefill]
+ */
+function openAddServerModal(prefill) {
+  addServerAddress.value = prefill?.address || '';
+  addServerNickname.value = prefill?.nickname || '';
+  addServerPassword.value = prefill?.password || '';
   addServerError.textContent = '';
   populateIdentitySelect(addServerIdentity, addServerIdentityGroup);
   modalAddServer.classList.remove('hidden');
-  addServerAddress.focus();
+  if (prefill?.address) {
+    addServerNickname.focus();
+  } else {
+    addServerAddress.focus();
+  }
 }
 
 /** Closes the Add Server modal. */

@@ -111,7 +111,7 @@ module.exports = {
           homepage: 'https://gimodi.com',
           icon: 'assets/icon.png',
           categories: ['Network', 'Chat'],
-          mimeType: [],
+          mimeType: ['x-scheme-handler/gimodi'],
           bin: 'gimodi',
         },
       },
