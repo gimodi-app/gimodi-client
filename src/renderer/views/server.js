@@ -2897,17 +2897,19 @@ async function renderUsersPanel(container) {
 
   const onlineCount = users.filter(u => u.online).length;
   const selectedUserIds = new Set();
-  let selectionMode = false;
 
+  container.style.position = 'relative';
   container.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 12px">
       <h3 style="margin:0;font-size:14px">All Users (${users.length}, ${onlineCount} online)</h3>
-      <button class="btn-primary bulk-delete-btn" style="background:var(--danger);display:none;font-size:12px;padding:4px 12px">Delete Selected (0)</button>
+    </div>
+    <div style="margin:0 0 10px">
+      <input type="text" class="users-search-input" placeholder="Search by nickname, role or user ID..." style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg-input);color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box">
     </div>
     <table style="width:100%;border-collapse:collapse">
       <thead>
         <tr style="text-align:left;color:var(--text-secondary);font-size:12px">
-          <th class="checkbox-col" style="padding:6px 8px;border-bottom:1px solid var(--border);width:28px;display:none">
+          <th class="checkbox-col" style="padding:6px 8px;border-bottom:1px solid var(--border);width:28px">
             <input type="checkbox" class="select-all-cb" title="Select all">
           </th>
           <th style="padding:6px 8px;border-bottom:1px solid var(--border);width:24px"></th>
@@ -2919,53 +2921,74 @@ async function renderUsersPanel(container) {
       </thead>
       <tbody></tbody>
     </table>
+    <div class="users-selection-bar" style="display:none;position:absolute;bottom:12px;right:12px;align-items:center;gap:8px;font-size:0.8rem;padding:8px 14px;background:var(--bg-secondary, #2a2a2a);border:1px solid var(--border);border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,0.3);z-index:10">
+      <span class="selection-count" style="color:var(--text-muted, #888)"></span>
+      <button class="btn-secondary bulk-delete-btn danger" style="padding:4px 10px;font-size:0.78rem;color:var(--danger-color, #e74c3c)"><i class="bi bi-trash"></i> Delete</button>
+      <button class="btn-secondary cancel-selection-btn" style="padding:4px 10px;font-size:0.78rem">Cancel</button>
+    </div>
   `;
 
   const tbody = container.querySelector('tbody');
+  const selectionBar = container.querySelector('.users-selection-bar');
+  const selectionCount = container.querySelector('.selection-count');
   const bulkDeleteBtn = container.querySelector('.bulk-delete-btn');
+  const cancelSelectionBtn = container.querySelector('.cancel-selection-btn');
   const selectAllCb = container.querySelector('.select-all-cb');
-  const checkboxColHeader = container.querySelector('.checkbox-col');
+  const searchInput = container.querySelector('.users-search-input');
 
-  const updateBulkDeleteBtn = () => {
-    if (selectedUserIds.size > 0) {
-      bulkDeleteBtn.style.display = '';
-      bulkDeleteBtn.textContent = `Delete Selected (${selectedUserIds.size})`;
+  /**
+   * @param {string} query - Search query to filter user rows by
+   */
+  const filterRows = (query) => {
+    const q = query.toLowerCase().trim();
+    for (const row of tbody.querySelectorAll('tr[data-user-id]')) {
+      const nick = row.dataset.nickname || '';
+      const roles = row.dataset.roles || '';
+      const uid = row.dataset.userId || '';
+      const match = !q || nick.includes(q) || roles.includes(q) || uid.includes(q);
+      row.style.display = match ? '' : 'none';
+    }
+  };
+
+  searchInput.addEventListener('input', () => filterRows(searchInput.value));
+
+  /**
+   * @returns {void}
+   */
+  const updateSelectionUI = () => {
+    const count = selectedUserIds.size;
+    if (count > 0) {
+      selectionBar.style.display = 'flex';
+      selectionCount.textContent = `${count} selected`;
     } else {
-      bulkDeleteBtn.style.display = 'none';
+      selectionBar.style.display = 'none';
     }
+    selectAllCb.checked = count === users.length && count > 0;
+    selectAllCb.indeterminate = count > 0 && count < users.length;
   };
 
-  const enterSelectionMode = () => {
-    if (selectionMode) return;
-    selectionMode = true;
-    checkboxColHeader.style.display = '';
-    for (const cb of tbody.querySelectorAll('.user-row-cb-td')) {
-      cb.style.display = '';
-    }
-  };
-
+  /**
+   * @returns {void}
+   */
   const exitSelectionMode = () => {
-    selectionMode = false;
     selectedUserIds.clear();
-    checkboxColHeader.style.display = 'none';
-    selectAllCb.checked = false;
-    for (const cb of tbody.querySelectorAll('.user-row-cb-td')) {
-      cb.style.display = 'none';
-      cb.querySelector('input').checked = false;
+    for (const cb of tbody.querySelectorAll('.user-row-cb')) {
+      cb.checked = false;
     }
-    updateBulkDeleteBtn();
+    updateSelectionUI();
   };
 
   selectAllCb.addEventListener('change', () => {
     const checked = selectAllCb.checked;
-    for (const cb of tbody.querySelectorAll('.user-row-cb input')) {
+    for (const cb of tbody.querySelectorAll('.user-row-cb')) {
       cb.checked = checked;
-      const userId = cb.dataset.userId;
-      if (checked) selectedUserIds.add(userId);
-      else selectedUserIds.delete(userId);
+      if (checked) selectedUserIds.add(cb.dataset.userId);
+      else selectedUserIds.delete(cb.dataset.userId);
     }
-    updateBulkDeleteBtn();
+    updateSelectionUI();
   });
+
+  cancelSelectionBtn.addEventListener('click', exitSelectionMode);
 
   bulkDeleteBtn.addEventListener('click', async () => {
     const count = selectedUserIds.size;
@@ -2973,7 +2996,7 @@ async function renderUsersPanel(container) {
     if (!await customConfirm(`Are you sure you want to permanently delete ${count} user${count > 1 ? 's' : ''}?\n\nThis will remove their identities, roles, and all DM history.`)) return;
 
     bulkDeleteBtn.disabled = true;
-    bulkDeleteBtn.textContent = 'Deleting...';
+    bulkDeleteBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
     try {
       await serverService.request('admin:bulk-delete-users', { userIds: [...selectedUserIds] });
     } catch (err) {
@@ -2995,13 +3018,14 @@ async function renderUsersPanel(container) {
 
   for (const user of users) {
     const tr = document.createElement('tr');
-    tr.style.cssText = 'cursor:context-menu';
+    tr.style.cssText = '';
+    tr.dataset.userId = user.userId.toLowerCase();
+    tr.dataset.nickname = user.nickname.toLowerCase();
+    tr.dataset.roles = user.roles.map(r => r.name).join(', ').toLowerCase();
     tr.addEventListener('contextmenu', (e) => showAdminUserContextMenu(e, user, container));
 
-    // Checkbox cell (hidden until selection mode)
     const cbTd = document.createElement('td');
-    cbTd.className = 'user-row-cb-td';
-    cbTd.style.cssText = 'padding:6px 8px;text-align:center;display:none';
+    cbTd.style.cssText = 'padding:6px 8px;text-align:center';
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.className = 'user-row-cb';
@@ -3010,22 +3034,10 @@ async function renderUsersPanel(container) {
     cb.addEventListener('change', () => {
       if (cb.checked) selectedUserIds.add(user.userId);
       else selectedUserIds.delete(user.userId);
-      selectAllCb.checked = selectedUserIds.size === users.length;
-      updateBulkDeleteBtn();
+      updateSelectionUI();
     });
     cbTd.appendChild(cb);
     tr.appendChild(cbTd);
-
-    // Click row to enter selection mode and toggle checkbox
-    tr.addEventListener('click', (e) => {
-      if (e.target.tagName === 'INPUT') return;
-      enterSelectionMode();
-      cb.checked = !cb.checked;
-      if (cb.checked) selectedUserIds.add(user.userId);
-      else selectedUserIds.delete(user.userId);
-      selectAllCb.checked = selectedUserIds.size === users.length;
-      updateBulkDeleteBtn();
-    });
 
     // Status dot
     const statusTd = document.createElement('td');
