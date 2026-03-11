@@ -437,6 +437,11 @@ function rebuildTrayMenu() {
       label: voiceDeafened ? 'Undeafen' : 'Deafen',
       click: () => { if (mainWindow) mainWindow.webContents.send('tray:toggle-deafen'); },
     });
+    items.push({ type: 'separator' });
+    items.push({
+      label: 'Disconnect',
+      click: () => { if (mainWindow) mainWindow.webContents.send('tray:disconnect'); },
+    });
   }
   items.push({ label: 'Close', click: () => { app.isQuitting = true; app.quit(); } });
   tray.setContextMenu(Menu.buildFromTemplate(items));

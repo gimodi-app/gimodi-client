@@ -140,6 +140,7 @@ export function initServerView(data) {
   renderChannelTree();
 
   btnDisconnect.addEventListener('click', handleDisconnect);
+  window.gimodi.onTrayDisconnect(handleDisconnect);
   const canCreate = serverService.hasPermission('channel.create');
   const canCreateTemp = serverService.hasPermission('channel.create_temporary');
   const canCreateGroup = serverService.hasPermission('channel.group_create');

@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('gimodi', {
     ipcRenderer.removeAllListeners('server-admin:audit-log');
     ipcRenderer.removeAllListeners('tray:toggle-mute');
     ipcRenderer.removeAllListeners('tray:toggle-deafen');
+    ipcRenderer.removeAllListeners('tray:disconnect');
     // Note: menu:disconnect and menu:open-unified-settings
     // are registered once by app.js and must persist across reconnects.
   },
@@ -69,6 +70,7 @@ contextBridge.exposeInMainWorld('gimodi', {
   setVoiceMuteState: (muted, deafened) => ipcRenderer.invoke('set-voice-mute-state', muted, deafened),
   onTrayToggleMute: (cb) => ipcRenderer.on('tray:toggle-mute', () => cb()),
   onTrayToggleDeafen: (cb) => ipcRenderer.on('tray:toggle-deafen', () => cb()),
+  onTrayDisconnect: (cb) => ipcRenderer.on('tray:disconnect', () => cb()),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   downloadFile: (url, filename) => ipcRenderer.invoke('download-file', url, filename),
   wcPopout: {
