@@ -419,6 +419,7 @@ let trayOnline = null;
 let voiceActive = false;
 let voiceMuted = false;
 let voiceDeafened = false;
+let notificationMode = 'mentions';
 
 /**
  * @description Rebuilds the system tray context menu based on current voice state
@@ -443,6 +444,31 @@ function rebuildTrayMenu() {
       click: () => { if (mainWindow) mainWindow.webContents.send('tray:disconnect'); },
     });
   }
+  items.push({ type: 'separator' });
+  const notifModes = [
+    { value: 'all', label: 'All messages' },
+    { value: 'mentions', label: 'Mentions and DMs only' },
+    { value: 'dms', label: 'DMs only' },
+    { value: 'none', label: 'Disabled' },
+  ];
+  items.push({
+    label: 'Notifications',
+    type: 'submenu',
+    submenu: notifModes.map(m => ({
+      label: m.label,
+      type: 'radio',
+      checked: notificationMode === m.value,
+      click: () => {
+        notificationMode = m.value;
+        const settings = loadSettingsSync();
+        settings.notificationMode = m.value;
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+        rebuildTrayMenu();
+        if (mainWindow) mainWindow.webContents.send('notification-mode:changed', m.value);
+      },
+    })),
+  });
+  items.push({ type: 'separator' });
   items.push({ label: 'Close', click: () => { app.isQuitting = true; app.quit(); } });
   tray.setContextMenu(Menu.buildFromTemplate(items));
 }
@@ -500,6 +526,7 @@ app.whenReady().then(async () => {
   const savedSettings = loadSettingsSync();
   if (savedSettings.devMode) lastDevMode = true;
   if (savedSettings.updateChannel) updateChannel = savedSettings.updateChannel;
+  if (savedSettings.notificationMode) notificationMode = savedSettings.notificationMode;
 
   const trayExt = process.platform === 'win32' ? 'ico' : 'png';
   trayDefault = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', `tray-32x32.${trayExt}`));
@@ -687,6 +714,11 @@ ipcMain.handle('servers:add', (event, server) => {
   if (!found) items.push(server);
   fs.writeFileSync(serversPath, JSON.stringify(items, null, 2));
   return items;
+});
+
+ipcMain.on('notification-mode:set', (event, mode) => {
+  notificationMode = mode;
+  rebuildTrayMenu();
 });
 
 ipcMain.handle('servers:reorder', (event, fromIndex, toIndex) => {

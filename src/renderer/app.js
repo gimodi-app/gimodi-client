@@ -916,6 +916,13 @@ btnCheckUpdates.addEventListener('click', () => {
 selectNotificationMode.addEventListener('change', () => {
   appSettings.notificationMode = selectNotificationMode.value;
   saveSettings();
+  window.gimodi.setNotificationMode(selectNotificationMode.value);
+});
+
+window.gimodi.onNotificationModeChanged((mode) => {
+  appSettings.notificationMode = mode;
+  notificationService.updateSettings(appSettings);
+  selectNotificationMode.value = mode;
 });
 
 // Identities tab handlers
@@ -1179,6 +1186,7 @@ inputPTTKey.addEventListener('keydown', (e) => {
 selectNotificationMode.addEventListener('change', () => {
   appSettings.notificationMode = selectNotificationMode.value;
   saveSettings();
+  window.gimodi.setNotificationMode(selectNotificationMode.value);
 });
 
 // --- Notification click handler ---

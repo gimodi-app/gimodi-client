@@ -120,6 +120,8 @@ contextBridge.exposeInMainWorld('gimodi', {
   showNotification: (options) => ipcRenderer.invoke('show-notification', options),
   onNotificationClicked: (cb) => ipcRenderer.on('notification:clicked', (_, action) => cb(action)),
   removeNotificationListener: () => ipcRenderer.removeAllListeners('notification:clicked'),
+  setNotificationMode: (mode) => ipcRenderer.send('notification-mode:set', mode),
+  onNotificationModeChanged: (cb) => ipcRenderer.on('notification-mode:changed', (_, mode) => cb(mode)),
   onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (_, version) => cb(version)),
   onUpdateStatus: (cb) => ipcRenderer.on('update:status', (_, status) => cb(status)),
   onUpdateDownloadStart: (cb) => ipcRenderer.on('update:download-start', (_, version) => cb(version)),
