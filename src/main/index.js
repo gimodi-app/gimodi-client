@@ -414,6 +414,8 @@ function createWindow() {
 let lastAdminStatus = false;
 let lastConnected = false;
 let lastDevMode = false;
+let trayDefault = null;
+let trayOnline = null;
 
 function loadSettingsSync() {
   try {
@@ -469,9 +471,10 @@ app.whenReady().then(async () => {
   if (savedSettings.devMode) lastDevMode = true;
   if (savedSettings.updateChannel) updateChannel = savedSettings.updateChannel;
 
-  const iconFile = process.platform === 'win32' ? 'tray-32x32.ico' : 'tray-32x32.png';
-  const icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', iconFile));
-  tray = new Tray(icon);
+  const trayExt = process.platform === 'win32' ? 'ico' : 'png';
+  trayDefault = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', `tray-32x32.${trayExt}`));
+  trayOnline = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', `tray-online-32x32.${trayExt}`));
+  tray = new Tray(trayDefault);
   tray.setToolTip('Gimodi');
   const trayMenu = Menu.buildFromTemplate([
     { label: 'Open', click: () => { mainWindow.show(); mainWindow.focus(); } },
@@ -589,6 +592,11 @@ function openIdentityManager() {
 // Admin status - rebuild menu when admin state changes
 ipcMain.handle('set-admin-status', (event, isAdmin, connected) => {
   buildMenu(!!isAdmin, connected !== undefined ? !!connected : true);
+});
+
+// Voice state - swap tray icon when voice is active
+ipcMain.handle('set-voice-active', (event, active) => {
+  if (tray) tray.setImage(active ? trayOnline : trayDefault);
 });
 
 // Recently Joined history

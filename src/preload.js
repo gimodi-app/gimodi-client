@@ -63,6 +63,7 @@ contextBridge.exposeInMainWorld('gimodi', {
     // are registered once by app.js and must persist across reconnects.
   },
   setAdminStatus: (isAdmin, connected) => ipcRenderer.invoke('set-admin-status', isAdmin, connected),
+  setVoiceActive: (active) => ipcRenderer.invoke('set-voice-active', active),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   downloadFile: (url, filename) => ipcRenderer.invoke('download-file', url, filename),
   wcPopout: {

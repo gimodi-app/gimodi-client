@@ -1221,6 +1221,7 @@ btnAdmin.addEventListener('click', () => {
 // Re-render sidebar when voice server changes (to update voice-active indicator)
 connectionManager.addEventListener('voice-server-changed', () => {
   rerenderSidebar();
+  window.gimodi.setVoiceActive(!!connectionManager.voiceKey);
 });
 
 // Handle unexpected connection loss from connectionManager
