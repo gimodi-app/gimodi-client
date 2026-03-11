@@ -114,6 +114,9 @@ export function initVoiceView(initialClients = [], serverName = '') {
 
   btnMute.addEventListener('click', toggleMute);
   btnDeafen.addEventListener('click', toggleDeafen);
+
+  window.gimodi.onTrayToggleMute(toggleMute);
+  window.gimodi.onTrayToggleDeafen(toggleDeafen);
   btnWebcam.addEventListener('click', handleWebcamClick);
   btnScreenShare.addEventListener('click', handleScreenShareClick);
 
@@ -355,6 +358,7 @@ function updateMuteUI() {
   btnMute.classList.toggle('active', showMuted);
   btnMute.innerHTML = showMuted ? '<i class="bi bi-mic-mute"></i>' : '<i class="bi bi-mic"></i>';
   btnMute.title = isDeafened ? 'Undeafen to unmute' : (isMuted ? 'Unmute' : 'Mute');
+  window.gimodi.setVoiceMuteState(isMuted, isDeafened);
 }
 
 function updateDeafenUI() {

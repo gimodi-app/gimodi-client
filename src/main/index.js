@@ -416,6 +416,31 @@ let lastConnected = false;
 let lastDevMode = false;
 let trayDefault = null;
 let trayOnline = null;
+let voiceActive = false;
+let voiceMuted = false;
+let voiceDeafened = false;
+
+/**
+ * @description Rebuilds the system tray context menu based on current voice state
+ */
+function rebuildTrayMenu() {
+  if (!tray) return;
+  const items = [
+    { label: 'Open', click: () => { mainWindow.show(); mainWindow.focus(); } },
+  ];
+  if (voiceActive) {
+    items.push({
+      label: voiceMuted || voiceDeafened ? 'Unmute' : 'Mute',
+      click: () => { if (mainWindow) mainWindow.webContents.send('tray:toggle-mute'); },
+    });
+    items.push({
+      label: voiceDeafened ? 'Undeafen' : 'Deafen',
+      click: () => { if (mainWindow) mainWindow.webContents.send('tray:toggle-deafen'); },
+    });
+  }
+  items.push({ label: 'Close', click: () => { app.isQuitting = true; app.quit(); } });
+  tray.setContextMenu(Menu.buildFromTemplate(items));
+}
 
 function loadSettingsSync() {
   try {
@@ -476,11 +501,7 @@ app.whenReady().then(async () => {
   trayOnline = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', `tray-online-32x32.${trayExt}`));
   tray = new Tray(trayDefault);
   tray.setToolTip('Gimodi');
-  const trayMenu = Menu.buildFromTemplate([
-    { label: 'Open', click: () => { mainWindow.show(); mainWindow.focus(); } },
-    { label: 'Close', click: () => { app.isQuitting = true; app.quit(); } },
-  ]);
-  tray.setContextMenu(trayMenu);
+  rebuildTrayMenu();
   const showWindow = () => { mainWindow.show(); mainWindow.focus(); };
   tray.on('click', showWindow);
   tray.on('double-click', showWindow);
@@ -596,7 +617,19 @@ ipcMain.handle('set-admin-status', (event, isAdmin, connected) => {
 
 // Voice state - swap tray icon when voice is active
 ipcMain.handle('set-voice-active', (event, active) => {
+  voiceActive = active;
+  if (!active) {
+    voiceMuted = false;
+    voiceDeafened = false;
+  }
   if (tray) tray.setImage(active ? trayOnline : trayDefault);
+  rebuildTrayMenu();
+});
+
+ipcMain.handle('set-voice-mute-state', (event, muted, deafened) => {
+  voiceMuted = muted;
+  voiceDeafened = deafened;
+  rebuildTrayMenu();
 });
 
 // Recently Joined history

@@ -59,11 +59,16 @@ contextBridge.exposeInMainWorld('gimodi', {
     ipcRenderer.removeAllListeners('server-admin:manage-roles');
     ipcRenderer.removeAllListeners('server-admin:server-settings');
     ipcRenderer.removeAllListeners('server-admin:audit-log');
+    ipcRenderer.removeAllListeners('tray:toggle-mute');
+    ipcRenderer.removeAllListeners('tray:toggle-deafen');
     // Note: menu:disconnect and menu:open-unified-settings
     // are registered once by app.js and must persist across reconnects.
   },
   setAdminStatus: (isAdmin, connected) => ipcRenderer.invoke('set-admin-status', isAdmin, connected),
   setVoiceActive: (active) => ipcRenderer.invoke('set-voice-active', active),
+  setVoiceMuteState: (muted, deafened) => ipcRenderer.invoke('set-voice-mute-state', muted, deafened),
+  onTrayToggleMute: (cb) => ipcRenderer.on('tray:toggle-mute', () => cb()),
+  onTrayToggleDeafen: (cb) => ipcRenderer.on('tray:toggle-deafen', () => cb()),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   downloadFile: (url, filename) => ipcRenderer.invoke('download-file', url, filename),
   wcPopout: {
