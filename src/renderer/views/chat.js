@@ -2,7 +2,7 @@ import serverService from '../services/server.js';
 import chatService from '../services/chat.js';
 import notificationService from '../services/notifications.js';
 import { tryHandleCommand, isSlashCommand } from '../services/commands.js';
-import { toggleEmojiPicker } from './emoji-picker.js';
+import { showEmojiPicker, closeEmojiPicker, isPickerOpen } from './emoji-picker.js';
 import { setNickname, invalidateNickname, getCachedNickname, resolveNicknames } from '../services/nicknameCache.js';
 import { formatTime, formatTimeShort, formatDateTime, formatRelativeTime } from '../services/timeFormat.js';
 import { customConfirm } from '../services/dialogs.js';
@@ -436,13 +436,21 @@ function selectEmojiShortcode(shortcode) {
 }
 
 function onEmojiClick() {
-  toggleEmojiPicker(btnEmoji, (emoji) => {
-    const start = chatInput.selectionStart;
-    const end = chatInput.selectionEnd;
-    chatInput.value = chatInput.value.substring(0, start) + emoji + chatInput.value.substring(end);
-    chatInput.selectionStart = chatInput.selectionEnd = start + emoji.length;
-    chatInput.focus();
-    autoResizeInput();
+  if (isPickerOpen()) {
+    closeEmojiPicker();
+    return;
+  }
+  showEmojiPicker({
+    anchor: btnEmoji,
+    closeOnSelect: false,
+    onSelect: (emoji) => {
+      const start = chatInput.selectionStart;
+      const end = chatInput.selectionEnd;
+      chatInput.value = chatInput.value.substring(0, start) + emoji + chatInput.value.substring(end);
+      chatInput.selectionStart = chatInput.selectionEnd = start + emoji.length;
+      chatInput.focus();
+      autoResizeInput();
+    }
   });
 }
 
