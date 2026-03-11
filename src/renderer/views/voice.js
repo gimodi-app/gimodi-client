@@ -100,11 +100,6 @@ export function setVoiceControlsVisible(visible) {
   for (const btn of voiceBar.querySelectorAll('.btn-icon:not(#btn-settings)')) {
     btn.style.display = visible ? '' : 'none';
   }
-  const banner = document.getElementById('voice-server-banner');
-  if (banner && !visible) {
-    banner.textContent = '';
-    banner.style.display = 'none';
-  }
 }
 
 export function initVoiceView(initialClients = [], serverName = '') {
@@ -198,11 +193,6 @@ function setVoiceControlsEnabled(enabled) {
 
 function onChannelChangedForControls() {
   setVoiceControlsEnabled(true);
-  const banner = document.getElementById('voice-server-banner');
-  if (banner && voiceServerName) {
-    banner.textContent = `Connected to ${voiceServerName}`;
-    banner.style.display = 'block';
-  }
 }
 
 export function cleanup() {
