@@ -3037,6 +3037,11 @@ async function renderUsersPanel(container) {
     tr.dataset.nickname = (user.registeredNicknames || [user.nickname]).join(' ').toLowerCase();
     tr.dataset.roles = user.roles.map(r => r.name).join(', ').toLowerCase();
     tr.addEventListener('contextmenu', (e) => showAdminUserContextMenu(e, user, container));
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', (e) => {
+      if (e.target.closest('input')) return;
+      showUserDetailModal(user);
+    });
 
     const cbTd = document.createElement('td');
     cbTd.style.cssText = 'padding:6px 8px;text-align:center';
@@ -3105,6 +3110,57 @@ async function renderUsersPanel(container) {
 
     tbody.appendChild(tr);
   }
+}
+
+/**
+ * @param {object} user
+ */
+function showUserDetailModal(user) {
+  const existing = document.querySelector('.modal-user-detail');
+  if (existing) existing.remove();
+
+  const nicks = user.registeredNicknames && user.registeredNicknames.length > 0
+    ? user.registeredNicknames.join(', ')
+    : user.nickname;
+  const roles = user.roles.length > 0 ? user.roles.map(r => r.name).join(', ') : '-';
+  const status = user.online ? 'Online' : 'Offline';
+  const lastSeen = user.online
+    ? 'Now'
+    : user.lastSeenAt ? new Date(user.lastSeenAt).toLocaleString() : '-';
+  const created = user.createdAt ? new Date(user.createdAt).toLocaleString() : '-';
+
+  const rows = [
+    ['Nickname', user.nickname],
+    ['Registered Nicknames', nicks],
+    ['User ID', user.userId],
+    ['Status', status],
+    ['Roles', roles],
+    ['Last Seen', lastSeen],
+    ['Created', created],
+  ];
+
+  const modal = document.createElement('div');
+  modal.className = 'modal modal-user-detail';
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:450px">
+      <h3 style="margin:0 0 16px">User Details - ${escapeHtml(user.nickname)}</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        ${rows.map(([label, value]) => `
+          <tr>
+            <td style="padding:5px 10px 5px 0;color:var(--text-muted);white-space:nowrap;vertical-align:top;font-weight:600">${escapeHtml(label)}</td>
+            <td style="padding:5px 0;word-break:break-all;user-select:text">${escapeHtml(value)}</td>
+          </tr>
+        `).join('')}
+      </table>
+      <div class="modal-buttons" style="margin-top:16px">
+        <button class="btn-secondary modal-close-btn">Close</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  modal.querySelector('.modal-close-btn').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
 }
 
 function showAdminUserContextMenu(e, user, panelContainer) {
@@ -3855,7 +3911,8 @@ async function renderRolesPanel(container) {
           </div>
           <div style="display:flex;flex:1;min-height:0">
             <div class="roles-perms-list" style="width:280px;flex-shrink:0;overflow-y:auto;padding:8px 16px"></div>
-            <div class="roles-members-section" style="flex:1;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden">
+            <div class="roles-perms-resize-handle" style="width:5px;cursor:col-resize;background:var(--border);flex-shrink:0;transition:background 0.15s"></div>
+            <div class="roles-members-section" style="flex:1;border-left:none;display:flex;flex-direction:column;overflow:hidden">
               <div style="font-size:11px;color:var(--text-muted);padding:8px 12px 6px">Members</div>
               <div class="roles-members-list" style="flex:1;overflow-y:auto;padding:0 12px 8px"></div>
             </div>
@@ -3920,6 +3977,37 @@ async function _initRolesLogic(root) {
   const membersContainer = root.querySelector('.roles-members-list');
   const membersSection = root.querySelector('.roles-members-section');
   const permsContainer = root.querySelector('.roles-perms-list');
+
+  const permsResizeHandle = root.querySelector('.roles-perms-resize-handle');
+  const savedPermsWidth = (await window.gimodi.settings.load())?.rolesPermsWidth;
+  if (savedPermsWidth) permsContainer.style.width = savedPermsWidth + 'px';
+
+  permsResizeHandle.addEventListener('mouseenter', () => { permsResizeHandle.style.background = 'var(--accent)'; });
+  permsResizeHandle.addEventListener('mouseleave', () => { if (!permsResizeHandle._dragging) permsResizeHandle.style.background = 'var(--border)'; });
+  permsResizeHandle.addEventListener('mousedown', (ev) => {
+    ev.preventDefault();
+    permsResizeHandle._dragging = true;
+    permsResizeHandle.style.background = 'var(--accent)';
+    const startX = ev.clientX;
+    const startWidth = permsContainer.offsetWidth;
+    const onMove = (me) => {
+      const parentWidth = permsContainer.parentElement.offsetWidth - permsResizeHandle.offsetWidth;
+      const maxWidth = parentWidth - 150;
+      const newWidth = Math.max(150, Math.min(maxWidth, startWidth + me.clientX - startX));
+      permsContainer.style.width = newWidth + 'px';
+    };
+    const onUp = async () => {
+      permsResizeHandle._dragging = false;
+      permsResizeHandle.style.background = 'var(--border)';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      const settings = await window.gimodi.settings.load() || {};
+      settings.rolesPermsWidth = permsContainer.offsetWidth;
+      window.gimodi.settings.save(settings);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
 
   let roles = [];
   let availablePermissions = []; // loaded from server
@@ -4901,22 +4989,34 @@ async function renderAuditLogPanel(container) {
     grant_voice: 'Grant Voice', revoke_voice: 'Revoke Voice',
   };
 
+  const AUDIT_COLUMNS = [
+    { key: 'time', label: 'Time', minWidth: 80, defaultWidth: 150 },
+    { key: 'action', label: 'Action', minWidth: 60, defaultWidth: 120 },
+    { key: 'actor', label: 'Actor', minWidth: 60, defaultWidth: 120 },
+    { key: 'target', label: 'Target', minWidth: 60, defaultWidth: 120 },
+    { key: 'details', label: 'Details', minWidth: 80 },
+  ];
+
+  const savedColWidths = (await window.gimodi.settings.load())?.auditColumnWidths || {};
+
+  container.style.cssText = 'display:flex;flex-direction:column;overflow:hidden;flex:1;min-height:0';
   container.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-shrink:0">
       <label style="font-size:13px;color:var(--text-secondary)">Filter by action:</label>
       <select class="audit-action-filter" style="font-size:13px;padding:3px 6px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px">
         <option value="">All actions</option>
       </select>
     </div>
-    <div class="audit-table-wrap" style="overflow-y:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <div class="audit-table-wrap" style="overflow-y:auto;flex:1;min-height:0">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
         <thead>
           <tr style="position:sticky;top:0;background:var(--bg-secondary)">
-            <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);white-space:nowrap">Time</th>
-            <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Action</th>
-            <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Actor</th>
-            <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Target</th>
-            <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Details</th>
+            ${AUDIT_COLUMNS.map((col, i) => {
+              const width = savedColWidths[col.key] || col.defaultWidth;
+              const widthStyle = width ? `width:${width}px;` : '';
+              const isLast = i === AUDIT_COLUMNS.length - 1;
+              return `<th data-col="${col.key}" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);position:relative;${widthStyle}${isLast ? '' : 'white-space:nowrap;'}">${col.label}${isLast ? '' : '<div class="audit-col-resize" style="position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;z-index:1"></div>'}</th>`;
+            }).join('')}
           </tr>
         </thead>
         <tbody class="audit-tbody"></tbody>
@@ -4925,6 +5025,43 @@ async function renderAuditLogPanel(container) {
       <div class="audit-error" style="display:none;padding:16px;color:var(--danger)"></div>
     </div>
   `;
+
+  container.querySelectorAll('.audit-col-resize').forEach(handle => {
+    handle.addEventListener('mouseenter', () => { handle.style.background = 'var(--accent)'; });
+    handle.addEventListener('mouseleave', () => { if (!handle._dragging) handle.style.background = ''; });
+    handle.addEventListener('mousedown', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      handle._dragging = true;
+      handle.style.background = 'var(--accent)';
+      const th = handle.parentElement;
+      const colKey = th.dataset.col;
+      const colDef = AUDIT_COLUMNS.find(c => c.key === colKey);
+      const startX = ev.clientX;
+      const startWidth = th.offsetWidth;
+      const table = th.closest('table');
+      const allThs = [...table.querySelectorAll('thead th')];
+      const colIndex = allThs.indexOf(th);
+      const othersCurrentWidth = allThs.reduce((sum, t, i) => i !== colIndex ? sum + t.offsetWidth : sum, 0);
+      const maxWidth = table.parentElement.clientWidth - othersCurrentWidth;
+      const onMove = (me) => {
+        const newWidth = Math.max(colDef.minWidth, Math.min(maxWidth, startWidth + me.clientX - startX));
+        th.style.width = newWidth + 'px';
+      };
+      const onUp = async () => {
+        handle._dragging = false;
+        handle.style.background = '';
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        const settings = await window.gimodi.settings.load() || {};
+        if (!settings.auditColumnWidths) settings.auditColumnWidths = {};
+        settings.auditColumnWidths[colKey] = th.offsetWidth;
+        window.gimodi.settings.save(settings);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  });
 
   const tbody = container.querySelector('.audit-tbody');
   const emptyMsg = container.querySelector('.audit-empty');
@@ -4954,14 +5091,23 @@ async function renderAuditLogPanel(container) {
 
       const actionLabel = ACTION_LABELS[log.action] || log.action;
 
-      const actorText = log.actor_nickname || log.actor_user_id || '\u2014';
-      const targetText = log.target_nickname || log.target_user_id || '\u2014';
+      const actorText = log.actor_nickname || log.actor_user_id || '-';
+      const targetText = log.target_nickname || log.target_user_id || '-';
 
-      [timeStr, actionLabel, actorText, targetText, log.details || '\u2014'].forEach((text, i) => {
+      const fields = [timeStr, actionLabel, actorText, targetText, log.details || '-'];
+      fields.forEach((text, i) => {
         const td = document.createElement('td');
-        td.style.cssText = 'padding:5px 8px;vertical-align:top;' + (i === 0 ? 'white-space:nowrap;color:var(--text-muted)' : '');
+        td.style.cssText = 'padding:5px 8px;vertical-align:top;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' + (i === 0 ? 'color:var(--text-muted)' : '');
         td.textContent = text;
+        td.title = text;
         tr.appendChild(td);
+      });
+
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click', () => {
+        const labels = ['Time', 'Action', 'Actor', 'Target', 'Details'];
+        const content = labels.map((l, i) => `${l}: ${fields[i]}`).join('\n');
+        customAlert(content);
       });
 
       tbody.appendChild(tr);
@@ -5125,6 +5271,7 @@ export function showUnifiedAdminDialog(initialTab) {
           await renderSettingsPanel(panel);
           break;
         case 'audit-log':
+          panel.style.cssText = 'flex:1;padding:16px 20px;min-width:0;display:flex;flex-direction:column;overflow:hidden';
           await renderAuditLogPanel(panel);
           break;
       }
