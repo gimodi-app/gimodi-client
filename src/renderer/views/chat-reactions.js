@@ -1,9 +1,9 @@
 import chatService from '../services/chat.js';
 import serverService from '../services/server.js';
 import { escapeHtml } from './chat-markdown.js';
-import { showEmojiPicker } from './emoji-picker.js';
+import { showEmojiPicker, closeEmojiPicker } from './emoji-picker.js';
 
-export const COMMON_REACTIONS = ['👍', '👎', '❤️', '😂', '😮', '😢', '🎉', '🔥'];
+const QUICK_REACTIONS = ['👍', '👎', '❤️', '😂', '😊', '🔥'];
 
 /**
  * Renders reaction buttons under a message element.
@@ -16,7 +16,6 @@ export function renderReactions(msgEl, messageId, reactions) {
   if (!reactionsRow) {
     reactionsRow = document.createElement('div');
     reactionsRow.className = 'reactions-row';
-    // Insert after .chat-msg-body so it's visible below the message text
     const body = msgEl.querySelector('.chat-msg-body');
     if (body) {
       body.after(reactionsRow);
@@ -41,7 +40,6 @@ export function renderReactions(msgEl, messageId, reactions) {
     reactionsRow.appendChild(btn);
   }
 
-  // Add a "+" button to add more reactions
   if (serverService.userId) {
     const addBtn = document.createElement('button');
     addBtn.className = 'reaction-btn reaction-add-btn';
@@ -50,25 +48,98 @@ export function renderReactions(msgEl, messageId, reactions) {
     addBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       const rect = addBtn.getBoundingClientRect();
-      showReactionPicker(rect.left, rect.bottom + 4, messageId);
+      showQuickReactionPicker(rect.left, rect.bottom + 4, messageId);
     });
     reactionsRow.appendChild(addBtn);
   }
 }
 
 /**
- * Shows the emoji picker popup for reactions.
+ * Shows a compact quick-reaction bar with common emojis and a "+" to open the full picker.
  * @param {number} x
  * @param {number} y
  * @param {string} messageId
  */
-export function showReactionPicker(x, y, messageId) {
-  showEmojiPicker({
-    x,
-    y,
-    quickReactions: COMMON_REACTIONS,
-    onSelect: (emoji) => chatService.react(messageId, emoji)
+export function showQuickReactionPicker(x, y, messageId) {
+  closeQuickReactionPicker();
+  closeEmojiPicker();
+
+  const msgEl = document.querySelector(`[data-msg-id="${messageId}"]`);
+  if (msgEl) msgEl.classList.add('picker-active');
+
+  const bar = document.createElement('div');
+  bar.id = 'quick-reaction-picker';
+  bar.className = 'quick-reaction-picker';
+  bar._messageEl = msgEl;
+
+  for (const emoji of QUICK_REACTIONS) {
+    const btn = document.createElement('button');
+    btn.className = 'quick-reaction-btn';
+    btn.textContent = emoji;
+    btn.addEventListener('click', () => {
+      chatService.react(messageId, emoji);
+      closeQuickReactionPicker();
+    });
+    bar.appendChild(btn);
+  }
+
+  const moreBtn = document.createElement('button');
+  moreBtn.className = 'quick-reaction-btn quick-reaction-more';
+  moreBtn.innerHTML = '<i class="bi bi-plus-lg"></i>';
+  moreBtn.title = 'More emojis';
+  moreBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const rect = moreBtn.getBoundingClientRect();
+    closeQuickReactionPicker();
+    showEmojiPicker({
+      x: rect.left,
+      y: rect.bottom + 4,
+      onSelect: (emoji) => chatService.react(messageId, emoji)
+    });
   });
+  bar.appendChild(moreBtn);
+
+  bar.style.left = x + 'px';
+  bar.style.top = y + 'px';
+  document.body.appendChild(bar);
+
+  const barRect = bar.getBoundingClientRect();
+  if (barRect.right > window.innerWidth) {
+    bar.style.left = (window.innerWidth - barRect.width - 8) + 'px';
+  }
+  if (barRect.bottom > window.innerHeight) {
+    bar.style.top = (y - barRect.height - 8) + 'px';
+  }
+  if (barRect.left < 0) {
+    bar.style.left = '8px';
+  }
+
+  setTimeout(() => {
+    const handler = (e) => {
+      if (!bar.contains(e.target)) {
+        closeQuickReactionPicker();
+        document.removeEventListener('mousedown', handler);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    bar._closeHandler = handler;
+  }, 0);
+}
+
+/**
+ * Closes the quick reaction picker if open.
+ */
+function closeQuickReactionPicker() {
+  const existing = document.getElementById('quick-reaction-picker');
+  if (existing) {
+    if (existing._closeHandler) {
+      document.removeEventListener('mousedown', existing._closeHandler);
+    }
+    if (existing._messageEl) {
+      existing._messageEl.classList.remove('picker-active');
+    }
+    existing.remove();
+  }
 }
 
 /**
@@ -82,11 +153,9 @@ export function onReactionUpdate(e) {
   const msgEl = chatMessages.querySelector(`[data-msg-id="${messageId}"]`);
   if (!msgEl) return;
 
-  // Remove old reactions row if exists
   const oldRow = msgEl.querySelector('.reactions-row');
   if (oldRow) oldRow.remove();
 
-  // Render new reactions if any
   if (reactions && reactions.length > 0) {
     renderReactions(msgEl, messageId, reactions);
   }

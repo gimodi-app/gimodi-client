@@ -240,10 +240,9 @@ function scrollToCategory(container, target) {
 
 /**
  * @param {function(string): void} onSelect
- * @param {string[]} [quickReactions]
  * @returns {HTMLElement}
  */
-function buildPicker(onSelect, quickReactions) {
+function buildPicker(onSelect) {
   const picker = document.createElement('div');
   picker.className = 'emoji-picker';
 
@@ -255,22 +254,6 @@ function buildPicker(onSelect, quickReactions) {
   searchInput.className = 'emoji-picker-search-input';
   searchRow.appendChild(searchInput);
   picker.appendChild(searchRow);
-
-  if (quickReactions && quickReactions.length > 0) {
-    const quickRow = document.createElement('div');
-    quickRow.className = 'emoji-picker-quick';
-    for (const emoji of quickReactions) {
-      const btn = document.createElement('button');
-      btn.className = 'emoji-picker-emoji';
-      btn.textContent = emoji;
-      btn.addEventListener('click', () => {
-        trackUsage(emoji);
-        onSelect(emoji);
-      });
-      quickRow.appendChild(btn);
-    }
-    picker.appendChild(quickRow);
-  }
 
   const tabBar = document.createElement('div');
   tabBar.className = 'emoji-picker-tabs';
@@ -414,9 +397,8 @@ function makeEmojiBtn(emoji, onSelect) {
  * @param {number} [options.y] - Y position (used if no anchor)
  * @param {function(string): void} options.onSelect - Called with the selected emoji
  * @param {boolean} [options.closeOnSelect=true] - Whether to close the picker after selection
- * @param {string[]} [options.quickReactions] - Optional quick reaction shortcuts shown at the top
  */
-export function showEmojiPicker({ anchor, x, y, onSelect, closeOnSelect = true, quickReactions }) {
+export function showEmojiPicker({ anchor, x, y, onSelect, closeOnSelect = true }) {
   closeEmojiPicker();
 
   const wrappedOnSelect = (emoji) => {
@@ -424,7 +406,7 @@ export function showEmojiPicker({ anchor, x, y, onSelect, closeOnSelect = true, 
     if (closeOnSelect) closeEmojiPicker();
   };
 
-  pickerEl = buildPicker(wrappedOnSelect, quickReactions);
+  pickerEl = buildPicker(wrappedOnSelect);
   document.body.appendChild(pickerEl);
 
   if (anchor) {

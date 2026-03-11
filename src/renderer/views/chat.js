@@ -7,7 +7,7 @@ import { setNickname, invalidateNickname, getCachedNickname, resolveNicknames } 
 import { formatTime, formatTimeShort, formatDateTime, formatRelativeTime } from '../services/timeFormat.js';
 import { customConfirm } from '../services/dialogs.js';
 import { renderMarkdown, escapeHtml, replaceEmoticons, isEmojiOnly } from './chat-markdown.js';
-import { renderReactions, showReactionPicker, onReactionUpdate, COMMON_REACTIONS } from './chat-reactions.js';
+import { renderReactions, showQuickReactionPicker, onReactionUpdate } from './chat-reactions.js';
 import { searchEmoji, getEmoji, replaceEmojiShortcodes } from '../services/emoji-shortcodes.js';
 
 const MAX_MESSAGE_LENGTH = 4000;
@@ -2052,7 +2052,7 @@ function buildMessageEl(msg, prevEl) {
       addReactionBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         const rect = addReactionBtn.getBoundingClientRect();
-        showReactionPicker(rect.left, rect.bottom + 4, msg.id);
+        showQuickReactionPicker(rect.left, rect.bottom + 4, msg.id);
       });
       hoverActions.appendChild(addReactionBtn);
 

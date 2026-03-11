@@ -2099,7 +2099,8 @@ label:has(input[type="checkbox"]) {
   transition: background-color 0.1s ease;
 }
 
-.chat-msg:hover {
+.chat-msg:hover,
+.chat-msg.picker-active {
   background-color: var(--hover-bg, rgba(255, 255, 255, 0.04));
 }
 
@@ -2111,7 +2112,8 @@ label:has(input[type="checkbox"]) {
   transition: background-color 0.1s ease;
 }
 
-.chat-msg:hover > .chat-msg-reply {
+.chat-msg:hover > .chat-msg-reply,
+.chat-msg.picker-active > .chat-msg-reply {
   background-color: transparent;
 }
 
@@ -2343,12 +2345,14 @@ label:has(input[type="checkbox"]) {
   pointer-events: none;
 }
 
-.chat-msg:hover .chat-msg-hover-time {
+.chat-msg:hover .chat-msg-hover-time,
+.chat-msg.picker-active .chat-msg-hover-time {
   display: block;
 }
 
 /* Hide hover-time when action toolbar is visible to avoid overlap */
-.chat-msg:hover:has(.chat-msg-actions) .chat-msg-hover-time {
+.chat-msg:hover:has(.chat-msg-actions) .chat-msg-hover-time,
+.chat-msg.picker-active:has(.chat-msg-actions) .chat-msg-hover-time {
   display: none;
 }
 
@@ -3979,7 +3983,8 @@ label:has(input[type="checkbox"]) {
 }
 
 .reactions-row:hover .reaction-add-btn,
-.chat-msg:hover .reaction-add-btn {
+.chat-msg:hover .reaction-add-btn,
+.chat-msg.picker-active .reaction-add-btn {
   opacity: 1;
 }
 
@@ -4005,7 +4010,8 @@ label:has(input[type="checkbox"]) {
   gap: 1px;
 }
 
-.chat-msg:hover .chat-msg-actions {
+.chat-msg:hover .chat-msg-actions,
+.chat-msg.picker-active .chat-msg-actions {
   display: flex;
 }
 
@@ -4067,14 +4073,6 @@ label:has(input[type="checkbox"]) {
 
 .emoji-picker-search-input:focus {
   border-color: var(--accent, #5865f2);
-}
-
-.emoji-picker-quick {
-  display: flex;
-  gap: 2px;
-  padding: 4px 10px 8px;
-  border-bottom: 1px solid var(--border);
-  justify-content: space-around;
 }
 
 .emoji-picker-tabs {
@@ -4152,6 +4150,49 @@ label:has(input[type="checkbox"]) {
   color: var(--text-secondary);
   padding: 24px;
   font-size: 13px;
+}
+
+/* Quick Reaction Picker */
+
+.quick-reaction-picker {
+  position: fixed;
+  display: flex;
+  gap: 2px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 10000;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.quick-reaction-btn {
+  background: transparent;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  line-height: 1;
+  transition: background 0.12s, transform 0.1s;
+}
+
+.quick-reaction-btn:hover {
+  background: var(--bg-hover);
+  transform: scale(1.15);
+}
+
+.quick-reaction-more {
+  font-size: 16px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+}
+
+.quick-reaction-more:hover {
+  color: var(--text-primary);
 }
 
 /* Admin gear icon next to server name */
