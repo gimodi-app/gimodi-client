@@ -201,22 +201,32 @@ const EMOJI_CATEGORIES = [
   }
 ];
 
+let reactionFreqCache = [];
+
+/**
+ * @returns {Promise<void>}
+ */
+async function loadReactionFrequent() {
+  const settings = await window.gimodi.settings.load() || {};
+  reactionFreqCache = settings.reactionFrequentEmojis || [];
+}
+
 /** @returns {string[]} */
 function getFrequentEmojis() {
-  try {
-    return JSON.parse(localStorage.getItem('gimodi:frequentEmojis') || '[]').slice(0, 24);
-  } catch { return []; }
+  return reactionFreqCache.slice(0, 24);
 }
 
 /** @param {string} emoji */
-function trackEmojiUsage(emoji) {
-  try {
-    let freq = JSON.parse(localStorage.getItem('gimodi:frequentEmojis') || '[]');
-    freq = freq.filter(e => e !== emoji);
-    freq.unshift(emoji);
-    localStorage.setItem('gimodi:frequentEmojis', JSON.stringify(freq.slice(0, 32)));
-  } catch { /* ignore */ }
+async function trackEmojiUsage(emoji) {
+  reactionFreqCache = reactionFreqCache.filter(e => e !== emoji);
+  reactionFreqCache.unshift(emoji);
+  reactionFreqCache = reactionFreqCache.slice(0, 32);
+  const settings = await window.gimodi.settings.load() || {};
+  settings.reactionFrequentEmojis = reactionFreqCache;
+  window.gimodi.settings.save(settings);
 }
+
+loadReactionFrequent();
 
 /**
  * Renders reaction buttons under a message element.

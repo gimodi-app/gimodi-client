@@ -619,33 +619,49 @@ const EMOJI_KEYWORDS = new Map([
   ['\u{1F1E7}\u{1F1EA}','belgium belgian flag be'],
 ]);
 
-const STORAGE_KEY = 'gimodi-emoji-freq';
 const MAX_FREQUENT = 24;
 
 let pickerEl = null;
 let onSelectCallback = null;
+let frequentCache = {};
 
+/**
+ * @returns {Promise<object>}
+ */
+async function loadFrequent() {
+  const settings = await window.gimodi.settings.load() || {};
+  frequentCache = settings.emojiFrequent || {};
+  return frequentCache;
+}
+
+/**
+ * @returns {object}
+ */
 function getFrequent() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
-  } catch {
-    return {};
-  }
+  return frequentCache;
 }
 
-function recordUsage(emoji) {
-  const freq = getFrequent();
-  freq[emoji] = (freq[emoji] || 0) + 1;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(freq));
+/**
+ * @param {string} emoji
+ */
+async function recordUsage(emoji) {
+  frequentCache[emoji] = (frequentCache[emoji] || 0) + 1;
+  const settings = await window.gimodi.settings.load() || {};
+  settings.emojiFrequent = frequentCache;
+  window.gimodi.settings.save(settings);
 }
 
+/**
+ * @returns {string[]}
+ */
 function getTopEmojis() {
-  const freq = getFrequent();
-  return Object.entries(freq)
+  return Object.entries(frequentCache)
     .sort((a, b) => b[1] - a[1])
     .slice(0, MAX_FREQUENT)
     .map(([emoji]) => emoji);
 }
+
+loadFrequent();
 
 function buildPicker() {
   const container = document.createElement('div');
