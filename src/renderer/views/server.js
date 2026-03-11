@@ -2488,40 +2488,61 @@ export function showUserContextMenu(e, user, options = {}) {
   menu.style.left = `${e.clientX}px`;
   menu.style.top = `${e.clientY}px`;
 
-  // Only show "Send Message" and "Poke" for other users
-  if (user.id !== serverService.clientId) {
-    const dmItem = document.createElement('div');
-    dmItem.className = 'context-menu-item';
-    dmItem.textContent = 'Send Message';
-    dmItem.addEventListener('click', () => {
+  const isOther = user.id !== serverService.clientId;
+
+  /**
+   * @param {string} text
+   */
+  const addLabel = (text) => {
+    const label = document.createElement('div');
+    label.className = 'context-menu-label';
+    label.textContent = text;
+    menu.appendChild(label);
+  };
+
+  /**
+   * @param {string} text
+   * @param {function} handler
+   * @param {{ danger?: boolean }} [opts]
+   * @returns {HTMLDivElement}
+   */
+  const addItem = (text, handler, opts = {}) => {
+    const item = document.createElement('div');
+    item.className = 'context-menu-item' + (opts.danger ? ' danger' : '');
+    item.textContent = text;
+    item.addEventListener('click', async () => {
       dismissContextMenu();
+      await handler();
+    });
+    menu.appendChild(item);
+    return item;
+  };
+
+  const addSeparator = () => {
+    const sep = document.createElement('div');
+    sep.className = 'context-menu-separator';
+    menu.appendChild(sep);
+  };
+
+  if (isOther) {
+    addItem('Send Message', () => {
       window.dispatchEvent(new CustomEvent('gimodi:open-dm', { detail: { userId: user.id, persistentUserId: user.userId || null, nickname: user.nickname } }));
     });
-    menu.appendChild(dmItem);
 
     if (!options.fromChat && serverService.hasPermission('user.poke')) {
-      const pokeItem = document.createElement('div');
-      pokeItem.className = 'context-menu-item';
-      pokeItem.textContent = 'Poke';
-      pokeItem.addEventListener('click', async () => {
-        dismissContextMenu();
+      addItem('Poke', async () => {
         const message = await customPrompt(`Poke message for ${user.nickname} (optional):`);
         if (message === null) return;
         try {
           await serverService.request('admin:poke', { clientId: user.id, message });
-        } catch (err) {
-          await customAlert(err.message);
-        }
+        } catch (err) { await customAlert(err.message); }
       });
-      menu.appendChild(pokeItem);
     }
   }
 
-  // Per-user volume control (only for other users with persistent identity, not from chat)
-  if (!options.fromChat && user.id !== serverService.clientId && user.userId) {
-    const volSep = document.createElement('div');
-    volSep.style.cssText = 'border-top:1px solid var(--border);margin:4px 0';
-    menu.appendChild(volSep);
+  if (!options.fromChat && isOther && user.userId) {
+    addSeparator();
+    addLabel('Volume');
 
     const volContainer = document.createElement('div');
     volContainer.className = 'context-menu-volume';
@@ -2552,146 +2573,88 @@ export function showUserContextMenu(e, user, options = {}) {
       voiceService.setUserVolume(user.userId, vol);
     });
 
-    // Prevent context menu from closing when interacting with slider
-    volContainer.addEventListener('click', (e) => e.stopPropagation());
-
+    volContainer.addEventListener('click', (ev) => ev.stopPropagation());
     menu.appendChild(volContainer);
   }
 
   if (!options.fromChat) {
-    const item = document.createElement('div');
-    item.className = 'context-menu-item';
-    item.textContent = 'Connection Details';
-    item.addEventListener('click', () => {
-      dismissContextMenu();
-      showConnectionDetails(user);
-    });
-    menu.appendChild(item);
+    if (!menu.querySelector('.context-menu-separator')) addSeparator();
+    addItem('Connection Details', () => showConnectionDetails(user));
   }
 
-  // Voice moderation items
   const currentChannel = channels.find(c => c.id === currentChannelId);
   if (currentChannel?.moderated) {
-    // User with voice.grant viewing another non-admin user
-    if ((serverService.hasPermission('voice.grant') || serverService.hasPermission('voice.revoke')) && user.id !== serverService.clientId && !user.badge) {
-      const voiceSep = document.createElement('div');
-      voiceSep.style.cssText = 'border-top:1px solid var(--border);margin:4px 0';
-      menu.appendChild(voiceSep);
+    const hasVoicePerms = serverService.hasPermission('voice.grant') || serverService.hasPermission('voice.revoke');
+
+    if (hasVoicePerms && isOther && !user.badge) {
+      addSeparator();
+      addLabel('Voice');
 
       if (voiceGrantedClients.has(user.id)) {
-        const revokeItem = document.createElement('div');
-        revokeItem.className = 'context-menu-item';
-        revokeItem.textContent = 'Revoke Voice';
-        revokeItem.addEventListener('click', async () => {
-          dismissContextMenu();
-          try {
-            await serverService.request('admin:revoke-voice', { clientId: user.id });
-          } catch (err) { await customAlert(err.message); }
+        addItem('Revoke Voice', async () => {
+          try { await serverService.request('admin:revoke-voice', { clientId: user.id }); }
+          catch (err) { await customAlert(err.message); }
         });
-        menu.appendChild(revokeItem);
       } else {
-        const grantItem = document.createElement('div');
-        grantItem.className = 'context-menu-item';
-        grantItem.textContent = voiceRequestClients.has(user.id) ? 'Grant Voice (requested)' : 'Grant Voice';
-        grantItem.addEventListener('click', async () => {
-          dismissContextMenu();
-          try {
-            await serverService.request('admin:grant-voice', { clientId: user.id });
-          } catch (err) { await customAlert(err.message); }
+        addItem(voiceRequestClients.has(user.id) ? 'Grant Voice (requested)' : 'Grant Voice', async () => {
+          try { await serverService.request('admin:grant-voice', { clientId: user.id }); }
+          catch (err) { await customAlert(err.message); }
         });
-        menu.appendChild(grantItem);
       }
     }
 
-    // User right-clicking own name (non-moderator)
-    if (user.id === serverService.clientId && !serverService.hasPermission('voice.grant')) {
-      if (!voiceGrantedClients.has(user.id)) {
-        const voiceSep = document.createElement('div');
-        voiceSep.style.cssText = 'border-top:1px solid var(--border);margin:4px 0';
-        menu.appendChild(voiceSep);
+    if (!isOther && !hasVoicePerms && !voiceGrantedClients.has(user.id)) {
+      addSeparator();
+      addLabel('Voice');
 
-        if (voiceRequestClients.has(user.id)) {
-          const cancelItem = document.createElement('div');
-          cancelItem.className = 'context-menu-item';
-          cancelItem.textContent = 'Cancel Voice Request';
-          cancelItem.addEventListener('click', async () => {
-            dismissContextMenu();
-            try {
-              await serverService.request('voice:cancel-request');
-              voiceRequestClients.delete(user.id);
-              renderChannelTree();
-            } catch (err) { await customAlert(err.message); }
-          });
-          menu.appendChild(cancelItem);
-        } else {
-          const requestItem = document.createElement('div');
-          requestItem.className = 'context-menu-item';
-          requestItem.textContent = 'Request Voice';
-          requestItem.addEventListener('click', async () => {
-            dismissContextMenu();
-            try {
-              await serverService.request('voice:request');
-              voiceRequestClients.add(user.id);
-              renderChannelTree();
-            } catch (err) { await customAlert(err.message); }
-          });
-          menu.appendChild(requestItem);
-        }
+      if (voiceRequestClients.has(user.id)) {
+        addItem('Cancel Voice Request', async () => {
+          try {
+            await serverService.request('voice:cancel-request');
+            voiceRequestClients.delete(user.id);
+            renderChannelTree();
+          } catch (err) { await customAlert(err.message); }
+        });
+      } else {
+        addItem('Request Voice', async () => {
+          try {
+            await serverService.request('voice:request');
+            voiceRequestClients.add(user.id);
+            renderChannelTree();
+          } catch (err) { await customAlert(err.message); }
+        });
       }
     }
   }
 
-  // Kick & ban actions for other users
-  if ((serverService.hasPermission('user.kick') || serverService.hasPermission('user.ban')) && user.id !== serverService.clientId) {
-    const sep = document.createElement('div');
-    sep.style.cssText = 'border-top:1px solid var(--border);margin:4px 0';
-    menu.appendChild(sep);
+  const hasAdminActions = isOther && (
+    serverService.hasPermission('user.kick') ||
+    serverService.hasPermission('user.ban') ||
+    serverService.hasPermission('user.assign_role')
+  );
+
+  if (hasAdminActions) {
+    addSeparator();
+    addLabel('Administration');
+
     if (!options.fromChat && serverService.hasPermission('user.kick')) {
-      const kickItem = document.createElement('div');
-      kickItem.className = 'context-menu-item danger';
-      kickItem.textContent = 'Kick';
-      kickItem.addEventListener('click', async () => {
-        dismissContextMenu();
-        try {
-          await serverService.request('admin:kick', { clientId: user.id });
-        } catch (err) {
-          await customAlert(err.message);
-        }
-      });
-      menu.appendChild(kickItem);
+      addItem('Kick', async () => {
+        try { await serverService.request('admin:kick', { clientId: user.id }); }
+        catch (err) { await customAlert(err.message); }
+      }, { danger: true });
     }
 
     if (serverService.hasPermission('user.ban')) {
-      const banItem = document.createElement('div');
-      banItem.className = 'context-menu-item danger';
-      banItem.textContent = 'Ban';
-      banItem.addEventListener('click', () => {
-        dismissContextMenu();
-        showBanModal(user, options);
-      });
-      menu.appendChild(banItem);
+      addItem('Ban', () => showBanModal(user, options), { danger: true });
     }
-  }
 
-  // Set Role - only for other users who have a persistent identity
-  if (serverService.hasPermission('user.assign_role') && user.id !== serverService.clientId) {
-    const roleSep = document.createElement('div');
-    roleSep.style.cssText = 'border-top:1px solid var(--border);margin:4px 0';
-    menu.appendChild(roleSep);
-
-    const roleItem = document.createElement('div');
-    roleItem.className = 'context-menu-item';
-    roleItem.textContent = 'Set Role...';
-    roleItem.addEventListener('click', async () => {
-      dismissContextMenu();
-      await showSetRoleMenu(user, e.clientX, e.clientY, options);
-    });
-    menu.appendChild(roleItem);
+    if (serverService.hasPermission('user.assign_role')) {
+      addItem('Set Role...', () => showSetRoleMenu(user, e.clientX, e.clientY, options));
+    }
   }
 
   document.body.appendChild(menu);
 
-  // Dismiss on outside click
   const onClickOutside = (ev) => {
     if (!menu.contains(ev.target)) {
       dismissContextMenu();
@@ -2700,7 +2663,6 @@ export function showUserContextMenu(e, user, options = {}) {
   };
   setTimeout(() => document.addEventListener('click', onClickOutside, true), 0);
 
-  // Dismiss on Escape
   const onEscape = (ev) => {
     if (ev.key === 'Escape') {
       dismissContextMenu();
@@ -3154,120 +3116,102 @@ function showAdminUserContextMenu(e, user, panelContainer) {
   menu.style.left = `${e.clientX}px`;
   menu.style.top = `${e.clientY}px`;
 
-  // Copy User ID
-  const copyItem = document.createElement('div');
-  copyItem.className = 'context-menu-item';
-  copyItem.textContent = 'Copy User ID';
-  copyItem.addEventListener('click', () => {
-    dismissContextMenu();
-    navigator.clipboard.writeText(user.userId);
-  });
-  menu.appendChild(copyItem);
+  /**
+   * @param {string} text
+   */
+  const addLabel = (text) => {
+    const label = document.createElement('div');
+    label.className = 'context-menu-label';
+    label.textContent = text;
+    menu.appendChild(label);
+  };
 
-  // Online-only actions
-  if (user.online && user.clientId) {
-    // Send Message
-    const dmItem = document.createElement('div');
-    dmItem.className = 'context-menu-item';
-    dmItem.textContent = 'Send Message';
-    dmItem.addEventListener('click', () => {
+  /**
+   * @param {string} text
+   * @param {function} handler
+   * @param {{ danger?: boolean }} [opts]
+   */
+  const addItem = (text, handler, opts = {}) => {
+    const item = document.createElement('div');
+    item.className = 'context-menu-item' + (opts.danger ? ' danger' : '');
+    item.textContent = text;
+    item.addEventListener('click', async () => {
       dismissContextMenu();
+      await handler();
+    });
+    menu.appendChild(item);
+  };
+
+  const addSeparator = () => {
+    const sep = document.createElement('div');
+    sep.className = 'context-menu-separator';
+    menu.appendChild(sep);
+  };
+
+  addItem('Copy User ID', () => navigator.clipboard.writeText(user.userId));
+
+  if (user.online && user.clientId) {
+    addSeparator();
+    addLabel('Communication');
+
+    addItem('Send Message', () => {
       window.dispatchEvent(new CustomEvent('gimodi:open-dm', { detail: { userId: user.clientId, persistentUserId: user.userId, nickname: user.nickname } }));
     });
-    menu.appendChild(dmItem);
 
     if (serverService.hasPermission('user.poke')) {
-      const pokeItem = document.createElement('div');
-      pokeItem.className = 'context-menu-item';
-      pokeItem.textContent = 'Poke';
-      pokeItem.addEventListener('click', async () => {
-        dismissContextMenu();
+      addItem('Poke', async () => {
         const message = await customPrompt(`Poke message for ${user.nickname} (optional):`);
         if (message === null) return;
         try {
           await serverService.request('admin:poke', { clientId: user.clientId, message });
         } catch (err) { await customAlert(err.message); }
       });
-      menu.appendChild(pokeItem);
+    }
+  }
+
+  const hasManagement = serverService.hasPermission('user.assign_role') ||
+    (serverService.hasPermission('user.ban') && user.registeredNicknames?.length > 0);
+
+  if (hasManagement) {
+    addSeparator();
+    addLabel('Management');
+
+    if (serverService.hasPermission('user.assign_role')) {
+      addItem('Set Role...', () => showSetRoleMenuByUserId(user, e.clientX, e.clientY, panelContainer));
     }
 
-    if (serverService.hasPermission('user.kick')) {
-      const sep = document.createElement('div');
-      sep.style.cssText = 'border-top:1px solid var(--border);margin:4px 0';
-      menu.appendChild(sep);
+    if (serverService.hasPermission('user.ban') && user.registeredNicknames?.length > 0) {
+      addItem('Manage Nicknames...', () => showManageNicknamesModal(user, panelContainer));
+    }
+  }
 
-      const kickItem = document.createElement('div');
-      kickItem.className = 'context-menu-item danger';
-      kickItem.textContent = 'Kick';
-      kickItem.addEventListener('click', async () => {
-        dismissContextMenu();
+  const hasDangerActions = (user.online && user.clientId && serverService.hasPermission('user.kick')) ||
+    serverService.hasPermission('user.ban');
+
+  if (hasDangerActions) {
+    addSeparator();
+    addLabel('Danger Zone');
+
+    if (user.online && user.clientId && serverService.hasPermission('user.kick')) {
+      addItem('Kick', async () => {
         try {
           await serverService.request('admin:kick', { clientId: user.clientId });
           renderUsersPanel(panelContainer);
         } catch (err) { await customAlert(err.message); }
-      });
-      menu.appendChild(kickItem);
-    }
-  }
-
-  // Assign Role (works for online and offline)
-  if (serverService.hasPermission('user.assign_role')) {
-    const roleSep = document.createElement('div');
-    roleSep.style.cssText = 'border-top:1px solid var(--border);margin:4px 0';
-    menu.appendChild(roleSep);
-
-    const roleItem = document.createElement('div');
-    roleItem.className = 'context-menu-item';
-    roleItem.textContent = 'Set Role...';
-    roleItem.addEventListener('click', async () => {
-      dismissContextMenu();
-      await showSetRoleMenuByUserId(user, e.clientX, e.clientY, panelContainer);
-    });
-    menu.appendChild(roleItem);
-  }
-
-  // Ban (works for online and offline)
-  if (serverService.hasPermission('user.ban')) {
-    const banSep = document.createElement('div');
-    banSep.style.cssText = 'border-top:1px solid var(--border);margin:4px 0';
-    menu.appendChild(banSep);
-
-    const banItem = document.createElement('div');
-    banItem.className = 'context-menu-item danger';
-    banItem.textContent = 'Ban User';
-    banItem.addEventListener('click', () => {
-      dismissContextMenu();
-      showBanByUserIdModal(user, panelContainer);
-    });
-    menu.appendChild(banItem);
-
-    if (user.registeredNicknames && user.registeredNicknames.length > 0) {
-      const nickSep = document.createElement('div');
-      nickSep.style.cssText = 'border-top:1px solid var(--border);margin:4px 0';
-      menu.appendChild(nickSep);
-
-      const nickItem = document.createElement('div');
-      nickItem.className = 'context-menu-item';
-      nickItem.textContent = 'Manage Nicknames...';
-      nickItem.addEventListener('click', () => {
-        dismissContextMenu();
-        showManageNicknamesModal(user, panelContainer);
-      });
-      menu.appendChild(nickItem);
+      }, { danger: true });
     }
 
-    const deleteItem = document.createElement('div');
-    deleteItem.className = 'context-menu-item danger';
-    deleteItem.textContent = 'Delete User';
-    deleteItem.addEventListener('click', async () => {
-      dismissContextMenu();
-      if (!await customConfirm(`Are you sure you want to permanently delete user "${user.nickname}"?\n\nThis will remove their identity, roles, all registered nicknames, and all DM history.`)) return;
-      try {
-        await serverService.request('admin:delete-user', { userId: user.userId });
-        renderUsersPanel(panelContainer);
-      } catch (err) { await customAlert(err.message); }
-    });
-    menu.appendChild(deleteItem);
+    if (serverService.hasPermission('user.ban')) {
+      addItem('Ban User', () => showBanByUserIdModal(user, panelContainer), { danger: true });
+
+      addItem('Delete User', async () => {
+        if (!await customConfirm(`Are you sure you want to permanently delete user "${user.nickname}"?\n\nThis will remove their identity, roles, all registered nicknames, and all DM history.`)) return;
+        try {
+          await serverService.request('admin:delete-user', { userId: user.userId });
+          renderUsersPanel(panelContainer);
+        } catch (err) { await customAlert(err.message); }
+      }, { danger: true });
+    }
   }
 
   document.body.appendChild(menu);
@@ -3345,8 +3289,13 @@ async function showManageNicknamesModal(user, panelContainer) {
 
   modal.innerHTML = `
     <div class="modal-content" style="max-width:400px">
-      <h3 style="margin:0 0 12px">Registered Nicknames — ${escapeHtml(user.nickname)}</h3>
+      <h3 style="margin:0 0 12px">Registered Nicknames - ${escapeHtml(user.nickname)}</h3>
       <div class="nickname-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:4px"></div>
+      <div class="add-nickname-row" style="display:flex;gap:8px;margin-top:12px">
+        <input type="text" class="add-nickname-input" placeholder="Add nickname..." maxlength="32" style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text-color);font-size:13px">
+        <button class="btn-secondary add-nickname-btn" style="padding:4px 10px;font-size:12px;white-space:nowrap;flex-shrink:0"><i class="bi bi-plus-lg"></i></button>
+      </div>
+      <div class="add-nickname-error" style="color:var(--danger-color, #e74c3c);font-size:12px;margin-top:4px;display:none"></div>
       <div class="modal-buttons" style="margin-top:12px">
         <button class="btn-secondary modal-close-btn">Close</button>
       </div>
@@ -3354,6 +3303,33 @@ async function showManageNicknamesModal(user, panelContainer) {
   `;
   document.body.appendChild(modal);
   renderList();
+
+  const addInput = modal.querySelector('.add-nickname-input');
+  const addBtn = modal.querySelector('.add-nickname-btn');
+  const addError = modal.querySelector('.add-nickname-error');
+
+  /**
+   * @returns {Promise<void>}
+   */
+  const addNickname = async () => {
+    const nick = addInput.value.trim();
+    if (!nick) return;
+    addError.style.display = 'none';
+    try {
+      await serverService.request('admin:add-nickname', { userId: user.userId, nickname: nick });
+      if (!user.registeredNicknames) user.registeredNicknames = [];
+      user.registeredNicknames.push(nick);
+      addInput.value = '';
+      renderList();
+      renderUsersPanel(panelContainer);
+    } catch (err) {
+      addError.textContent = err.message;
+      addError.style.display = 'block';
+    }
+  };
+
+  addBtn.addEventListener('click', addNickname);
+  addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addNickname(); });
 
   modal.querySelector('.modal-close-btn').addEventListener('click', () => modal.remove());
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });

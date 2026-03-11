@@ -2976,6 +2976,21 @@ label:has(input[type="checkbox"]) {
   pointer-events: none;
 }
 
+.context-menu-label {
+  padding: 6px 12px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  user-select: none;
+}
+
+.context-menu-separator {
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+
 .context-menu-header {
   display: flex;
   align-items: center;
