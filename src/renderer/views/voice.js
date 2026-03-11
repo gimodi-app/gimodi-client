@@ -2,6 +2,7 @@ import serverService from '../services/server.js';
 import voiceService from '../services/voice.js';
 import screenShareService from '../services/screen.js';
 import { customAlert, customConfirm } from '../services/dialogs.js';
+import { getFeedbackVolume } from './server.js';
 
 const log = (...args) => console.log('[voice-view]', ...args);
 
@@ -13,16 +14,14 @@ const sndWebcamStart = new Audio('../../assets/webcam-start.mp3');
 const sndWebcamStop = new Audio('../../assets/webcam-stop.mp3');
 
 function playMuteSound(audio) {
-  console.log('playMuteSound', audio);
   const clone = audio.cloneNode();
-  clone.volume = 0.25;
+  clone.volume = getFeedbackVolume();
   clone.play().catch(() => {});
 }
 
 function playScreenSound(audio) {
-  console.log('playScreenSound', audio);
   const clone = audio.cloneNode();
-  clone.volume = 0.4;
+  clone.volume = getFeedbackVolume();
   clone.play().catch(() => {});
 }
 

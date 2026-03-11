@@ -80,6 +80,13 @@ export function setFeedbackVolume(vol) {
   feedbackVolume = vol;
 }
 
+/**
+ * @returns {number} Current feedback volume (0–1)
+ */
+export function getFeedbackVolume() {
+  return feedbackVolume;
+}
+
 export function initServerView(data) {
   channels = data.channels;
   clients = data.clients;
