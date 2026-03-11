@@ -8,6 +8,7 @@ import { formatTime, formatTimeShort, formatDateTime, formatRelativeTime } from 
 import { customConfirm } from '../services/dialogs.js';
 import { renderMarkdown, escapeHtml, replaceEmoticons, isEmojiOnly } from './chat-markdown.js';
 import { renderReactions, showReactionPicker, onReactionUpdate, COMMON_REACTIONS } from './chat-reactions.js';
+import { searchEmoji, getEmoji, replaceEmojiShortcodes } from '../services/emoji-shortcodes.js';
 
 const MAX_MESSAGE_LENGTH = 4000;
 
@@ -98,7 +99,9 @@ function onKeydown(e) {
       const selected = mentionAutocomplete.querySelector('.mention-autocomplete-item.selected');
       if (selected) {
         e.preventDefault();
-        if (mentionTriggerChar === '#') {
+        if (mentionTriggerChar === ':') {
+          selectEmojiShortcode(selected.dataset.shortcode);
+        } else if (mentionTriggerChar === '#') {
           selectChannelMention(selected.dataset.channelName, selected.dataset.channelId);
         } else {
           selectMention(selected.dataset.nickname, selected.dataset.userId || null, selected.dataset.clientId || null);
@@ -144,25 +147,24 @@ function onChatInputForMentions() {
   const cursorPos = chatInput.selectionStart;
   const text = chatInput.value.substring(0, cursorPos);
 
-  // Find the last @ or # before cursor
+  // Find the last @, #, or : before cursor
   const lastAtIndex = text.lastIndexOf('@');
   const lastHashIndex = text.lastIndexOf('#');
+  const lastColonIndex = text.lastIndexOf(':');
 
-  // Determine which trigger is closer to cursor
-  let triggerIndex = -1;
-  let triggerChar = null;
-  if (lastAtIndex > lastHashIndex) {
-    triggerIndex = lastAtIndex;
-    triggerChar = '@';
-  } else if (lastHashIndex > lastAtIndex) {
-    triggerIndex = lastHashIndex;
-    triggerChar = '#';
-  } else {
+  // Determine which trigger is closest to cursor
+  let triggerIndex = Math.max(lastAtIndex, lastHashIndex, lastColonIndex);
+  if (triggerIndex === -1) {
     hideMentionAutocomplete();
     return;
   }
+  let triggerChar = null;
+  if (triggerIndex === lastAtIndex) triggerChar = '@';
+  else if (triggerIndex === lastHashIndex) triggerChar = '#';
+  else triggerChar = ':';
 
-  if (triggerIndex > 0 && /\S/.test(text[triggerIndex - 1])) {
+  // For @ and #, require whitespace or start-of-string before trigger
+  if (triggerChar !== ':' && triggerIndex > 0 && /\S/.test(text[triggerIndex - 1])) {
     hideMentionAutocomplete();
     return;
   }
@@ -181,6 +183,12 @@ function onChatInputForMentions() {
     return;
   }
 
+  // For emoji shortcodes, require at least 2 chars to start searching
+  if (triggerChar === ':' && searchText.length < 2) {
+    hideMentionAutocomplete();
+    return;
+  }
+
   mentionStartPos = triggerIndex;
   mentionTriggerChar = triggerChar;
 
@@ -195,8 +203,7 @@ function onChatInputForMentions() {
       return;
     }
     showMentionAutocomplete(matches);
-  } else {
-    // # channel mention
+  } else if (triggerChar === '#') {
     const allChannels = (window.gimodiChannels || []).filter(c => c.type !== 'group');
     const matches = allChannels.filter(c =>
       c.name.toLowerCase().startsWith(searchText.toLowerCase())
@@ -207,6 +214,14 @@ function onChatInputForMentions() {
       return;
     }
     showChannelAutocomplete(matches);
+  } else {
+    // : emoji shortcode
+    const matches = searchEmoji(searchText, 10);
+    if (matches.length === 0) {
+      hideMentionAutocomplete();
+      return;
+    }
+    showEmojiShortcodeAutocomplete(matches);
   }
 }
 
@@ -363,6 +378,59 @@ function selectChannelMention(channelName, channelId) {
   if (channelId) {
     selectedChannelMentions.set(channelName, channelId);
   }
+
+  hideMentionAutocomplete();
+}
+
+/**
+ * @param {{shortcode: string, emoji: string}[]} matches
+ */
+function showEmojiShortcodeAutocomplete(matches) {
+  if (!mentionAutocomplete) {
+    mentionAutocomplete = document.createElement('div');
+    mentionAutocomplete.id = 'mention-autocomplete';
+    mentionAutocomplete.className = 'mention-autocomplete';
+    document.body.appendChild(mentionAutocomplete);
+  }
+
+  mentionAutocomplete.innerHTML = '';
+  for (let i = 0; i < matches.length; i++) {
+    const item = document.createElement('div');
+    item.className = 'mention-autocomplete-item' + (i === 0 ? ' selected' : '');
+    item.dataset.shortcode = matches[i].shortcode;
+    const emojiSpan = document.createElement('span');
+    emojiSpan.className = 'emoji';
+    emojiSpan.textContent = matches[i].emoji;
+    emojiSpan.style.marginRight = '8px';
+    item.appendChild(emojiSpan);
+    item.appendChild(document.createTextNode(':' + matches[i].shortcode + ':'));
+    item.addEventListener('click', () => selectEmojiShortcode(matches[i].shortcode));
+    mentionAutocomplete.appendChild(item);
+  }
+
+  const inputRect = chatInput.getBoundingClientRect();
+  mentionAutocomplete.style.left = inputRect.left + 'px';
+  mentionAutocomplete.style.bottom = (window.innerHeight - inputRect.top + 4) + 'px';
+  mentionAutocomplete.classList.remove('hidden');
+}
+
+/**
+ * @param {string} shortcode
+ */
+function selectEmojiShortcode(shortcode) {
+  if (mentionStartPos === -1) return;
+
+  const emoji = getEmoji(shortcode);
+  if (!emoji) return;
+
+  const cursorPos = chatInput.selectionStart;
+  const before = chatInput.value.substring(0, mentionStartPos);
+  const after = chatInput.value.substring(cursorPos);
+
+  chatInput.value = before + emoji + after;
+  chatInput.selectionStart = chatInput.selectionEnd = mentionStartPos + emoji.length;
+  chatInput.focus();
+  autoResizeInput();
 
   hideMentionAutocomplete();
 }

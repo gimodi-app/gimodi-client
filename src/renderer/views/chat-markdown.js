@@ -1,3 +1,4 @@
+import { replaceEmojiShortcodes } from '../services/emoji-shortcodes.js';
 import { marked } from 'marked';
 import { markedHighlight } from 'marked-highlight';
 import hljs from 'highlight.js/lib/core';
@@ -130,7 +131,8 @@ export function replaceEmoticons(text) {
   const parts = text.split(/(```[\s\S]*?```|`[^`]+`)/g);
   return parts.map((part, i) => {
     if (i % 2 === 1) return part;
-    return part.replace(EMOTICON_RE, (m) => EMOTICON_MAP[m] || m);
+    const withShortcodes = replaceEmojiShortcodes(part);
+    return withShortcodes.replace(EMOTICON_RE, (m) => EMOTICON_MAP[m] || m);
   }).join('');
 }
 
