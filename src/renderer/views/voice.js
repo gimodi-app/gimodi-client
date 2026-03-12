@@ -1119,7 +1119,8 @@ async function handleScreenShareClick() {
     // The actual call happens in the service, which calls getDisplayMedia.
     await screenShareService.startSharing(true);
   } catch (e) {
-    if (e.name !== 'NotAllowedError') {
+    const cancelled = e.name === 'NotAllowedError' || e.message === 'Error starting capture';
+    if (!cancelled) {
       console.error('Screen share failed:', e);
       await customAlert('Failed to start screen share: ' + e.message);
     }
