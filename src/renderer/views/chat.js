@@ -1650,7 +1650,7 @@ function appendPreviewCards(bodyEl, previews) {
   const firstCard = container.querySelector('.link-preview-card') || container.querySelector('.media-embed');
   (firstCard || container).appendChild(dismissBtn);
 
-  activateEmbedPlayButtons(container);
+  activateMediaEmbedButtons(container);
 
   bodyEl.appendChild(container);
 }
@@ -1678,7 +1678,7 @@ function appendMediaEmbeds(msgEl) {
       embed.innerHTML = `
         <div class="media-embed-player media-embed-placeholder">
           <div class="media-embed-icon"><i class="bi bi-youtube"></i></div>
-          <button class="media-embed-play" aria-label="Video abspielen"><i class="bi bi-play-fill"></i></button>
+          <button class="media-embed-load" aria-label="Load preview"><i class="bi bi-eye"></i> Load preview</button>
         </div>
         <a class="media-embed-link" href="${escapeHtml(href)}" title="${escapeHtml(href)}">
           <i class="bi bi-box-arrow-up-right"></i> ${escapeHtml(a.textContent || href)}
@@ -1704,24 +1704,34 @@ function appendMediaEmbeds(msgEl) {
     body.appendChild(embed);
   }
 
-  activateEmbedPlayButtons(body);
+  activateMediaEmbedButtons(body);
 }
 
 /**
  * Replaces a media embed placeholder with a live iframe when the play button is clicked.
  * @param {HTMLElement} container
  */
-function activateEmbedPlayButtons(container) {
-  for (const btn of container.querySelectorAll('.media-embed-play')) {
+/**
+ * Activates load-preview buttons on media embeds (step 1: load thumbnail, step 2: play video).
+ * @param {HTMLElement} container
+ */
+function activateMediaEmbedButtons(container) {
+  for (const btn of container.querySelectorAll('.media-embed-load')) {
     btn.addEventListener('click', () => {
       const embed = btn.closest('.media-embed');
       if (!embed) return;
       const videoId = embed.dataset.embedId;
-      const start = embed.dataset.embedStart;
-      const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1${start ? `&start=${start}` : ''}`;
       const player = embed.querySelector('.media-embed-player');
-      player.classList.remove('media-embed-placeholder');
-      player.innerHTML = `<iframe src="${escapeHtml(embedUrl)}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+      player.innerHTML = `
+        <img src="https://img.youtube.com/vi/${escapeHtml(videoId)}/hqdefault.jpg" alt="" loading="lazy">
+        <button class="media-embed-play" aria-label="Play video"><i class="bi bi-play-fill"></i></button>
+      `;
+      player.querySelector('.media-embed-play').addEventListener('click', () => {
+        const start = embed.dataset.embedStart;
+        const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&vq=hd1080${start ? `&start=${start}` : ''}`;
+        player.classList.remove('media-embed-placeholder');
+        player.innerHTML = `<iframe src="${escapeHtml(embedUrl)}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+      });
     });
   }
 }
