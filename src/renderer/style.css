@@ -4811,6 +4811,47 @@ input.is-invalid {
   justify-content: flex-end;
 }
 
+.help-commands-modal {
+  width: 420px;
+}
+
+.help-commands-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.help-commands-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.help-commands-row:hover {
+  background: var(--bg-hover);
+}
+
+.help-commands-usage {
+  font-family: monospace;
+  font-size: 13px;
+  color: var(--accent);
+  white-space: nowrap;
+  min-width: 140px;
+}
+
+.help-commands-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.help-commands-empty {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
 .btn-save-loading {
   position: relative;
   pointer-events: none;
