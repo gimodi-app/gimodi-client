@@ -101,14 +101,26 @@ export function setVoiceControlsVisible(visible) {
   }
 }
 
+/**
+ * Re-syncs the mute/deafen/webcam button UI to match the current voice state.
+ * Called when switching back to the voice server view.
+ */
+export function syncVoiceControlsUI() {
+  updateMuteUI();
+  updateDeafenUI();
+  btnWebcam.classList.toggle('active', isWebcamOn);
+  btnScreenShare.classList.toggle('active', isScreenSharing);
+}
+
 export function initVoiceView(initialClients = [], serverName = '') {
   voiceServerName = serverName;
   for (const c of initialClients) {
     if (c.userId) clientUserMap.set(c.id, c.userId);
   }
 
-  // Show voice controls but keep them disabled until user joins a channel
-  setVoiceControlsVisible(true);
+  // Voice-specific buttons are hidden until user joins a voice channel
+  // (visibility is controlled by connectionManager voice-server-changed event)
+  setVoiceControlsVisible(false);
   setVoiceControlsEnabled(false);
 
   btnMute.addEventListener('click', toggleMute);

@@ -3,9 +3,9 @@ import connectionManager, { connKey, addressFromKey } from './services/connectio
 import voiceService from './services/voice.js';
 import notificationService from './services/notifications.js';
 import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects } from './views/connect.js';
-import { initServerView, cleanup as cleanupServer, getCurrentChannelId, getFirstChannelId, setFeedbackVolume, isCurrentChannelModerated, hasVoiceGrant, showUnifiedAdminDialog, showRedeemTokenModal, switchChannel, saveState as saveServerState, restoreState as restoreServerState } from './views/server.js';
+import { initServerView, cleanup as cleanupServer, getCurrentChannelId, getFirstChannelId, setFeedbackVolume, isCurrentChannelModerated, hasVoiceGrant, showUnifiedAdminDialog, showRedeemTokenModal, switchChannel, saveState as saveServerState, restoreState as restoreServerState, syncLocalVoiceIndicators } from './views/server.js';
 import { initChatView, cleanup as cleanupChat, switchChannel as switchChatChannel, appendSystemMessage, refreshTimestamps, setChatDisplayMode, setMediaEmbedPrivacy, openChannelViewTab, getChannelViewTabsState, restoreChannelViewTabs, saveState as saveChatState, restoreState as restoreChatState, initUnreadState, getViewingChannelId } from './views/chat.js';
-import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoiceServerName } from './views/voice.js';
+import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoiceServerName, syncVoiceControlsUI } from './views/voice.js';
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
 import { initSidePanel } from './views/side-panel.js';
@@ -390,8 +390,12 @@ function switchToServer(key) {
   window.gimodi.setAdminStatus(serverService.hasPermission('server.admin_menu'), true);
   updateAdminIconVisibility();
 
-  // Always show voice controls when viewing a connected server
-  setVoiceControlsVisible(true);
+  // Show voice controls only when connected to a voice channel
+  setVoiceControlsVisible(!!connectionManager.voiceKey);
+  if (connectionManager.voiceKey) {
+    syncVoiceControlsUI();
+    syncLocalVoiceIndicators();
+  }
 
   log('Switched view to', key);
 }
@@ -1239,6 +1243,7 @@ btnAdmin.addEventListener('click', () => {
 connectionManager.addEventListener('voice-server-changed', () => {
   rerenderSidebar();
   window.gimodi.setVoiceActive(!!connectionManager.voiceKey);
+  setVoiceControlsVisible(!!connectionManager.voiceKey);
 });
 
 // Handle unexpected connection loss from connectionManager

@@ -406,8 +406,9 @@ function getChannelName(id) {
 
 function handleDisconnect() {
   playSound(sndDisconnect);
+  const targetKey = connectionManager.voiceKey || connectionManager.activeKey;
   window.dispatchEvent(new CustomEvent('gimodi:disconnect-server', {
-    detail: { connKey: connectionManager.activeKey },
+    detail: { connKey: targetKey },
   }));
 }
 
@@ -853,6 +854,20 @@ function onLocalDeafenChanged() {
   if (voiceService._manualMute || voiceService._deafened) mutedClients.add(id); else mutedClients.delete(id);
   if (voiceService._deafened) deafenedClients.add(id); else deafenedClients.delete(id);
   updateMuteIcons(id);
+}
+
+/**
+ * Re-syncs the local user's voice indicators from voiceService/screenShareService state.
+ * Called after restoring server view state when switching back to the voice server.
+ */
+export function syncLocalVoiceIndicators() {
+  const id = serverService.clientId;
+  if (!id) return;
+  if (voiceService._manualMute || voiceService._deafened) mutedClients.add(id); else mutedClients.delete(id);
+  if (voiceService._deafened) deafenedClients.add(id); else deafenedClients.delete(id);
+  if (voiceService.webcamProducer) webcamClients.add(id); else webcamClients.delete(id);
+  if (screenShareService.isSharing) streamingClients.add(id); else streamingClients.delete(id);
+  renderChannelTree();
 }
 
 function onVoiceGranted(e) {
