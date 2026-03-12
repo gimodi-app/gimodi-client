@@ -845,27 +845,48 @@ export function saveState() {
     activeTab: { ...activeTab },
     channelViewTabs: channelViewTabs.map(t => ({ ...t })),
     dmTabs: dmTabs.map(t => ({ ...t })),
+    tabOrder: tabOrder.map(t => ({ ...t })),
   };
 }
 
 export function restoreState(state) {
   if (!state) return;
-  console.log('[chat] restoreState', { currentChannelId: state.currentChannelId, activeTab: state.activeTab, cvTabs: state.channelViewTabs?.length });
+  console.log('[chat] restoreState', { currentChannelId: state.currentChannelId, activeTab: state.activeTab, cvTabs: state.channelViewTabs?.length, dmTabs: state.dmTabs?.length });
 
-  // Re-init with the saved channel ID - this sets up listeners and loads history
   initChatView(state.currentChannelId);
 
-  // Restore channel-view tabs
-  if (state.channelViewTabs?.length) {
-    restoreChannelViewTabs(
-      state.channelViewTabs.map(t => ({
-        channelId: t.channelId,
-        channelName: t.channelName,
-        ...(t.password != null && { password: t.password }),
-      })),
-      state.activeTab?.type === 'channel-view' ? state.activeTab.channelId : null
-    );
+  for (const dt of state.dmTabs || []) {
+    dmTabs.push({ ...dt });
+    if (!dmMessages.has(dt.userId)) dmMessages.set(dt.userId, []);
   }
+
+  for (const cv of state.channelViewTabs || []) {
+    channelViewTabs.push({ channelId: cv.channelId, channelName: cv.channelName, ...(cv.password != null && { password: cv.password }) });
+    chatService.subscribeChannel(cv.channelId, cv.password);
+  }
+
+  if (state.tabOrder?.length) {
+    tabOrder.push(...state.tabOrder);
+  } else {
+    for (const dt of dmTabs) tabOrder.push({ type: 'dm', id: dt.userId });
+    for (const cv of channelViewTabs) tabOrder.push({ type: 'channel-view', id: cv.channelId });
+  }
+
+  if (state.activeTab?.type === 'dm') {
+    const dt = dmTabs.find(t => t.userId === state.activeTab.userId);
+    if (dt) {
+      switchToTab({ type: 'dm', userId: dt.userId, persistentUserId: dt.persistentUserId, nickname: dt.nickname });
+      return;
+    }
+  }
+  if (state.activeTab?.type === 'channel-view') {
+    const cv = channelViewTabs.find(t => t.channelId === state.activeTab.channelId);
+    if (cv) {
+      switchToTab({ type: 'channel-view', channelId: cv.channelId, channelName: cv.channelName });
+      return;
+    }
+  }
+  renderTabs();
 }
 
 export function switchChannel(channelId) {
@@ -1238,12 +1259,25 @@ function closeChannelViewTab(channelId) {
 
 export function getChannelViewTabsState() {
   const activeChannelId = activeTab.type === 'channel-view' ? activeTab.channelId : null;
+  const activeDmUserId = activeTab.type === 'dm' ? activeTab.persistentUserId : null;
   return {
     tabs: tabOrder.filter(o => o.type === 'channel-view').map(o => {
       const t = channelViewTabs.find(cv => cv.channelId === o.id);
       return t ? { channelId: t.channelId, channelName: t.channelName, ...(t.password != null && { password: t.password }) } : null;
     }).filter(Boolean),
     activeChannelId,
+    dmTabs: dmTabs.filter(t => t.persistentUserId).map(t => ({
+      persistentUserId: t.persistentUserId,
+      nickname: t.nickname,
+    })),
+    tabOrder: tabOrder.map(entry => {
+      if (entry.type === 'dm') {
+        const dt = dmTabs.find(t => t.userId === entry.id);
+        return dt?.persistentUserId ? { type: 'dm', id: dt.persistentUserId } : null;
+      }
+      return { type: entry.type, id: entry.id };
+    }).filter(Boolean),
+    activeDmUserId,
   };
 }
 
@@ -1256,6 +1290,68 @@ export function restoreChannelViewTabs(tabs, activeChannelId) {
     }
   }
   // Switch to the previously active tab if it exists and isn't already active
+  if (activeChannelId) {
+    const cvTab = channelViewTabs.find(t => t.channelId === activeChannelId);
+    if (cvTab && (activeTab.type !== 'channel-view' || activeTab.channelId !== activeChannelId)) {
+      switchToTab({ type: 'channel-view', channelId: activeChannelId, channelName: cvTab.channelName });
+      return;
+    }
+  }
+  renderTabs();
+}
+
+/**
+ * @param {Object} saved
+ * @param {Array} saved.cvTabs
+ * @param {Array} saved.dmTabs
+ * @param {Array} saved.savedTabOrder
+ * @param {string|null} saved.activeChannelId
+ * @param {string|null} saved.activeDmUserId
+ */
+export function restoreTabs({ cvTabs, dmTabs: savedDmTabs, savedTabOrder, activeChannelId, activeDmUserId }) {
+  for (const { channelId, channelName, password } of cvTabs || []) {
+    if (!channelViewTabs.find(t => t.channelId === channelId)) {
+      channelViewTabs.push({ channelId, channelName, ...(password != null && { password }) });
+      chatService.subscribeChannel(channelId, password);
+    }
+  }
+
+  for (const { persistentUserId, nickname } of savedDmTabs || []) {
+    if (!dmTabs.find(t => t.persistentUserId === persistentUserId)) {
+      dmTabs.push({ userId: persistentUserId, persistentUserId, nickname });
+      if (!dmMessages.has(persistentUserId)) dmMessages.set(persistentUserId, []);
+    }
+  }
+
+  tabOrder.length = 0;
+  if (savedTabOrder?.length) {
+    for (const entry of savedTabOrder) {
+      if (entry.type === 'channel-view' && channelViewTabs.find(t => t.channelId === entry.id)) {
+        tabOrder.push({ type: 'channel-view', id: entry.id });
+      } else if (entry.type === 'dm') {
+        const dt = dmTabs.find(t => t.persistentUserId === entry.id);
+        if (dt) tabOrder.push({ type: 'dm', id: dt.userId });
+      }
+    }
+  }
+  for (const cv of channelViewTabs) {
+    if (!tabOrder.find(t => t.type === 'channel-view' && t.id === cv.channelId)) {
+      tabOrder.push({ type: 'channel-view', id: cv.channelId });
+    }
+  }
+  for (const dt of dmTabs) {
+    if (!tabOrder.find(t => t.type === 'dm' && t.id === dt.userId)) {
+      tabOrder.push({ type: 'dm', id: dt.userId });
+    }
+  }
+
+  if (activeDmUserId) {
+    const dt = dmTabs.find(t => t.persistentUserId === activeDmUserId);
+    if (dt) {
+      switchToTab({ type: 'dm', userId: dt.userId, persistentUserId: dt.persistentUserId, nickname: dt.nickname });
+      return;
+    }
+  }
   if (activeChannelId) {
     const cvTab = channelViewTabs.find(t => t.channelId === activeChannelId);
     if (cvTab && (activeTab.type !== 'channel-view' || activeTab.channelId !== activeChannelId)) {
@@ -1281,11 +1377,28 @@ function onClientJoinedForCache(e) {
   const { userId, nickname, clientId } = e.detail;
   if (clientId) clientNicknameMap.set(clientId, nickname);
   if (userId && nickname) {
-    // User (re)connected - update cache with potentially new nickname
     invalidateNickname(userId);
     setNickname(userId, nickname);
-    // Update any visible message headers for this user
     updateVisibleNicknames(userId, nickname);
+  }
+  if (userId && clientId) {
+    const dmTab = dmTabs.find(t => t.persistentUserId === userId && t.userId !== clientId);
+    if (dmTab) {
+      const oldId = dmTab.userId;
+      dmTab.userId = clientId;
+      if (nickname) dmTab.nickname = nickname;
+      const orderEntry = tabOrder.find(t => t.type === 'dm' && t.id === oldId);
+      if (orderEntry) orderEntry.id = clientId;
+      if (activeTab.type === 'dm' && activeTab.userId === oldId) {
+        activeTab.userId = clientId;
+      }
+      const msgs = dmMessages.get(oldId);
+      if (msgs) {
+        dmMessages.delete(oldId);
+        dmMessages.set(clientId, msgs);
+      }
+      renderTabs();
+    }
   }
 }
 
@@ -2575,6 +2688,18 @@ function onNavigateChannel(e) {
 
 function openDmTab(userId, nickname, persistentUserId = null) {
   let tab = dmTabs.find(t => t.userId === userId);
+  let changed = false;
+  if (!tab && persistentUserId) {
+    tab = dmTabs.find(t => t.persistentUserId === persistentUserId);
+    if (tab) {
+      const oldId = tab.userId;
+      tab.userId = userId;
+      tab.nickname = nickname;
+      const orderEntry = tabOrder.find(t => t.type === 'dm' && t.id === oldId);
+      if (orderEntry) orderEntry.id = userId;
+      changed = true;
+    }
+  }
   if (!tab) {
     tab = { userId, persistentUserId, nickname };
     dmTabs.push(tab);
@@ -2582,8 +2707,10 @@ function openDmTab(userId, nickname, persistentUserId = null) {
     if (!dmMessages.has(userId)) {
       dmMessages.set(userId, []);
     }
+    changed = true;
   }
-  switchToTab({ type: 'dm', userId, persistentUserId: tab.persistentUserId, nickname });
+  switchToTab({ type: 'dm', userId: tab.userId, persistentUserId: tab.persistentUserId, nickname: tab.nickname });
+  if (changed) window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
 }
 
 function closeDmTab(userId) {
@@ -2593,8 +2720,8 @@ function closeDmTab(userId) {
   const orderIdx = tabOrder.findIndex(t => t.type === 'dm' && t.id === userId);
   if (orderIdx !== -1) tabOrder.splice(orderIdx, 1);
   dmMessages.delete(userId);
+  window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
 
-  // If we're closing the active tab, switch to channel
   if (activeTab.type === 'dm' && activeTab.userId === userId) {
     switchToTab({ type: 'channel' });
   } else {
@@ -2715,6 +2842,15 @@ async function onDmMessage(e) {
   const decrypted = await tryDecryptDmMessage(msg);
 
   let tab = dmTabs.find(t => t.userId === otherUserId);
+  if (!tab && otherPersistentUserId) {
+    tab = dmTabs.find(t => t.persistentUserId === otherPersistentUserId);
+    if (tab) {
+      const oldId = tab.userId;
+      tab.userId = otherUserId;
+      const orderEntry = tabOrder.find(t => t.type === 'dm' && t.id === oldId);
+      if (orderEntry) orderEntry.id = otherUserId;
+    }
+  }
   if (!tab) {
     const nickname = otherNickname || otherUserId;
     tab = { userId: otherUserId, persistentUserId: otherPersistentUserId, nickname };

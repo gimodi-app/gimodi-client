@@ -4,7 +4,7 @@ import voiceService from './services/voice.js';
 import notificationService from './services/notifications.js';
 import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects } from './views/connect.js';
 import { initServerView, cleanup as cleanupServer, getCurrentChannelId, getFirstChannelId, setFeedbackVolume, isCurrentChannelModerated, hasVoiceGrant, showUnifiedAdminDialog, showRedeemTokenModal, switchChannel, saveState as saveServerState, restoreState as restoreServerState, syncLocalVoiceIndicators } from './views/server.js';
-import { initChatView, cleanup as cleanupChat, switchChannel as switchChatChannel, appendSystemMessage, refreshTimestamps, setChatDisplayMode, setMediaEmbedPrivacy, openChannelViewTab, getChannelViewTabsState, restoreChannelViewTabs, saveState as saveChatState, restoreState as restoreChatState, initUnreadState, getViewingChannelId } from './views/chat.js';
+import { initChatView, cleanup as cleanupChat, switchChannel as switchChatChannel, appendSystemMessage, refreshTimestamps, setChatDisplayMode, setMediaEmbedPrivacy, openChannelViewTab, getChannelViewTabsState, restoreTabs, saveState as saveChatState, restoreState as restoreChatState, initUnreadState, getViewingChannelId } from './views/chat.js';
 import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoiceServerName, syncVoiceControlsUI } from './views/voice.js';
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
@@ -505,28 +505,26 @@ window.addEventListener('gimodi:connected', async (e) => {
     if (defaultChannel) switchChannel(defaultChannel.id);
   }
 
-  // Suppress auto-saves until all tabs (initial + restored) are open,
-  // otherwise openChannelViewTab fires gimodi:channel-tabs-changed and
-  // overwrites appSettings.channelTabs[address] before we read it below.
   suppressTabSave = true;
 
-  // Restore persisted channel-view tabs for this server+identity
   const saved = appSettings.channelTabs?.[key];
-  if (saved?.tabs?.length) {
+  if (saved) {
     const validChannelIds = new Set(data.channels.map(c => c.id));
-    // Use current channel names from server in case they changed
     const channelNameMap = new Map(data.channels.map(c => [c.id, c.name]));
-    const tabsToRestore = saved.tabs
+    const cvTabs = (saved.tabs || [])
       .filter(t => validChannelIds.has(t.channelId))
       .map(t => ({ channelId: t.channelId, channelName: channelNameMap.get(t.channelId) || t.channelName, ...(t.password != null && { password: t.password }) }));
     const activeChannelId = saved.activeChannelId && validChannelIds.has(saved.activeChannelId)
       ? saved.activeChannelId : null;
-    if (tabsToRestore.length > 0 || activeChannelId) {
-      restoreChannelViewTabs(tabsToRestore, activeChannelId);
+    const savedDmTabs = saved.dmTabs || [];
+    const savedTabOrder = saved.tabOrder || [];
+    const activeDmUserId = saved.activeDmUserId || null;
+
+    if (cvTabs.length > 0 || savedDmTabs.length > 0 || activeChannelId || activeDmUserId) {
+      restoreTabs({ cvTabs, dmTabs: savedDmTabs, savedTabOrder, activeChannelId, activeDmUserId });
     }
   }
   suppressTabSave = false;
-  // Single save with the full state (initial tab + all restored tabs)
   saveChannelTabs();
 
   appendSystemMessage(`Connected to ${data.serverName}`);
