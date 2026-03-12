@@ -889,22 +889,22 @@ function onVoiceRequestCancelled(e) {
 }
 
 function updateMuteIcons(clientId) {
-  const containers = document.querySelectorAll(`.channel-user-status[data-client-id="${clientId}"]`);
-  for (const el of containers) {
+  const indicators = document.querySelectorAll(`.voice-indicator[data-client-id="${clientId}"]`);
+  for (const el of indicators) {
     const isMuted = mutedClients.has(clientId);
     const isDeafened = deafenedClients.has(clientId);
     if (isDeafened) {
+      el.className = 'voice-indicator mute-status';
       el.innerHTML = '<i class="bi bi-volume-mute"></i>';
       el.title = 'Deafened';
-      el.classList.remove('hidden');
     } else if (isMuted) {
+      el.className = 'voice-indicator mute-status';
       el.innerHTML = '<i class="bi bi-mic-mute"></i>';
       el.title = 'Muted';
-      el.classList.remove('hidden');
     } else {
+      el.className = 'voice-indicator';
       el.innerHTML = '';
       el.title = '';
-      el.classList.add('hidden');
     }
   }
 }
@@ -1269,9 +1269,19 @@ function renderChannel(ch, isChild, groupId) {
       const userEl = document.createElement('div');
       userEl.className = `channel-user${u.id === serverService.clientId ? ' self' : ''}`;
       const indicator = document.createElement('span');
-      const isTalkingInCurrentChannel = talkingClients.has(u.id) && ch.id === currentChannelId;
-      indicator.className = `voice-indicator${isTalkingInCurrentChannel ? ' talking' : ''}`;
       indicator.dataset.clientId = u.id;
+      const isTalkingInCurrentChannel = talkingClients.has(u.id) && ch.id === currentChannelId;
+      if (deafenedClients.has(u.id)) {
+        indicator.className = 'voice-indicator mute-status';
+        indicator.innerHTML = '<i class="bi bi-volume-mute"></i>';
+        indicator.title = 'Deafened';
+      } else if (mutedClients.has(u.id)) {
+        indicator.className = 'voice-indicator mute-status';
+        indicator.innerHTML = '<i class="bi bi-mic-mute"></i>';
+        indicator.title = 'Muted';
+      } else {
+        indicator.className = `voice-indicator${isTalkingInCurrentChannel ? ' talking' : ''}`;
+      }
       userEl.appendChild(indicator);
 
       const nameSpan = document.createElement('span');
@@ -1299,21 +1309,6 @@ function renderChannel(ch, isChild, groupId) {
         handIcon.innerHTML = '<i class="bi bi-megaphone"></i>';
         userEl.appendChild(handIcon);
       }
-
-      // Mute/deafen status icon
-      const statusIcon = document.createElement('span');
-      statusIcon.className = 'channel-user-status';
-      statusIcon.dataset.clientId = u.id;
-      if (deafenedClients.has(u.id)) {
-        statusIcon.innerHTML = '<i class="bi bi-volume-mute"></i>';
-        statusIcon.title = 'Deafened';
-      } else if (mutedClients.has(u.id)) {
-        statusIcon.innerHTML = '<i class="bi bi-mic-mute"></i>';
-        statusIcon.title = 'Muted';
-      } else {
-        statusIcon.classList.add('hidden');
-      }
-      userEl.appendChild(statusIcon);
 
       if (webcamClients.has(u.id)) {
         const camIcon = document.createElement('span');

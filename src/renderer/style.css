@@ -1201,7 +1201,7 @@ label:has(input[type="checkbox"]) {
 .channel-user {
   display: flex;
   align-items: center;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-muted);
   padding: 3px 0;
 }
@@ -1230,12 +1230,6 @@ label:has(input[type="checkbox"]) {
   flex-shrink: 0;
 }
 
-.channel-user-status {
-  padding-left: 4px;
-  font-size: 10px;
-  flex-shrink: 0;
-  opacity: 0.6;
-}
 
 .stream-icon {
   padding-left: 4px;
@@ -1251,18 +1245,44 @@ label:has(input[type="checkbox"]) {
 }
 
 .voice-indicator {
-  width: 7px;
-  height: 7px;
+  min-width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-indicator::before {
+  content: '';
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   background: #333333;
-  margin-right: 6px;
-  flex-shrink: 0;
   transition: background 0.15s, box-shadow 0.15s;
 }
 
-.voice-indicator.talking {
+.voice-indicator.talking::before {
   background: #4caf50;
-  box-shadow: 0 0 4px rgba(76, 175, 80, 0.6);
+  box-shadow: 0 0 5px rgba(76, 175, 80, 0.6);
+}
+
+.voice-indicator.mute-status::before {
+  display: none;
+}
+
+.voice-indicator.mute-status {
+  background: none;
+  opacity: 0.6;
+}
+
+.voice-indicator.mute-status .bi-volume-mute {
+  font-size: 16px;
+}
+
+.voice-indicator.mute-status .bi-mic-mute {
+  font-size: 13px;
 }
 
 /* --- Main Content --- */
