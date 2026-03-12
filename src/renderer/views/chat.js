@@ -58,7 +58,8 @@ let activeTab = { type: 'channel' }; // { type: 'channel' } | { type: 'dm', user
 const dmTabs = []; // [{ userId, persistentUserId, nickname }]
 const dmMessages = new Map(); // userId (clientId) → message[]
 const channelViewTabs = []; // [{ channelId, channelName }]
-let draggedTab = null; // { type, index } for drag-and-drop reordering
+const tabOrder = []; // unified visual order: [{ type: 'dm'|'channel-view', id: string }, ...]
+let draggedTab = null; // { index } for drag-and-drop reordering
 const channelViewMessagesCache = new Map(); // channelId → DOM nodes[]
 const channelViewMessagesPending = new Map(); // channelId → message[] (buffered while tab inactive)
 const channelMessagesCache = []; // stores channel DOM nodes when switching away
@@ -702,6 +703,7 @@ export function initChatView(channelId) {
   activeTab = { type: 'channel' };
   dmTabs.length = 0;
   dmMessages.clear();
+  tabOrder.length = 0;
   channelMessagesCache.length = 0;
   channelMessagesPending.length = 0;
   channelTabUnread = false;
@@ -829,6 +831,7 @@ chatService.removeEventListener('cleared', onChatCleared);
   // Clear channel-view tabs (unsubscribe all)
   for (const cv of channelViewTabs) chatService.unsubscribeChannel(cv.channelId);
   channelViewTabs.length = 0;
+  tabOrder.length = 0;
   channelViewMessagesCache.clear();
   channelViewMessagesPending.clear();
   channelPinnedMessages.clear();
@@ -1198,6 +1201,7 @@ export function openChannelViewTab(channelId, channelName, password, readRestric
   if (!tab) {
     tab = { channelId, channelName, readRestricted, writeRestricted, ...(password != null && { password }) };
     channelViewTabs.push(tab);
+    tabOrder.push({ type: 'channel-view', id: channelId });
     chatService.subscribeChannel(channelId, password);
     window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
   } else {
@@ -1216,6 +1220,8 @@ function closeChannelViewTab(channelId) {
   const idx = channelViewTabs.findIndex(t => t.channelId === channelId);
   if (idx === -1) return;
   channelViewTabs.splice(idx, 1);
+  const orderIdx = tabOrder.findIndex(t => t.type === 'channel-view' && t.id === channelId);
+  if (orderIdx !== -1) tabOrder.splice(orderIdx, 1);
   channelViewMessagesCache.delete(channelId);
   channelViewMessagesPending.delete(channelId);
   if (channelId !== currentChannelId) channelPinnedMessages.delete(channelId);
@@ -1233,7 +1239,10 @@ function closeChannelViewTab(channelId) {
 export function getChannelViewTabsState() {
   const activeChannelId = activeTab.type === 'channel-view' ? activeTab.channelId : null;
   return {
-    tabs: channelViewTabs.map(t => ({ channelId: t.channelId, channelName: t.channelName, ...(t.password != null && { password: t.password }) })),
+    tabs: tabOrder.filter(o => o.type === 'channel-view').map(o => {
+      const t = channelViewTabs.find(cv => cv.channelId === o.id);
+      return t ? { channelId: t.channelId, channelName: t.channelName, ...(t.password != null && { password: t.password }) } : null;
+    }).filter(Boolean),
     activeChannelId,
   };
 }
@@ -1242,6 +1251,7 @@ export function restoreChannelViewTabs(tabs, activeChannelId) {
   for (const { channelId, channelName, password } of tabs) {
     if (!channelViewTabs.find(t => t.channelId === channelId)) {
       channelViewTabs.push({ channelId, channelName, ...(password != null && { password }) });
+      tabOrder.push({ type: 'channel-view', id: channelId });
       chatService.subscribeChannel(channelId, password);
     }
   }
@@ -2564,11 +2574,11 @@ function onNavigateChannel(e) {
 }
 
 function openDmTab(userId, nickname, persistentUserId = null) {
-  // If tab already exists, just switch to it
   let tab = dmTabs.find(t => t.userId === userId);
   if (!tab) {
     tab = { userId, persistentUserId, nickname };
     dmTabs.push(tab);
+    tabOrder.push({ type: 'dm', id: userId });
     if (!dmMessages.has(userId)) {
       dmMessages.set(userId, []);
     }
@@ -2580,6 +2590,8 @@ function closeDmTab(userId) {
   const idx = dmTabs.findIndex(t => t.userId === userId);
   if (idx === -1) return;
   dmTabs.splice(idx, 1);
+  const orderIdx = tabOrder.findIndex(t => t.type === 'dm' && t.id === userId);
+  if (orderIdx !== -1) tabOrder.splice(orderIdx, 1);
   dmMessages.delete(userId);
 
   // If we're closing the active tab, switch to channel
@@ -2702,12 +2714,12 @@ async function onDmMessage(e) {
   // Decrypt content
   const decrypted = await tryDecryptDmMessage(msg);
 
-  // Auto-open tab if it doesn't exist
   let tab = dmTabs.find(t => t.userId === otherUserId);
   if (!tab) {
     const nickname = otherNickname || otherUserId;
     tab = { userId: otherUserId, persistentUserId: otherPersistentUserId, nickname };
     dmTabs.push(tab);
+    tabOrder.push({ type: 'dm', id: otherUserId });
     if (!dmMessages.has(otherUserId)) {
       dmMessages.set(otherUserId, []);
     }
@@ -2822,63 +2834,60 @@ function renderTabs() {
     tabBar.appendChild(channelTab);
   }
 
-  // DM tabs
-  for (let i = 0; i < dmTabs.length; i++) {
-    const dt = dmTabs[i];
+  for (let i = 0; i < tabOrder.length; i++) {
+    const entry = tabOrder[i];
     const tab = document.createElement('div');
-    tab.className = `tab${activeTab.type === 'dm' && activeTab.userId === dt.userId ? ' active' : ''}${dt.unread ? ' unread' : ''}`;
-    tab.dataset.type = 'dm';
-    tab.dataset.userId = dt.userId;
     tab.dataset.dragIndex = i;
     tab.draggable = true;
-    addTabDragListeners(tab, 'dm', i);
+    addTabDragListeners(tab, i);
 
-    const label = document.createElement('span');
-    label.className = 'tab-label';
-    label.textContent = dt.nickname;
-    tab.appendChild(label);
+    if (entry.type === 'dm') {
+      const dt = dmTabs.find(t => t.userId === entry.id);
+      if (!dt) continue;
+      tab.className = `tab${activeTab.type === 'dm' && activeTab.userId === dt.userId ? ' active' : ''}${dt.unread ? ' unread' : ''}`;
+      tab.dataset.type = 'dm';
+      tab.dataset.userId = dt.userId;
 
-    const closeBtn = document.createElement('span');
-    closeBtn.className = 'tab-close';
-    closeBtn.innerHTML = '&times;';
-    closeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      closeDmTab(dt.userId);
-    });
-    tab.appendChild(closeBtn);
+      const label = document.createElement('span');
+      label.className = 'tab-label';
+      label.textContent = dt.nickname;
+      tab.appendChild(label);
 
-    tab.addEventListener('click', () => switchToTab({ type: 'dm', userId: dt.userId, persistentUserId: dt.persistentUserId, nickname: dt.nickname }));
-    tab.addEventListener('contextmenu', (e) => showTabContextMenu(e, { type: 'dm', userId: dt.userId }));
-    tabBar.appendChild(tab);
-  }
+      const closeBtn = document.createElement('span');
+      closeBtn.className = 'tab-close';
+      closeBtn.innerHTML = '&times;';
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeDmTab(dt.userId);
+      });
+      tab.appendChild(closeBtn);
 
-  // Channel-view tabs (closeable, read-only channel history)
-  for (let i = 0; i < channelViewTabs.length; i++) {
-    const cv = channelViewTabs[i];
-    const tab = document.createElement('div');
-    tab.className = `tab${activeTab.type === 'channel-view' && activeTab.channelId === cv.channelId ? ' active' : ''}${cv.unread ? ' unread' : ''}`;
-    tab.dataset.type = 'channel-view';
-    tab.dataset.channelId = cv.channelId;
-    tab.dataset.dragIndex = i;
-    tab.draggable = true;
-    addTabDragListeners(tab, 'channel-view', i);
+      tab.addEventListener('click', () => switchToTab({ type: 'dm', userId: dt.userId, persistentUserId: dt.persistentUserId, nickname: dt.nickname }));
+      tab.addEventListener('contextmenu', (e) => showTabContextMenu(e, { type: 'dm', userId: dt.userId }));
+    } else {
+      const cv = channelViewTabs.find(t => t.channelId === entry.id);
+      if (!cv) continue;
+      tab.className = `tab${activeTab.type === 'channel-view' && activeTab.channelId === cv.channelId ? ' active' : ''}${cv.unread ? ' unread' : ''}`;
+      tab.dataset.type = 'channel-view';
+      tab.dataset.channelId = cv.channelId;
 
-    const label = document.createElement('span');
-    label.className = 'tab-label';
-    label.textContent = '#' + cv.channelName;
-    tab.appendChild(label);
+      const label = document.createElement('span');
+      label.className = 'tab-label';
+      label.textContent = '#' + cv.channelName;
+      tab.appendChild(label);
 
-    const closeBtn = document.createElement('span');
-    closeBtn.className = 'tab-close';
-    closeBtn.innerHTML = '&times;';
-    closeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      closeChannelViewTab(cv.channelId);
-    });
-    tab.appendChild(closeBtn);
+      const closeBtn = document.createElement('span');
+      closeBtn.className = 'tab-close';
+      closeBtn.innerHTML = '&times;';
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeChannelViewTab(cv.channelId);
+      });
+      tab.appendChild(closeBtn);
 
-    tab.addEventListener('click', () => switchToTab({ type: 'channel-view', channelId: cv.channelId, channelName: cv.channelName }));
-    tab.addEventListener('contextmenu', (e) => showTabContextMenu(e, { type: 'channel-view', channelId: cv.channelId }));
+      tab.addEventListener('click', () => switchToTab({ type: 'channel-view', channelId: cv.channelId, channelName: cv.channelName }));
+      tab.addEventListener('contextmenu', (e) => showTabContextMenu(e, { type: 'channel-view', channelId: cv.channelId }));
+    }
     tabBar.appendChild(tab);
   }
 }
@@ -2956,9 +2965,9 @@ function showTabContextMenu(e, tabInfo) {
   document.addEventListener('keydown', onEscape);
 }
 
-function addTabDragListeners(tab, type, index) {
+function addTabDragListeners(tab, index) {
   tab.addEventListener('dragstart', (e) => {
-    draggedTab = { type, index };
+    draggedTab = { index };
     tab.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
   });
@@ -2972,10 +2981,9 @@ function addTabDragListeners(tab, type, index) {
   });
 
   tab.addEventListener('dragover', (e) => {
-    if (!draggedTab || draggedTab.type !== type) return;
+    if (!draggedTab) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    // Show drop indicator based on cursor position
     const rect = tab.getBoundingClientRect();
     const midX = rect.left + rect.width / 2;
     tab.classList.toggle('drag-over-left', e.clientX < midX);
@@ -2989,7 +2997,7 @@ function addTabDragListeners(tab, type, index) {
   tab.addEventListener('drop', (e) => {
     e.preventDefault();
     tab.classList.remove('drag-over-left', 'drag-over-right');
-    if (!draggedTab || draggedTab.type !== type) return;
+    if (!draggedTab) return;
 
     const fromIndex = draggedTab.index;
     const rect = tab.getBoundingClientRect();
@@ -2998,11 +3006,10 @@ function addTabDragListeners(tab, type, index) {
     if (toIndex > fromIndex) toIndex--;
     if (fromIndex === toIndex) return;
 
-    const arr = type === 'dm' ? dmTabs : channelViewTabs;
-    const [moved] = arr.splice(fromIndex, 1);
-    arr.splice(toIndex, 0, moved);
+    const [moved] = tabOrder.splice(fromIndex, 1);
+    tabOrder.splice(toIndex, 0, moved);
 
-    if (type === 'channel-view') {
+    if (tabOrder.some(t => t.type === 'channel-view')) {
       window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
     }
     renderTabs();
