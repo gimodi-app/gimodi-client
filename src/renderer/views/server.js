@@ -4277,8 +4277,25 @@ async function _initRolesLogic(root) {
 
   const collapsedGroups = new Set(); // track collapsed group IDs
 
+  let permsSearchValue = '';
+
   const renderPerms = (readOnly = false) => {
     permsContainer.innerHTML = '';
+
+    const searchWrap = document.createElement('div');
+    searchWrap.className = 'roles-perms-search-wrap';
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.className = 'roles-perms-search';
+    searchInput.placeholder = 'Search permissions...';
+    searchInput.value = permsSearchValue;
+    const clearBtn = document.createElement('span');
+    clearBtn.className = 'roles-perms-search-clear';
+    clearBtn.textContent = '\u00D7';
+    clearBtn.style.display = permsSearchValue ? '' : 'none';
+    searchWrap.append(searchInput, clearBtn);
+    permsContainer.appendChild(searchWrap);
+
     if (readOnly) {
       const note = document.createElement('div');
       note.style.cssText = 'font-size:11px;color:var(--text-muted);padding:4px 0 8px';
@@ -4290,8 +4307,17 @@ async function _initRolesLogic(root) {
       ? permissionGroups
       : [{ id: 'all', label: 'All Permissions', permissions: availablePermissions }];
 
+    const filter = permsSearchValue.toLowerCase();
+    const groupElements = [];
+
     for (const group of groups) {
-      const isCollapsed = collapsedGroups.has(group.id);
+      const filteredPerms = filter
+        ? group.permissions.filter(p => p.label.toLowerCase().includes(filter) || p.key.toLowerCase().includes(filter))
+        : group.permissions;
+
+      if (filter && filteredPerms.length === 0) continue;
+
+      const isCollapsed = !filter && collapsedGroups.has(group.id);
       const checkedCount = group.permissions.filter(p => pendingPerms.has(p.key)).length;
 
       const header = document.createElement('div');
@@ -4313,9 +4339,10 @@ async function _initRolesLogic(root) {
       const body = document.createElement('div');
       body.style.cssText = `padding-left:18px;${isCollapsed ? 'display:none;' : ''}`;
 
-      for (const { key, label } of group.permissions) {
+      for (const { key, label } of filteredPerms) {
         const row = document.createElement('label');
         row.style.cssText = `display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;${readOnly ? 'opacity:0.5;' : 'cursor:pointer;'}`;
+        row.dataset.permKey = key;
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = pendingPerms.has(key);
@@ -4334,19 +4361,42 @@ async function _initRolesLogic(root) {
       }
 
       permsContainer.appendChild(body);
+      groupElements.push({ header, body, arrow, group });
 
-      header.addEventListener('click', () => {
-        if (collapsedGroups.has(group.id)) {
-          collapsedGroups.delete(group.id);
-          body.style.display = '';
-          arrow.style.transform = 'rotate(90deg)';
-        } else {
-          collapsedGroups.add(group.id);
-          body.style.display = 'none';
-          arrow.style.transform = '';
-        }
-      });
+      if (!filter) {
+        header.addEventListener('click', () => {
+          if (collapsedGroups.has(group.id)) {
+            collapsedGroups.delete(group.id);
+            body.style.display = '';
+            arrow.style.transform = 'rotate(90deg)';
+          } else {
+            collapsedGroups.add(group.id);
+            body.style.display = 'none';
+            arrow.style.transform = '';
+          }
+        });
+      }
     }
+
+    if (filter && groupElements.length === 0) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'font-size:12px;color:var(--text-muted);padding:12px 0;text-align:center';
+      empty.textContent = 'No permissions found.';
+      permsContainer.appendChild(empty);
+    }
+
+    searchInput.addEventListener('input', () => {
+      permsSearchValue = searchInput.value;
+      clearBtn.style.display = permsSearchValue ? '' : 'none';
+      renderPerms(readOnly);
+      const newInput = permsContainer.querySelector('.roles-perms-search');
+      if (newInput) { newInput.focus(); newInput.selectionStart = newInput.selectionEnd = newInput.value.length; }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      permsSearchValue = '';
+      renderPerms(readOnly);
+    });
   };
 
   const showRoleContextMenu = (x, y, role) => {
@@ -4458,6 +4508,17 @@ async function _initRolesLogic(root) {
       role.badge = newBadge;
       role.color = newColor;
       renderRolesList();
+
+      const saveBtn = root.querySelector('.roles-save-btn');
+      const origText = saveBtn.textContent;
+      saveBtn.textContent = 'Saved!';
+      saveBtn.disabled = true;
+      saveBtn.classList.add('roles-save-success');
+      setTimeout(() => {
+        saveBtn.textContent = origText;
+        saveBtn.disabled = false;
+        saveBtn.classList.remove('roles-save-success');
+      }, 1500);
     } catch (err) { await customAlert(err.message); }
   });
 

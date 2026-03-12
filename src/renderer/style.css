@@ -4846,6 +4846,56 @@ input.is-invalid {
   color: var(--text-muted);
 }
 
+.roles-save-success {
+  background: var(--success, #2ea043) !important;
+  border-color: var(--success, #2ea043) !important;
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.roles-perms-search-wrap {
+  position: sticky;
+  top: -8px;
+  z-index: 1;
+  padding: 8px 0;
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+}
+
+.roles-perms-search {
+  width: 100%;
+  padding: 7px 26px 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.roles-perms-search:focus {
+  border-color: var(--accent);
+}
+
+.roles-perms-search::placeholder {
+  color: var(--text-muted);
+}
+
+.roles-perms-search-clear {
+  position: absolute;
+  right: 6px;
+  font-size: 16px;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px;
+}
+
+.roles-perms-search-clear:hover {
+  color: var(--text-primary);
+}
+
 .help-commands-empty {
   color: var(--text-muted);
   font-size: 14px;
