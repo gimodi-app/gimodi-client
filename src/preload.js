@@ -59,11 +59,15 @@ contextBridge.exposeInMainWorld('gimodi', {
     ipcRenderer.removeAllListeners('server-admin:manage-roles');
     ipcRenderer.removeAllListeners('server-admin:server-settings');
     ipcRenderer.removeAllListeners('server-admin:audit-log');
+    // Note: menu:disconnect and menu:open-unified-settings
+    // are registered once by app.js and must persist across reconnects.
+    // Note: tray:toggle-mute, tray:toggle-deafen, tray:disconnect are managed
+    // separately via removeTrayVoiceListeners to persist across server view switches.
+  },
+  removeTrayVoiceListeners: () => {
     ipcRenderer.removeAllListeners('tray:toggle-mute');
     ipcRenderer.removeAllListeners('tray:toggle-deafen');
     ipcRenderer.removeAllListeners('tray:disconnect');
-    // Note: menu:disconnect and menu:open-unified-settings
-    // are registered once by app.js and must persist across reconnects.
   },
   setAdminStatus: (isAdmin, connected) => ipcRenderer.invoke('set-admin-status', isAdmin, connected),
   setVoiceActive: (active) => ipcRenderer.invoke('set-voice-active', active),

@@ -249,6 +249,7 @@ export function cleanup() {
   serverService.removeEventListener('webcam:stopped', onPeerWebcamStopped);
   serverService.removeEventListener('screen:stopped', onPeerScreenStopped);
   window.gimodi.screen.removePickerListener();
+  window.gimodi.removeTrayVoiceListeners();
   window.removeEventListener('keydown', onKeyDown);
   window.removeEventListener('keyup', onKeyUp);
   window.removeEventListener('gimodi:channel-changed', onChannelChangedForControls);
