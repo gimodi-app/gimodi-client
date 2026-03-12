@@ -56,6 +56,10 @@ class ChatService extends EventTarget {
     serverService.addEventListener('chat:subscribed', (e) => {
       this.dispatchEvent(new CustomEvent('subscribed', { detail: e.detail }));
     });
+
+    serverService.addEventListener('chat:purged', (e) => {
+      this.dispatchEvent(new CustomEvent('purged', { detail: e.detail }));
+    });
   }
 
   /**

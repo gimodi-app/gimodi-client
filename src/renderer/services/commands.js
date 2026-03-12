@@ -8,6 +8,15 @@ const COMMAND_REGISTRY = {
       serverService.send('chat:command', { name: 'clear', channelId });
     },
   },
+  purge: {
+    description: 'Delete all messages from a user server-wide',
+    /** @param {{args: string}} context */
+    execute({ args }) {
+      const nickname = args.startsWith('@') ? args.slice(1) : args;
+      if (!nickname) return;
+      serverService.send('chat:command', { name: 'purge', nickname });
+    },
+  },
 };
 
 /**
@@ -18,13 +27,15 @@ const COMMAND_REGISTRY = {
 export function tryHandleCommand(input, context) {
   if (!input.startsWith('/')) return false;
 
-  const [rawName] = input.slice(1).trim().split(/\s+/);
-  const name = rawName.toLowerCase();
+  const trimmed = input.slice(1).trim();
+  const spaceIdx = trimmed.indexOf(' ');
+  const name = (spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx)).toLowerCase();
+  const args = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim();
 
   const cmd = COMMAND_REGISTRY[name];
   if (!cmd) return false;
 
-  cmd.execute(context);
+  cmd.execute({ ...context, args });
   return true;
 }
 

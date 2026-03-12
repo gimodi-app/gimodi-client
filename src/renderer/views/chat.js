@@ -741,6 +741,7 @@ export function initChatView(channelId) {
   chatService.addEventListener('message-deleted', onMessageDeleted);
   chatService.addEventListener('dm-message', onDmMessage);
 chatService.addEventListener('cleared', onChatCleared);
+  chatService.addEventListener('purged', onChatPurged);
   chatService.addEventListener('typing', onTypingEvent);
   chatService.addEventListener('reaction-update', onReactionUpdate);
   chatService.addEventListener('message-edited', onMessageEdited);
@@ -803,6 +804,7 @@ export function cleanup() {
   chatService.removeEventListener('message-deleted', onMessageDeleted);
   chatService.removeEventListener('dm-message', onDmMessage);
 chatService.removeEventListener('cleared', onChatCleared);
+  chatService.removeEventListener('purged', onChatPurged);
   chatService.removeEventListener('typing', onTypingEvent);
   chatService.removeEventListener('reaction-update', onReactionUpdate);
   chatService.removeEventListener('message-edited', onMessageEdited);
@@ -1491,6 +1493,48 @@ function onChatCleared(e) {
 
   if (activeTab.type === 'channel-view' && activeTab.channelId === channelId) {
     chatMessages.innerHTML = '';
+  }
+}
+
+function onChatPurged(e) {
+  const { clientId, userId } = e.detail;
+
+  const selectors = [];
+  if (clientId) selectors.push(`.chat-msg[data-client-id="${CSS.escape(clientId)}"]`);
+  if (userId) selectors.push(`.chat-msg[data-user-id="${CSS.escape(userId)}"]`);
+  if (selectors.length === 0) return;
+
+  const selector = selectors.join(', ');
+  for (const el of chatMessages.querySelectorAll(selector)) {
+    el.remove();
+  }
+
+  const matchesNode = (node) =>
+    (clientId && node.dataset?.clientId === clientId) ||
+    (userId && node.dataset?.userId === userId);
+
+  const matchesMsg = (msg) =>
+    (clientId && msg.clientId === clientId) ||
+    (userId && msg.userId === userId);
+
+  for (let i = channelMessagesCache.length - 1; i >= 0; i--) {
+    if (matchesNode(channelMessagesCache[i])) channelMessagesCache.splice(i, 1);
+  }
+
+  for (const [chId, nodes] of channelViewMessagesCache) {
+    const filtered = nodes.filter(n => !matchesNode(n));
+    if (filtered.length === 0) channelViewMessagesCache.delete(chId);
+    else channelViewMessagesCache.set(chId, filtered);
+  }
+
+  for (let i = channelMessagesPending.length - 1; i >= 0; i--) {
+    if (matchesMsg(channelMessagesPending[i])) channelMessagesPending.splice(i, 1);
+  }
+
+  for (const [chId, msgs] of channelViewMessagesPending) {
+    const filtered = msgs.filter(m => !matchesMsg(m));
+    if (filtered.length === 0) channelViewMessagesPending.delete(chId);
+    else channelViewMessagesPending.set(chId, filtered);
   }
 }
 
