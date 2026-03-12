@@ -344,6 +344,15 @@ function createWindow() {
     callback(0); // 0 = accept
   });
 
+  // Fix Referer for YouTube embeds so they don't reject with error 153
+  mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
+    { urls: ['https://www.youtube-nocookie.com/*', 'https://www.youtube.com/*'] },
+    (details, callback) => {
+      details.requestHeaders['Referer'] = 'https://www.youtube-nocookie.com/';
+      callback({ requestHeaders: details.requestHeaders });
+    }
+  );
+
   // Prevent navigation away from the app (e.g. clicking download links)
   mainWindow.webContents.on('will-navigate', (e, url) => {
     const appUrl = `file://${path.join(__dirname, '..', 'renderer', 'index.html')}`;

@@ -1540,10 +1540,39 @@ function onLinkPreview(e) {
   const body = msgEl.querySelector('.chat-msg-body');
   if (!body) return;
 
-  appendPreviewCards(body, previews);
+  const embeddedUrls = new Set([...msgEl.querySelectorAll('.media-embed-link')].map(a => a.href));
+  const remaining = previews.filter(p => !embeddedUrls.has(p.url));
+  if (!remaining.length) return;
+
+  appendPreviewCards(body, remaining);
   scrollToBottom();
 }
 
+/**
+ * Extracts a YouTube video ID from a URL, or returns null.
+ * @param {string} url
+ * @returns {string|null}
+ */
+function extractYouTubeId(url) {
+  const m = url.match(/(?:youtube\.com\/watch\?.*v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Extracts a start time parameter from a YouTube URL, or returns null.
+ * @param {string} url
+ * @returns {string|null}
+ */
+function extractYouTubeStart(url) {
+  const m = url.match(/[?&]t=(\d+)/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Renders an embeddable media preview card, or falls back to a standard link preview.
+ * @param {{url: string, title: string, description: string, image: string|null, siteName: string}} preview
+ * @returns {string}
+ */
 function renderPreviewCard(preview) {
   const imageHtml = preview.image
     ? `<img class="link-preview-image" src="${escapeHtml(preview.image)}" alt="" loading="lazy">`
@@ -1577,7 +1606,7 @@ function appendPreviewCards(bodyEl, previews) {
   container.innerHTML = previews.map(renderPreviewCard).join('');
 
   // Open links in system browser
-  for (const a of container.querySelectorAll('.link-preview-card')) {
+  for (const a of container.querySelectorAll('.link-preview-card, .media-embed-link')) {
     a.addEventListener('click', (e) => {
       e.preventDefault();
       const href = a.getAttribute('href');
@@ -1618,10 +1647,83 @@ function appendPreviewCards(bodyEl, previews) {
       container.remove();
     }
   });
-  const firstCard = container.querySelector('.link-preview-card');
+  const firstCard = container.querySelector('.link-preview-card') || container.querySelector('.media-embed');
   (firstCard || container).appendChild(dismissBtn);
 
+  activateEmbedPlayButtons(container);
+
   bodyEl.appendChild(container);
+}
+
+/**
+ * Scans a message element for embeddable URLs and appends inline media players.
+ * @param {HTMLElement} msgEl
+ */
+function appendMediaEmbeds(msgEl) {
+  const body = msgEl.querySelector('.chat-msg-body');
+  if (!body) return;
+
+  const links = body.querySelectorAll('a[href]');
+  const embeds = [];
+
+  for (const a of links) {
+    const href = a.getAttribute('href');
+    const ytId = extractYouTubeId(href);
+    if (ytId) {
+      const start = extractYouTubeStart(href);
+      const embed = document.createElement('div');
+      embed.className = 'media-embed';
+      embed.dataset.embedId = ytId;
+      embed.dataset.embedStart = start || '';
+      embed.innerHTML = `
+        <div class="media-embed-player media-embed-placeholder">
+          <div class="media-embed-icon"><i class="bi bi-youtube"></i></div>
+          <button class="media-embed-play" aria-label="Video abspielen"><i class="bi bi-play-fill"></i></button>
+        </div>
+        <a class="media-embed-link" href="${escapeHtml(href)}" title="${escapeHtml(href)}">
+          <i class="bi bi-box-arrow-up-right"></i> ${escapeHtml(a.textContent || href)}
+        </a>
+      `;
+
+      const link = embed.querySelector('.media-embed-link');
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.gimodi.openExternal(href);
+      });
+      link.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        showLinkContextMenu(e.clientX, e.clientY, href);
+      });
+
+      embeds.push(embed);
+    }
+  }
+
+  for (const embed of embeds) {
+    body.appendChild(embed);
+  }
+
+  activateEmbedPlayButtons(body);
+}
+
+/**
+ * Replaces a media embed placeholder with a live iframe when the play button is clicked.
+ * @param {HTMLElement} container
+ */
+function activateEmbedPlayButtons(container) {
+  for (const btn of container.querySelectorAll('.media-embed-play')) {
+    btn.addEventListener('click', () => {
+      const embed = btn.closest('.media-embed');
+      if (!embed) return;
+      const videoId = embed.dataset.embedId;
+      const start = embed.dataset.embedStart;
+      const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1${start ? `&start=${start}` : ''}`;
+      const player = embed.querySelector('.media-embed-player');
+      player.classList.remove('media-embed-placeholder');
+      player.innerHTML = `<iframe src="${escapeHtml(embedUrl)}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+    });
+  }
 }
 
 function isFileMessage(content) {
@@ -2026,10 +2128,15 @@ function buildMessageEl(msg, prevEl) {
     });
   }
 
-  // Render link previews from history
+  // Render inline media embeds (YouTube etc.) from message links
+  appendMediaEmbeds(el);
+
+  // Render link previews from history (skip URLs already embedded)
   if (msg.linkPreviews?.length) {
     const body = el.querySelector('.chat-msg-body');
-    appendPreviewCards(body, msg.linkPreviews);
+    const embeddedUrls = new Set([...el.querySelectorAll('.media-embed-link')].map(a => a.getAttribute('href')));
+    const remaining = msg.linkPreviews.filter(p => !embeddedUrls.has(p.url));
+    if (remaining.length) appendPreviewCards(body, remaining);
   }
 
   // Render reactions
