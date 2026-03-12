@@ -372,6 +372,7 @@
         <nav class="settings-nav">
           <button class="settings-nav-item active" data-tab="general">General</button>
           <button class="settings-nav-item" data-tab="audio">Audio / Video</button>
+          <button class="settings-nav-item" data-tab="privacy">Privacy</button>
           <button class="settings-nav-item" data-tab="identities">Identities</button>
         </nav>
         <div class="settings-panels">
@@ -498,6 +499,18 @@
                 <input type="text" id="input-ptt-key" placeholder="Press a key..." readonly>
                 <small style="color: var(--text-muted);">Click and press a key to set your push-to-talk keybind</small>
               </div>
+            </div>
+          </div>
+
+          <!-- Privacy Panel -->
+          <div id="settings-panel-privacy" class="settings-panel">
+            <div class="settings-section-label">Media Embeds</div>
+            <div class="form-group">
+              <label class="checkbox-label" for="checkbox-media-embed-privacy">
+                <input type="checkbox" id="checkbox-media-embed-privacy" checked>
+                <span>Require confirmation before loading external media</span>
+              </label>
+              <div class="form-hint">When enabled, embedded media (e.g. YouTube videos) will not connect to external servers until you explicitly allow it.</div>
             </div>
           </div>
 

@@ -13,6 +13,7 @@ import { searchEmoji, getEmoji, replaceEmojiShortcodes } from '../services/emoji
 const MAX_MESSAGE_LENGTH = 4000;
 
 let compactMode = false;
+let mediaEmbedPrivacy = true;
 
 const chatMessages = document.getElementById('chat-messages');
 const pinnedMessages = document.getElementById('pinned-messages');
@@ -1675,15 +1676,26 @@ function appendMediaEmbeds(msgEl) {
       embed.className = 'media-embed';
       embed.dataset.embedId = ytId;
       embed.dataset.embedStart = start || '';
-      embed.innerHTML = `
-        <div class="media-embed-player media-embed-placeholder">
-          <div class="media-embed-icon"><i class="bi bi-youtube"></i></div>
-          <button class="media-embed-load" aria-label="Load preview"><i class="bi bi-eye"></i> Load preview</button>
-        </div>
-        <a class="media-embed-link" href="${escapeHtml(href)}" title="${escapeHtml(href)}">
-          <i class="bi bi-box-arrow-up-right"></i> ${escapeHtml(a.textContent || href)}
-        </a>
-      `;
+      if (mediaEmbedPrivacy) {
+        embed.innerHTML = `
+          <div class="media-embed-player media-embed-placeholder">
+            <button class="media-embed-load" aria-label="Load preview"><i class="bi bi-eye"></i> Load preview</button>
+          </div>
+          <a class="media-embed-link" href="${escapeHtml(href)}" title="${escapeHtml(href)}">
+            <i class="bi bi-box-arrow-up-right"></i> ${escapeHtml(a.textContent || href)}
+          </a>
+        `;
+      } else {
+        const embedUrl = `https://www.youtube-nocookie.com/embed/${escapeHtml(ytId)}?vq=hd1080${start ? `&start=${start}` : ''}`;
+        embed.innerHTML = `
+          <div class="media-embed-player">
+            <iframe src="${escapeHtml(embedUrl)}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+          </div>
+          <a class="media-embed-link" href="${escapeHtml(href)}" title="${escapeHtml(href)}">
+            <i class="bi bi-box-arrow-up-right"></i> ${escapeHtml(a.textContent || href)}
+          </a>
+        `;
+      }
 
       const link = embed.querySelector('.media-embed-link');
       link.addEventListener('click', (e) => {
@@ -2268,6 +2280,14 @@ function refreshNodeTimestamps(el) {
 export function setChatDisplayMode(mode) {
   compactMode = mode === 'compact';
   chatMessages.classList.toggle('compact-mode', compactMode);
+}
+
+/**
+ * Sets whether media embeds require user confirmation before loading external content.
+ * @param {boolean} enabled
+ */
+export function setMediaEmbedPrivacy(enabled) {
+  mediaEmbedPrivacy = enabled;
 }
 
 export function refreshTimestamps() {

@@ -4,7 +4,7 @@ import voiceService from './services/voice.js';
 import notificationService from './services/notifications.js';
 import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects } from './views/connect.js';
 import { initServerView, cleanup as cleanupServer, getCurrentChannelId, getFirstChannelId, setFeedbackVolume, isCurrentChannelModerated, hasVoiceGrant, showUnifiedAdminDialog, showRedeemTokenModal, switchChannel, saveState as saveServerState, restoreState as restoreServerState } from './views/server.js';
-import { initChatView, cleanup as cleanupChat, switchChannel as switchChatChannel, appendSystemMessage, refreshTimestamps, setChatDisplayMode, openChannelViewTab, getChannelViewTabsState, restoreChannelViewTabs, saveState as saveChatState, restoreState as restoreChatState, initUnreadState, getViewingChannelId } from './views/chat.js';
+import { initChatView, cleanup as cleanupChat, switchChannel as switchChatChannel, appendSystemMessage, refreshTimestamps, setChatDisplayMode, setMediaEmbedPrivacy, openChannelViewTab, getChannelViewTabsState, restoreChannelViewTabs, saveState as saveChatState, restoreState as restoreChatState, initUnreadState, getViewingChannelId } from './views/chat.js';
 import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoiceServerName } from './views/voice.js';
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
@@ -270,6 +270,7 @@ async function loadSettings() {
     setTimeFormat(appSettings.timeFormat);
   }
   setChatDisplayMode(appSettings.chatDisplay || 'default');
+  setMediaEmbedPrivacy(appSettings.mediaEmbedPrivacy !== false);
   if (appSettings.micId) {
     voiceService.setMicrophone(appSettings.micId);
   }
@@ -842,6 +843,7 @@ async function openSettings(tab = 'audio') {
   updateChannelGroup.classList.toggle('hidden', !appSettings.devMode);
   selectUpdateChannel.value = appSettings.updateChannel || 'stable';
   selectNotificationMode.value = appSettings.notificationMode || 'mentions';
+  document.getElementById('checkbox-media-embed-privacy').checked = appSettings.mediaEmbedPrivacy !== false;
 
   rangeVoiceActivation.value = voiceService.voiceActivationLevel;
   voiceActivationValue.textContent = voiceService.voiceActivationLevel === 0 ? 'Off' : voiceService.voiceActivationLevel;
@@ -917,6 +919,12 @@ selectNotificationMode.addEventListener('change', () => {
   appSettings.notificationMode = selectNotificationMode.value;
   saveSettings();
   window.gimodi.setNotificationMode(selectNotificationMode.value);
+});
+
+document.getElementById('checkbox-media-embed-privacy').addEventListener('change', (e) => {
+  appSettings.mediaEmbedPrivacy = e.target.checked;
+  setMediaEmbedPrivacy(e.target.checked);
+  saveSettings();
 });
 
 window.gimodi.onNotificationModeChanged((mode) => {

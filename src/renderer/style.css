@@ -3522,7 +3522,7 @@ label:has(input[type="checkbox"]) {
 .settings-dialog-content {
   width: 740px;
   max-width: 95vw;
-  max-height: 85vh;
+  height: 85vh;
   display: flex;
   flex-direction: column;
   padding: 0;
