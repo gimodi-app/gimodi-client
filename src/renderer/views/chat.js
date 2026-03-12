@@ -1474,13 +1474,24 @@ function onMessage(e) {
 
 function onChatCleared(e) {
   const { channelId } = e.detail;
-  if (channelId !== currentChannelId) return;
-  // Clear both the DOM cache and any buffered pending messages
-  channelMessagesCache.length = 0;
-  channelMessagesPending.length = 0;
-  channelTabUnread = false;
-  if (activeTab.type !== 'channel') return;
-  chatMessages.innerHTML = '';
+
+  if (channelId === currentChannelId) {
+    channelMessagesCache.length = 0;
+    channelMessagesPending.length = 0;
+    channelTabUnread = false;
+    paginationState.channel = { oldestTs: null, allLoaded: false, loading: false };
+    if (activeTab.type === 'channel') {
+      chatMessages.innerHTML = '';
+    }
+  }
+
+  channelViewMessagesCache.delete(channelId);
+  channelViewMessagesPending.delete(channelId);
+  paginationState.channelView.delete(channelId);
+
+  if (activeTab.type === 'channel-view' && activeTab.channelId === channelId) {
+    chatMessages.innerHTML = '';
+  }
 }
 
 function onMessageDeleted(e) {
