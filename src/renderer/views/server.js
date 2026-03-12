@@ -406,10 +406,28 @@ function getChannelName(id) {
 
 function handleDisconnect() {
   playSound(sndDisconnect);
-  const targetKey = connectionManager.voiceKey || connectionManager.activeKey;
-  window.dispatchEvent(new CustomEvent('gimodi:disconnect-server', {
-    detail: { connKey: targetKey },
-  }));
+  if (currentChannelId && connectionManager.voiceKey === connectionManager.activeKey) {
+    leaveVoiceChannel();
+  } else {
+    const targetKey = connectionManager.voiceKey || connectionManager.activeKey;
+    window.dispatchEvent(new CustomEvent('gimodi:disconnect-server', {
+      detail: { connKey: targetKey },
+    }));
+  }
+}
+
+/**
+ * @returns {void}
+ */
+function leaveVoiceChannel() {
+  if (screenShareService.isSharing) screenShareService.stopSharing();
+  voiceService.cleanup();
+  serverService.send('channel:leave', {});
+  const self = clients.find(c => c.id === serverService.clientId);
+  if (self) self.channelId = null;
+  currentChannelId = null;
+  connectionManager.clearVoiceServer();
+  renderChannelTree();
 }
 
 async function onPoked(e) {
