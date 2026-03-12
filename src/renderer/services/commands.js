@@ -1,4 +1,24 @@
 import serverService from './server.js';
+import { customAlert } from './dialogs.js';
+
+/**
+ * @param {number} ms
+ * @returns {string}
+ */
+function formatUptime(ms) {
+  const seconds = Math.floor(ms / 1000);
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  parts.push(`${secs}s`);
+  return parts.join(' ');
+}
 
 const COMMAND_REGISTRY = {
   clear: {
@@ -15,6 +35,20 @@ const COMMAND_REGISTRY = {
       const nickname = args.startsWith('@') ? args.slice(1) : args;
       if (!nickname) return;
       serverService.send('chat:command', { name: 'purge', nickname });
+    },
+  },
+  uptime: {
+    description: 'Show server uptime',
+    /** @param {object} context */
+    async execute() {
+      try {
+        const data = await serverService.request('chat:command', { name: 'uptime' });
+        const started = new Date(data.startedAt);
+        const uptime = formatUptime(data.uptimeMs);
+        customAlert(`Server Uptime: ${uptime}\nOnline since: ${started.toLocaleString()}`);
+      } catch (err) {
+        customAlert(err.message || 'Failed to retrieve uptime.');
+      }
     },
   },
 };
