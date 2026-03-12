@@ -497,8 +497,9 @@ window.addEventListener('gimodi:connected', async (e) => {
 
   // Auto-join first channel when connecting via double-click
   if (data.autoJoin) {
-    const lobby = data.channels.find(c => c.type !== 'group');
-    if (lobby) switchChannel(lobby.id);
+    const defaultChannel = data.channels.find(c => c.isDefault && c.type !== 'group')
+      || data.channels.find(c => c.type !== 'group');
+    if (defaultChannel) switchChannel(defaultChannel.id);
   }
 
   // Suppress auto-saves until all tabs (initial + restored) are open,
