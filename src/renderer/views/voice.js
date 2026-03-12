@@ -1108,6 +1108,7 @@ async function handleScreenShareClick() {
   } catch (e) {
     if (e.name !== 'NotAllowedError') {
       console.error('Screen share failed:', e);
+      await customAlert('Failed to start screen share: ' + e.message);
     }
   }
 }

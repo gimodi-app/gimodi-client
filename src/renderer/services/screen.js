@@ -95,10 +95,19 @@ class ScreenShareService extends EventTarget {
       this.stopSharing();
     };
 
-    this.videoProducer = await voiceService.sendTransport.produce({
-      track: videoTrack,
-      appData: { screen: true },
-    });
+    try {
+      this.videoProducer = await voiceService.sendTransport.produce({
+        track: videoTrack,
+        appData: { screen: true },
+      });
+    } catch (e) {
+      this.stream.getTracks().forEach(t => t.stop());
+      this.stream = null;
+      if (this._platform === 'linux' && this._venmicAvailable) {
+        window.gimodi.venmic.stopSystem?.();
+      }
+      throw e;
+    }
     log('Screen video producer created:', this.videoProducer.id);
 
     this.videoProducer.on('transportclose', () => {
