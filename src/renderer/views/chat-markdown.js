@@ -149,35 +149,6 @@ export function autoLinkUrls(text) {
 }
 
 /**
- * @param {string} text
- * @returns {string}
- */
-export function ensureBlankLineAfterCodeFence(text) {
-  const lines = text.split('\n');
-  const out = [];
-  let inFence = false;
-  let fenceMarker = '';
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const fenceMatch = line.match(/^(`{3,}|~{3,})/);
-    if (!inFence && fenceMatch) {
-      inFence = true;
-      fenceMarker = fenceMatch[1][0].repeat(fenceMatch[1].length);
-      out.push(line);
-    } else if (inFence && line.trim() === fenceMarker) {
-      inFence = false;
-      out.push(line);
-      if (i + 1 < lines.length && lines[i + 1].trim() !== '') {
-        out.push('');
-      }
-    } else {
-      out.push(line);
-    }
-  }
-  return out.join('\n');
-}
-
-/**
  * @param {string} html
  * @returns {string}
  */
@@ -232,14 +203,6 @@ export function isEmojiOnly(text) {
 }
 
 /**
- * @param {string} text
- * @returns {string}
- */
-function preserveMultipleNewlines(text) {
-  return text.replace(/\n{3,}/g, (match) => '\n' + '&nbsp;\n'.repeat(match.length - 2) + '\n');
-}
-
-/**
  * Renders message text to HTML with emoji, markdown, mentions, and code highlighting.
  * @param {string} text
  * @returns {string}
@@ -247,9 +210,19 @@ function preserveMultipleNewlines(text) {
 export function renderMarkdown(text) {
   const withEmoji = replaceEmoticons(text);
   const linked = autoLinkUrls(withEmoji);
-  const fenced = ensureBlankLineAfterCodeFence(linked);
-  const preserved = preserveMultipleNewlines(fenced);
-  const parsed = marked.parse(preserved);
-  const withMentions = highlightMentions(parsed);
+
+  const segments = linked.split(/(```[\s\S]*?```)/g);
+  let html = '';
+
+  for (let i = 0; i < segments.length; i++) {
+    if (i % 2 === 1) {
+      html += marked.parse(segments[i]).replace(/\n$/, '');
+    } else {
+      const lines = segments[i].split('\n');
+      html += lines.map(line => marked.parseInline(line)).join('<br>');
+    }
+  }
+
+  const withMentions = highlightMentions(html);
   return wrapEmojis(withMentions);
 }
