@@ -371,35 +371,15 @@
       <div class="settings-dialog-layout">
         <nav class="settings-nav">
           <button class="settings-nav-item active" data-tab="general">General</button>
+          <button class="settings-nav-item" data-tab="appearance">Appearance</button>
           <button class="settings-nav-item" data-tab="audio">Audio / Video</button>
-          <button class="settings-nav-item" data-tab="privacy">Privacy</button>
           <button class="settings-nav-item" data-tab="identities">Identities</button>
+          <button class="settings-nav-item" data-tab="advanced">Advanced</button>
         </nav>
         <div class="settings-panels">
 
           <!-- General Panel -->
           <div id="settings-panel-general" class="settings-panel active">
-            <div class="settings-section-label">Appearance</div>
-            <div class="form-group">
-              <label>Theme</label>
-              <div id="theme-grid" class="theme-grid settings-theme-grid"></div>
-            </div>
-            <div class="form-group">
-              <label for="select-time-format">Time Format</label>
-              <select id="select-time-format">
-                <option value="locale">Default (system locale)</option>
-                <option value="eu-24h">DD.MM.YYYY 24h</option>
-                <option value="us-12h">MM/DD/YYYY 12h</option>
-                <option value="iso-24h">YYYY-MM-DD 24h</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="select-chat-display">Chat Display</label>
-              <select id="select-chat-display">
-                <option value="default">Default</option>
-                <option value="compact">Compact</option>
-              </select>
-            </div>
             <div class="settings-section-label">Notifications</div>
             <div class="form-group">
               <label for="select-notification-mode">Desktop Notifications</label>
@@ -411,31 +391,36 @@
               </select>
               <small style="color: var(--text-muted);">Show desktop notifications when the app is not focused</small>
             </div>
-            <div class="settings-section-label">Application</div>
+          </div>
+
+          <!-- Appearance Panel -->
+          <div id="settings-panel-appearance" class="settings-panel">
+            <div class="settings-section-label">Theme</div>
             <div class="form-group">
-              <label class="checkbox-label">
-                <input type="checkbox" id="checkbox-dev-mode"> Developer Mode
-              </label>
-              <small style="color: var(--text-muted);">Enables Reload, Force Reload, and DevTools in the menu</small>
+              <div id="theme-grid" class="theme-grid settings-theme-grid"></div>
             </div>
-            <div id="update-channel-group" class="form-group hidden">
-              <label for="select-update-channel">Update Channel</label>
-              <select id="select-update-channel">
-                <option value="stable">Stable</option>
-                <option value="beta">Beta</option>
-                <option value="nightly">Nightly</option>
+            <div class="settings-section-label">Time Format</div>
+            <div class="form-group">
+              <select id="select-time-format">
+                <option value="locale">Default (system locale)</option>
+                <option value="eu-24h">DD.MM.YYYY 24h</option>
+                <option value="us-12h">MM/DD/YYYY 12h</option>
+                <option value="iso-24h">YYYY-MM-DD 24h</option>
               </select>
-              <small style="color: var(--text-muted);">Choose which release channel to receive updates from</small>
             </div>
+            <div class="settings-section-label">Chat Display</div>
             <div class="form-group">
-              <button id="btn-check-updates" class="btn-secondary">Check for Updates</button>
+              <select id="select-chat-display">
+                <option value="default">Default</option>
+                <option value="compact">Compact</option>
+              </select>
             </div>
           </div>
 
           <!-- Audio/Video Panel -->
           <div id="settings-panel-audio" class="settings-panel">
+            <div class="settings-section-label">Microphone</div>
             <div class="form-group">
-              <label for="select-mic">Microphone</label>
               <div class="device-select-row">
                 <select id="select-mic"></select>
                 <button id="btn-test-mic" class="btn-secondary btn-test" title="Test microphone">
@@ -443,8 +428,8 @@
                 </button>
               </div>
             </div>
+            <div class="settings-section-label">Camera</div>
             <div class="form-group">
-              <label for="select-camera">Camera</label>
               <div class="device-select-row">
                 <select id="select-camera"></select>
                 <button id="btn-test-camera" class="btn-secondary btn-test" title="Test camera">
@@ -459,8 +444,8 @@
                 </div>
               </div>
             </div>
+            <div class="settings-section-label">Speaker</div>
             <div class="form-group">
-              <label for="select-speaker">Speaker</label>
               <div class="device-select-row">
                 <select id="select-speaker"></select>
                 <button id="btn-test-speaker" class="btn-secondary btn-test" title="Play test tone">
@@ -468,8 +453,8 @@
                 </button>
               </div>
             </div>
+            <div class="settings-section-label">Voice Activation Level</div>
             <div class="form-group">
-              <label for="range-voice-activation">Voice Activation Level</label>
               <div class="range-row">
                 <input type="range" id="range-voice-activation" min="0" max="100" value="0" step="1">
                 <span id="voice-activation-value">Off</span>
@@ -478,39 +463,23 @@
                 <div id="mic-level-fill" class="mic-level-fill"></div>
               </div>
             </div>
+            <div class="settings-section-label">Feedback Volume</div>
             <div class="form-group">
-              <label for="range-feedback-volume">Feedback Volume</label>
               <div class="range-row">
                 <input type="range" id="range-feedback-volume" min="0" max="100" value="10" step="1">
                 <span id="feedback-volume-value">10</span>
               </div>
             </div>
+            <div class="settings-section-label">Push to Talk</div>
             <div class="form-group">
               <label class="checkbox-label">
-                <input type="checkbox" id="checkbox-noise-suppression"> Noise Suppression
-              </label>
-            </div>
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input type="checkbox" id="checkbox-push-to-talk"> Push-to-Talk
+                <input type="checkbox" id="checkbox-push-to-talk"> Enable Push-to-Talk
               </label>
               <div class="ptt-key-config" id="ptt-key-config">
                 <label for="input-ptt-key">PTT Key</label>
                 <input type="text" id="input-ptt-key" placeholder="Press a key..." readonly>
                 <small style="color: var(--text-muted);">Click and press a key to set your push-to-talk keybind</small>
               </div>
-            </div>
-          </div>
-
-          <!-- Privacy Panel -->
-          <div id="settings-panel-privacy" class="settings-panel">
-            <div class="settings-section-label">Media Embeds</div>
-            <div class="form-group">
-              <label class="checkbox-label" for="checkbox-media-embed-privacy">
-                <input type="checkbox" id="checkbox-media-embed-privacy" checked>
-                <span>Require confirmation before loading external media</span>
-              </label>
-              <div class="form-hint">When enabled, embedded media (e.g. YouTube videos) will not connect to external servers until you explicitly allow it.</div>
             </div>
           </div>
 
@@ -526,6 +495,44 @@
             <div class="modal-buttons">
               <button id="btn-identity-new" class="btn-primary">New Identity</button>
               <button id="btn-identity-import" class="btn-secondary">Import...</button>
+            </div>
+          </div>
+
+          <!-- Advanced Panel -->
+          <div id="settings-panel-advanced" class="settings-panel">
+            <div class="settings-section-label">Media Embeds</div>
+            <div class="form-group">
+              <label class="checkbox-label" for="checkbox-media-embed-privacy">
+                <input type="checkbox" id="checkbox-media-embed-privacy" checked>
+                <span>Require confirmation before loading external media</span>
+              </label>
+              <div class="form-hint">When enabled, embedded media (e.g. YouTube videos) will not connect to external servers until you explicitly allow it.</div>
+            </div>
+            <div class="settings-section-label">Update Channel</div>
+            <div id="update-channel-group" class="form-group">
+              <select id="select-update-channel">
+                <option value="stable">Stable</option>
+                <option value="beta">Beta</option>
+                <option value="nightly">Nightly</option>
+              </select>
+              <small style="color: var(--text-muted);">Choose which release channel to receive updates from</small>
+            </div>
+            <div class="settings-section-label">Check for Updates</div>
+            <div class="form-group">
+              <button id="btn-check-updates" class="btn-secondary">Check for Updates</button>
+            </div>
+            <div class="settings-section-label">Noise Suppression <span class="badge-experimental">Experimental</span></div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="checkbox-noise-suppression"> Enable Noise Suppression
+              </label>
+            </div>
+            <div class="settings-section-label">Developer Mode</div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="checkbox-dev-mode"> Enable Developer Mode
+              </label>
+              <small style="color: var(--text-muted);">Enables Reload, Force Reload, and DevTools in the menu</small>
             </div>
           </div>
 

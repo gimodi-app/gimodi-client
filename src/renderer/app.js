@@ -154,7 +154,6 @@ const settingsPanels = document.querySelectorAll('.settings-panel');
 const themeGrid = document.getElementById('theme-grid');
 const checkboxDevMode = document.getElementById('checkbox-dev-mode');
 const selectNotificationMode = document.getElementById('select-notification-mode');
-const updateChannelGroup = document.getElementById('update-channel-group');
 const selectUpdateChannel = document.getElementById('select-update-channel');
 const btnCheckUpdates = document.getElementById('btn-check-updates');
 // Audio/Video tab
@@ -830,6 +829,9 @@ function switchSettingsTab(tab) {
     stopMicLevelMeter();
     stopCameraPreview();
   }
+  if (tab === 'appearance') {
+    renderThemeGrid();
+  }
   if (tab === 'identities') {
     loadSettingsIdentities();
   }
@@ -841,11 +843,9 @@ settingsNavItems.forEach(t => {
 
 async function openSettings(tab = 'audio') {
   // Populate all values before showing
-  renderThemeGrid();
   document.getElementById('select-time-format').value = appSettings.timeFormat || 'locale';
   document.getElementById('select-chat-display').value = appSettings.chatDisplay || 'default';
   checkboxDevMode.checked = !!appSettings.devMode;
-  updateChannelGroup.classList.toggle('hidden', !appSettings.devMode);
   selectUpdateChannel.value = appSettings.updateChannel || 'stable';
   selectNotificationMode.value = appSettings.notificationMode || 'mentions';
   document.getElementById('checkbox-media-embed-privacy').checked = appSettings.mediaEmbedPrivacy !== false;
@@ -907,7 +907,6 @@ checkboxDevMode.addEventListener('change', () => {
   appSettings.devMode = checkboxDevMode.checked;
   saveSettings();
   window.gimodi.setDevMode(checkboxDevMode.checked);
-  updateChannelGroup.classList.toggle('hidden', !checkboxDevMode.checked);
 });
 
 selectUpdateChannel.addEventListener('change', () => {
