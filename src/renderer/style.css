@@ -1231,6 +1231,14 @@ label:has(input[type="checkbox"]) {
 }
 
 
+.voice-muted-icon {
+  padding-left: 4px;
+  font-size: 11px;
+  flex-shrink: 0;
+  opacity: 0.5;
+  color: var(--text-secondary, #888);
+}
+
 .stream-icon {
   padding-left: 4px;
   font-size: 12px;

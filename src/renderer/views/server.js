@@ -1308,6 +1308,15 @@ function renderChannel(ch, isChild, groupId) {
         handIcon.title = 'Voice requested';
         handIcon.innerHTML = '<i class="bi bi-megaphone"></i>';
         userEl.appendChild(handIcon);
+      } else if (ch.moderated) {
+        const isSelfWithBypass = u.id === serverService.clientId && serverService.hasPermission('channel.bypass_moderation');
+        if (!isSelfWithBypass) {
+          const muteIcon = document.createElement('span');
+          muteIcon.className = 'voice-muted-icon';
+          muteIcon.title = 'No voice permission';
+          muteIcon.innerHTML = '<i class="bi bi-mic-mute"></i>';
+          userEl.appendChild(muteIcon);
+        }
       }
 
       if (webcamClients.has(u.id)) {
