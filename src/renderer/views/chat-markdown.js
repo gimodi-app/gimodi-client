@@ -232,6 +232,14 @@ export function isEmojiOnly(text) {
 }
 
 /**
+ * @param {string} text
+ * @returns {string}
+ */
+function preserveMultipleNewlines(text) {
+  return text.replace(/\n{3,}/g, (match) => '\n' + '&nbsp;\n'.repeat(match.length - 2) + '\n');
+}
+
+/**
  * Renders message text to HTML with emoji, markdown, mentions, and code highlighting.
  * @param {string} text
  * @returns {string}
@@ -240,7 +248,8 @@ export function renderMarkdown(text) {
   const withEmoji = replaceEmoticons(text);
   const linked = autoLinkUrls(withEmoji);
   const fenced = ensureBlankLineAfterCodeFence(linked);
-  const parsed = marked.parse(fenced);
+  const preserved = preserveMultipleNewlines(fenced);
+  const parsed = marked.parse(preserved);
   const withMentions = highlightMentions(parsed);
   return wrapEmojis(withMentions);
 }
