@@ -401,13 +401,25 @@ function saveCurrentViewState(key) {
   connectionManager.saveServerState(key, { server: serverState, chat: chatState });
 }
 
-function switchToServer(key) {
+async function switchToServer(key) {
   if (!connectionManager.isConnected(key)) {
     return;
   }
 
   const prevKey = connectionManager.activeKey;
   if (prevKey === key) {
+    return;
+  }
+
+  if (connectionManager.getMode(key) === 'observe') {
+    try {
+      const data = await connectionManager.upgrade(key);
+      data._connKey = key;
+      window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: data }));
+      rerenderSidebar();
+    } catch (err) {
+      appendSystemMessage(`Upgrade failed: ${err.message}`);
+    }
     return;
   }
 
@@ -610,11 +622,18 @@ window.addEventListener('gimodi:connected', async (e) => {
   initSidePanel(getViewingChannelId);
   initUnreadState(data.channels, serverService.address);
 
-  // Auto-join first channel when connecting via double-click
+  // Auto-join channel: string = specific channel ID (reconnect rejoin), true = default channel (double-click)
   if (data.autoJoin) {
-    const defaultChannel = data.channels.find((c) => c.isDefault && c.type !== 'group') || data.channels.find((c) => c.type !== 'group');
-    if (defaultChannel) {
-      switchChannel(defaultChannel.id);
+    if (typeof data.autoJoin === 'string') {
+      const targetChannel = data.channels.find((c) => c.id === data.autoJoin);
+      if (targetChannel) {
+        switchChannel(targetChannel.id);
+      }
+    } else {
+      const defaultChannel = data.channels.find((c) => c.isDefault && c.type !== 'group') || data.channels.find((c) => c.type !== 'group');
+      if (defaultChannel) {
+        switchChannel(defaultChannel.id);
+      }
     }
   }
 
@@ -1412,6 +1431,9 @@ connectionManager.addEventListener('voice-server-changed', () => {
   setVoiceControlsVisible(!!connectionManager.voiceKey);
 });
 
+/** @type {Map<string, string>} Stores the voice channel ID per connection key for rejoin after reconnect. */
+const _pendingVoiceRejoin = new Map();
+
 // Handle unexpected connection loss from connectionManager
 connectionManager.addEventListener('connection-lost', (e) => {
   const { key, reason, hadVoice, willReconnect } = e.detail;
@@ -1419,6 +1441,10 @@ connectionManager.addEventListener('connection-lost', (e) => {
 
   if (willReconnect) {
     if (hadVoice && connectionManager.activeKey === key) {
+      const channelId = getCurrentChannelId();
+      if (channelId) {
+        _pendingVoiceRejoin.set(key, channelId);
+      }
       voiceService.cleanup();
       connectionManager.clearVoiceServer();
       setVoiceChannel(null);
@@ -1447,7 +1473,13 @@ connectionManager.addEventListener('reconnected', (e) => {
   log('Reconnected to', key);
   rerenderSidebar();
 
+  const rejoinChannelId = _pendingVoiceRejoin.get(key);
+  _pendingVoiceRejoin.delete(key);
+
   if (connectionManager.activeKey === key) {
+    if (rejoinChannelId) {
+      data.autoJoin = rejoinChannelId;
+    }
     data._connKey = key;
     window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: data }));
   }
@@ -1462,6 +1494,21 @@ connectionManager.addEventListener('background-connected', (e) => {
   if (data.serverName && data.serverName !== server.name) {
     server.name = data.serverName;
     window.gimodi.servers.add(server);
+  }
+
+  const conn = connectionManager.getConnection(key);
+  if (conn && data.mode === 'observe') {
+    conn.addEventListener('notify:mention', (ev) => {
+      const d = ev.detail;
+      const sName = conn.serverName || server.name || server.address;
+      notificationService.show(`Mention in ${sName}`, `${d.nickname} in #${d.channelName}: ${d.content}`);
+      rerenderSidebar();
+    });
+    conn.addEventListener('server:poked', (ev) => {
+      const d = ev.detail;
+      const sName = conn.serverName || server.name || server.address;
+      notificationService.show(`Poke from ${sName}`, d.message || 'You were poked.');
+    });
   }
 
   rerenderSidebar();

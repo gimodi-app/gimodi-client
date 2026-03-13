@@ -570,6 +570,20 @@ body {
   z-index: 1;
 }
 
+/* Observe mode indicator (gray dot) */
+.server-sidebar-btn.observe::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #6b7280;
+  border: 2px solid var(--bg-primary);
+  z-index: 1;
+}
+
 /* Reconnecting indicator (pulsing orange dot) */
 .server-sidebar-btn.reconnecting::after {
   content: '';

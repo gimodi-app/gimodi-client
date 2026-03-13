@@ -37,6 +37,8 @@ class ConnectionManager extends EventTarget {
     this._connectionStatus = new Map();
     /** @type {Map<string, object>} */
     this._connectData = new Map();
+    /** @type {Map<string, 'observe'|'full'>} */
+    this._connectionModes = new Map();
   }
 
   /**
@@ -61,6 +63,7 @@ class ConnectionManager extends EventTarget {
     this._credentials.set(key, { nickname, password, publicKey });
     this._connectionStatus.set(key, 'connected');
     this._connectData.set(key, data);
+    this._connectionModes.set(key, 'full');
     this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'connected' } }));
 
     this._bindReconnectEvents(key, conn);
@@ -77,6 +80,7 @@ class ConnectionManager extends EventTarget {
    * @param {Array} identities
    */
   async connectAll(servers, identities) {
+    const pending = [];
     for (const server of servers) {
       const key = connKey(server.address, server.identityFingerprint);
       if (this._connections.has(key)) {
@@ -96,7 +100,20 @@ class ConnectionManager extends EventTarget {
       this._connectionStatus.set(key, 'connecting');
       this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'connecting' } }));
 
-      this._connectInBackground(key, server, publicKey);
+      pending.push({ key, server, publicKey });
+    }
+
+    const concurrency = 5;
+    let i = 0;
+    const runNext = () => {
+      if (i >= pending.length) {
+        return;
+      }
+      const { key, server, publicKey } = pending[i++];
+      this._connectInBackground(key, server, publicKey).then(runNext, runNext);
+    };
+    for (let j = 0; j < Math.min(concurrency, pending.length); j++) {
+      runNext();
     }
   }
 
@@ -109,12 +126,13 @@ class ConnectionManager extends EventTarget {
   async _connectInBackground(key, server, publicKey) {
     try {
       const conn = new ServerService();
-      const data = await conn.connect(server.address, server.nickname, server.password || undefined, publicKey);
+      const data = await conn.connect(server.address, server.nickname, server.password || undefined, publicKey, { mode: 'observe' });
 
       this._connections.set(key, conn);
       this._credentials.set(key, { nickname: server.nickname, password: server.password || undefined, publicKey });
       this._connectionStatus.set(key, 'connected');
       this._connectData.set(key, data);
+      this._connectionModes.set(key, 'observe');
       this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'connected' } }));
 
       this._bindReconnectEvents(key, conn);
@@ -144,6 +162,8 @@ class ConnectionManager extends EventTarget {
 
     conn.addEventListener('reconnected', (e) => {
       this._connectionStatus.set(key, 'connected');
+      this._connectData.set(key, e.detail);
+      this._connectionModes.set(key, e.detail.mode || 'full');
       this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'connected' } }));
       this.dispatchEvent(new CustomEvent('reconnected', { detail: { key, data: e.detail } }));
     });
@@ -197,6 +217,7 @@ class ConnectionManager extends EventTarget {
     this._serverStates.delete(key);
     this._credentials.delete(key);
     this._connectData.delete(key);
+    this._connectionModes.delete(key);
     this._connectionStatus.set(key, 'disconnected');
 
     if (this._voiceKey === key) {
@@ -237,6 +258,7 @@ class ConnectionManager extends EventTarget {
     this._serverStates.clear();
     this._credentials.clear();
     this._connectData.clear();
+    this._connectionModes.clear();
     this._connectionStatus.clear();
     this._activeKey = null;
     this._voiceKey = null;
@@ -273,6 +295,7 @@ class ConnectionManager extends EventTarget {
     this._serverStates.delete(key);
     this._credentials.delete(key);
     this._connectData.delete(key);
+    this._connectionModes.delete(key);
     this._connectionStatus.set(key, 'disconnected');
     this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'disconnected' } }));
 
@@ -315,6 +338,30 @@ class ConnectionManager extends EventTarget {
         detail: { key: null },
       }),
     );
+  }
+
+  /**
+   * @param {string} key
+   * @returns {'observe'|'full'|null}
+   */
+  getMode(key) {
+    return this._connectionModes.get(key) || null;
+  }
+
+  /**
+   * @param {string} key
+   * @returns {Promise<object>}
+   */
+  async upgrade(key) {
+    const conn = this._connections.get(key);
+    if (!conn) {
+      throw new Error('No connection for key');
+    }
+    const data = await conn.upgrade();
+    this._connectionModes.set(key, 'full');
+    this._connectData.set(key, data);
+    this.dispatchEvent(new CustomEvent('connection-upgraded', { detail: { key, data } }));
+    return data;
   }
 
   /**

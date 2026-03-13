@@ -278,8 +278,12 @@ function createServerButton(server, pathStr) {
   if (isConnected) {
     btn.classList.add('connected');
   }
+  const isObserve = connectionManager.getMode(key) === 'observe';
   if (isReconnecting) {
     btn.classList.add('reconnecting');
+  }
+  if (isObserve) {
+    btn.classList.add('observe');
   }
   if (isVoice) {
     btn.classList.add('voice-active');
@@ -318,13 +322,13 @@ function createServerButton(server, pathStr) {
     }
     clickTimer = setTimeout(() => {
       clickTimer = null;
-      if (isConnected && !isActive) {
+      if ((isConnected || isObserve) && !isActive) {
         window.dispatchEvent(
           new CustomEvent('gimodi:switch-server', {
             detail: { connKey: connKey(server.address, server.identityFingerprint) },
           }),
         );
-      } else if (!isConnected && !isReconnecting) {
+      } else if (!isConnected && !isReconnecting && !isObserve) {
         _connectCallback(server);
       }
     }, 250);
@@ -725,7 +729,8 @@ function showTooltip(e, server) {
   addr.className = 'tooltip-addr';
   const sKey = connKey(server.address, server.identityFingerprint);
   const sStatus = connectionManager.getStatus(sKey);
-  const statusLabel = sStatus === 'connected' ? ' · Connected' : sStatus === 'reconnecting' ? ' · Reconnecting...' : sStatus === 'connecting' ? ' · Connecting...' : '';
+  const sMode = connectionManager.getMode(sKey);
+  const statusLabel = sStatus === 'connected' && sMode === 'observe' ? ' · Observing' : sStatus === 'connected' ? ' · Connected' : sStatus === 'reconnecting' ? ' · Reconnecting...' : sStatus === 'connecting' ? ' · Connecting...' : '';
   addr.textContent = `${server.address} · ${server.nickname}${statusLabel}`;
   tooltipEl.appendChild(addr);
   document.body.appendChild(tooltipEl);

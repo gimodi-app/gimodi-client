@@ -77,10 +77,13 @@ export class ServerService extends EventTarget {
    * @param {string} nickname
    * @param {string} [password]
    * @param {string} [publicKey]
+   * @param {{mode?: 'observe'|'full'}} [options]
    * @returns {Promise<object>}
    */
-  connect(address, nickname, password, publicKey) {
-    this._connectParams = { address, nickname, password, publicKey };
+  connect(address, nickname, password, publicKey, options) {
+    const mode = options?.mode || 'full';
+    this._mode = mode;
+    this._connectParams = { address, nickname, password, publicKey, mode };
     this._intentionalDisconnect = false;
     this._reconnecting = false;
     this._reconnectAttempts = 0;
@@ -128,6 +131,7 @@ export class ServerService extends EventTarget {
             password: password || undefined,
             clientVersion,
             publicKey: publicKey || undefined,
+            mode: mode || undefined,
           });
           this.clientId = data.clientId;
           this.userId = data.userId || null;
@@ -215,7 +219,7 @@ export class ServerService extends EventTarget {
         return;
       }
 
-      const { address, nickname, password, publicKey } = this._connectParams;
+      const { address, nickname, password, publicKey, mode: reconnectMode } = this._connectParams;
       let url = address;
       if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
         url = `wss://${url}`;
@@ -244,6 +248,7 @@ export class ServerService extends EventTarget {
                 password: password || undefined,
                 clientVersion,
                 publicKey: publicKey || undefined,
+                mode: reconnectMode || undefined,
               });
               this.clientId = data.clientId;
               this.userId = data.userId || null;
@@ -335,6 +340,31 @@ export class ServerService extends EventTarget {
       ws.close();
     }
     this._resetState();
+  }
+
+  /**
+   * Upgrades from observe to full mode over the existing WebSocket.
+   * @returns {Promise<object>}
+   */
+  async upgrade() {
+    const data = await this.request('server:upgrade', {});
+    this._mode = 'full';
+    if (this._connectParams) {
+      this._connectParams.mode = 'full';
+    }
+    this.clientId = data.clientId;
+    this.userId = data.userId || null;
+    this.permissions = new Set(data.permissions || []);
+    this.serverName = data.serverName;
+    this.serverVersion = data.serverVersion || null;
+    this.maxFileSize = data.maxFileSize || null;
+    this.tempChannelDeleteDelay = data.tempChannelDeleteDelay || 180;
+    return data;
+  }
+
+  /** @returns {string} */
+  get mode() {
+    return this._mode || 'full';
   }
 
   /** @private */
