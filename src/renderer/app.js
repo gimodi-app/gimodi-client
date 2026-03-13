@@ -401,7 +401,7 @@ function saveCurrentViewState(key) {
   connectionManager.saveServerState(key, { server: serverState, chat: chatState });
 }
 
-async function switchToServer(key) {
+async function switchToServer(key, options) {
   if (!connectionManager.isConnected(key)) {
     return;
   }
@@ -415,6 +415,9 @@ async function switchToServer(key) {
     try {
       const data = await connectionManager.upgrade(key);
       data._connKey = key;
+      if (options?.autoJoin) {
+        data.autoJoin = true;
+      }
       window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: data }));
       rerenderSidebar();
     } catch (err) {
@@ -496,7 +499,7 @@ async function switchToServer(key) {
 
 // Listen for view-switch requests from sidebar
 window.addEventListener('gimodi:switch-server', (e) => {
-  switchToServer(e.detail.connKey);
+  switchToServer(e.detail.connKey, { autoJoin: e.detail.autoJoin });
 });
 
 window.addEventListener('gimodi:disconnect-server', (e) => {

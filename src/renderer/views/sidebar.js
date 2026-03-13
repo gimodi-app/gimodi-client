@@ -338,8 +338,14 @@ function createServerButton(server, pathStr) {
       clearTimeout(clickTimer);
       clickTimer = null;
     }
-    if (!isConnected && !isReconnecting) {
+    if (!isConnected && !isReconnecting && !isObserve) {
       _connectCallback(server, { autoJoin: true });
+    } else if (isObserve) {
+      window.dispatchEvent(
+        new CustomEvent('gimodi:switch-server', {
+          detail: { connKey: connKey(server.address, server.identityFingerprint), autoJoin: true },
+        }),
+      );
     } else if (isConnected) {
       if (!isActive) {
         window.dispatchEvent(
