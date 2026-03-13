@@ -2826,6 +2826,7 @@ function switchToTab(tab) {
   }
 
   renderTabs();
+  window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
 }
 
 async function onDmMessage(e) {
