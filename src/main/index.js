@@ -906,7 +906,7 @@ const friendsPath = path.join(app.getPath('userData'), 'friends.json');
  * @returns {object[]}
  */
 function loadFriends() {
-  let items = [];
+  let items;
   try {
     items = JSON.parse(fs.readFileSync(friendsPath, 'utf-8'));
   } catch {

@@ -38,7 +38,9 @@ class DmChatProvider {
   _bindEvents() {
     const onReceived = (e) => {
       if (e.detail.conversationId === this._conversationId) {
-        if (this._seenMessageIds.has(e.detail.id)) return;
+        if (this._seenMessageIds.has(e.detail.id)) {
+          return;
+        }
         this._seenMessageIds.add(e.detail.id);
         const msg = this._toMessageFormat(e.detail);
         this.events.dispatchEvent(new CustomEvent('message', { detail: msg }));
@@ -95,12 +97,16 @@ class DmChatProvider {
    * @private
    */
   _senderName(dm) {
-    if (dm.direction === 'sent') return this._ownNickname;
+    if (dm.direction === 'sent') {
+      return this._ownNickname;
+    }
 
     const conv = this._dmService.getConversationMeta(this._conversationId);
     if (conv) {
       const participant = conv.participants.find((p) => p.fingerprint === dm.senderFingerprint);
-      if (participant) return participant.nickname;
+      if (participant) {
+        return participant.nickname;
+      }
     }
     return dm.senderFingerprint?.slice(0, 12) + '…';
   }
@@ -178,7 +184,9 @@ class DmChatProvider {
       const conv = this._dmService.getConversationMeta(this._conversationId);
       const connectionManager = (await import('../connectionManager.js')).default;
       const serverKey = conv?.serverKey || connectionManager.activeKey;
-      if (!serverKey) return;
+      if (!serverKey) {
+        return;
+      }
 
       await this._dmService.fetchHistory(this._conversationId, serverKey);
 
@@ -190,7 +198,9 @@ class DmChatProvider {
           this.events.dispatchEvent(new CustomEvent('message', { detail: msg }));
         }
       }
-    } catch {}
+    } catch {
+      /* ignore */
+    }
   }
 
   /**
@@ -232,7 +242,9 @@ class DmChatProvider {
    */
   getMentionCandidates() {
     const conv = this._dmService.getConversationMeta(this._conversationId);
-    if (!conv) return [{ nickname: this._ownNickname }];
+    if (!conv) {
+      return [{ nickname: this._ownNickname }];
+    }
     return conv.participants.map((p) => ({ nickname: p.nickname }));
   }
 

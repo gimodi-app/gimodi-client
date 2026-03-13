@@ -78,7 +78,9 @@ function formatTime(ts) {
  * @returns {string}
  */
 function conversationDisplayName(conv) {
-  if (conv.name) return conv.name;
+  if (conv.name) {
+    return conv.name;
+  }
   if (conv.type === 'direct') {
     const other = conv.participants.find((p) => p.fingerprint !== dmService._fingerprint);
     if (other) {
@@ -119,7 +121,9 @@ function showConvContextMenu(e, conversationId) {
   closeContextMenu();
 
   const conv = dmService?.getConversationMeta(conversationId);
-  if (!conv) return;
+  if (!conv) {
+    return;
+  }
 
   const menu = document.createElement('div');
   menu.className = 'dm-context-menu';
@@ -140,10 +144,14 @@ function showConvContextMenu(e, conversationId) {
           closeContextMenu();
           const shortFp = otherFp.slice(0, 12) + '…';
           const raw = await customPrompt(`Add as friend — enter a name:`, shortFp);
-          if (raw === null) return;
+          if (raw === null) {
+            return;
+          }
           friendsService.addFriend(otherFp, raw.trim() || shortFp);
           renderConversationList();
-          if (activeConversationId === conversationId) initDmChat();
+          if (activeConversationId === conversationId) {
+            initDmChat();
+          }
         });
         menu.appendChild(addItem);
       }
@@ -159,7 +167,9 @@ function showConvContextMenu(e, conversationId) {
           friendsService.blockContact(otherFp);
         }
         renderConversationList();
-        if (activeConversationId === conversationId) initDmChat();
+        if (activeConversationId === conversationId) {
+          initDmChat();
+        }
       });
       menu.appendChild(blockItem);
     }
@@ -172,7 +182,9 @@ function showConvContextMenu(e, conversationId) {
     leaveItem.addEventListener('click', async () => {
       closeContextMenu();
       const confirmed = await customConfirm('Leave this group conversation?');
-      if (!confirmed) return;
+      if (!confirmed) {
+        return;
+      }
       try {
         await dmService.leaveConversation(conversationId);
         if (activeConversationId === conversationId) {
@@ -193,7 +205,9 @@ function showConvContextMenu(e, conversationId) {
   purgeItem.addEventListener('click', async () => {
     closeContextMenu();
     const confirmed = await customConfirm('Purge this conversation? All messages will be deleted locally.');
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
     dmService.purgeConversation(conversationId);
     if (activeConversationId === conversationId) {
       activeConversationId = null;
@@ -208,9 +222,15 @@ function showConvContextMenu(e, conversationId) {
 }
 
 document.addEventListener('click', closeContextMenu, true);
-document.addEventListener('contextmenu', (e) => {
-  if (!e.target.closest('.dm-conv-item')) closeContextMenu();
-}, true);
+document.addEventListener(
+  'contextmenu',
+  (e) => {
+    if (!e.target.closest('.dm-conv-item')) {
+      closeContextMenu();
+    }
+  },
+  true,
+);
 
 /**
  * Builds a conversation list item element.
@@ -218,7 +238,7 @@ document.addEventListener('contextmenu', (e) => {
  * @param {import('../services/dm.js').DmMessage|null} lastMsg
  * @returns {HTMLElement}
  */
-function buildConvItem(conv, lastMsg) {
+function buildConvItem(conv) {
   const item = document.createElement('div');
   const isActive = conv.id === activeConversationId;
   item.className = 'dm-conv-item' + (isActive ? ' active' : '');
@@ -297,7 +317,9 @@ function buildFriendRequestItem(req) {
  */
 function renderConversationList() {
   const list = el('dm-conversation-list');
-  if (!list || !dmService) return;
+  if (!list || !dmService) {
+    return;
+  }
 
   const conversations = dmService.getConversationList();
   const lastMessages = dmService.getLastMessages();
@@ -316,7 +338,7 @@ function renderConversationList() {
   });
 
   for (const conv of sorted) {
-    list.appendChild(buildConvItem(conv, lastMessages.get(conv.id) ?? null));
+    list.appendChild(buildConvItem(conv));
   }
 }
 
@@ -328,7 +350,9 @@ function switchTab(tab) {
   activeTab = tab;
   const convList = el('dm-conversation-list');
   const friendsList = el('dm-friends-list');
-  if (!convList || !friendsList) return;
+  if (!convList || !friendsList) {
+    return;
+  }
 
   for (const btn of document.querySelectorAll('.dm-tab')) {
     btn.classList.toggle('active', btn.dataset.tab === tab);
@@ -350,7 +374,9 @@ function switchTab(tab) {
  */
 function renderFriendsList() {
   const list = el('dm-friends-list');
-  if (!list || !friendsService) return;
+  if (!list || !friendsService) {
+    return;
+  }
 
   const friends = friendsService.getFriends();
   const friendRequests = friendsService.getPendingRequests();
@@ -447,15 +473,25 @@ function initDmChat() {
   const header = el('dm-chat-header');
   const chatMessagesEl = el('dm-chat-messages');
 
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   if (!activeConversationId) {
-    if (chatMessagesEl) chatMessagesEl.innerHTML = '<div class="dm-empty-hint">Select a conversation</div>';
-    if (header) header.textContent = '';
+    if (chatMessagesEl) {
+      chatMessagesEl.innerHTML = '<div class="dm-empty-hint">Select a conversation</div>';
+    }
+    if (header) {
+      header.textContent = '';
+    }
     const input = container.querySelector('.chat-input');
     const sendBtn = container.querySelector('.btn-send');
-    if (input) input.disabled = true;
-    if (sendBtn) sendBtn.disabled = true;
+    if (input) {
+      input.disabled = true;
+    }
+    if (sendBtn) {
+      sendBtn.disabled = true;
+    }
     return;
   }
 
@@ -472,20 +508,28 @@ function initDmChat() {
     const otherFp = conv.participants.find((p) => p.fingerprint !== dmService._fingerprint)?.fingerprint;
     const blocked = otherFp && friendsService?.isBlocked(otherFp);
     if (blocked) {
-      if (header) renderDmHeader(header, name, conv);
-      if (chatMessagesEl) chatMessagesEl.innerHTML = '';
+      if (header) {
+        renderDmHeader(header, name, conv);
+      }
+      if (chatMessagesEl) {
+        chatMessagesEl.innerHTML = '';
+      }
       const input = container.querySelector('.chat-input');
       const sendBtn = container.querySelector('.btn-send');
       if (input) {
         input.disabled = true;
         input.placeholder = 'You have blocked this person.';
       }
-      if (sendBtn) sendBtn.disabled = true;
+      if (sendBtn) {
+        sendBtn.disabled = true;
+      }
       return;
     }
   }
 
-  if (header) renderDmHeader(header, name, conv);
+  if (header) {
+    renderDmHeader(header, name, conv);
+  }
 
   if (dmChatProvider) {
     cleanupChat();
@@ -549,9 +593,7 @@ async function showNewConversationDialog() {
    */
   function renderFriendCheckboxes(filter = '') {
     friendListEl.innerHTML = '';
-    const filtered = filter
-      ? friends.filter((f) => f.nickname.toLowerCase().includes(filter.toLowerCase()))
-      : friends;
+    const filtered = filter ? friends.filter((f) => f.nickname.toLowerCase().includes(filter.toLowerCase())) : friends;
 
     for (const friend of filtered) {
       const label = document.createElement('label');
@@ -640,7 +682,7 @@ async function showNewConversationDialog() {
         };
       });
 
-      const groupName = selected.size > 1 ? (groupNameInput.value.trim() || null) : null;
+      const groupName = selected.size > 1 ? groupNameInput.value.trim() || null : null;
       const conv = await dmService.createConversation(participants, groupName);
       overlay.remove();
       renderConversationList();
@@ -658,7 +700,9 @@ async function showNewConversationDialog() {
 
   overlay.appendChild(dialog);
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) overlay.remove();
+    if (e.target === overlay) {
+      overlay.remove();
+    }
   });
 
   document.body.appendChild(overlay);
@@ -708,7 +752,9 @@ export function initDmView(dm, friends) {
 
   dmService.addEventListener('conversation-purged', () => {
     renderConversationList();
-    if (activeConversationId) initDmChat();
+    if (activeConversationId) {
+      initDmChat();
+    }
   });
 
   dmService.addEventListener('message-updated', () => {
@@ -729,12 +775,16 @@ export function initDmView(dm, friends) {
 
   dmService.addEventListener('participant-changed', () => {
     renderConversationList();
-    if (activeConversationId) initDmChat();
+    if (activeConversationId) {
+      initDmChat();
+    }
   });
 
   dmService.addEventListener('conversation-left', () => {
     renderConversationList();
-    if (activeConversationId) initDmChat();
+    if (activeConversationId) {
+      initDmChat();
+    }
   });
 
   friendsService.addEventListener('friend:request-received', renderActiveTab);
@@ -764,7 +814,9 @@ export function initDmView(dm, friends) {
  */
 export function refreshDmView() {
   renderActiveTab();
-  if (activeConversationId) initDmChat();
+  if (activeConversationId) {
+    initDmChat();
+  }
 }
 
 /**

@@ -283,9 +283,7 @@ async function decryptMessage(armoredMessage) {
     throw new Error('No identity available for decryption.');
   }
 
-  const decryptionKeys = await Promise.all(
-    keyed.map((i) => pgp.readPrivateKey({ armoredKey: i.privateKeyArmored })),
-  );
+  const decryptionKeys = await Promise.all(keyed.map((i) => pgp.readPrivateKey({ armoredKey: i.privateKeyArmored })));
 
   const message = await pgp.readMessage({ armoredMessage });
 

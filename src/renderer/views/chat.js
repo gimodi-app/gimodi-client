@@ -2,7 +2,7 @@ import notificationService from '../services/notifications.js';
 import { tryHandleCommand, isSlashCommand } from '../services/commands.js';
 import { showEmojiPicker, closeEmojiPicker, isPickerOpen } from './emoji-picker.js';
 import { setNickname, invalidateNickname, getCachedNickname, resolveNicknames } from '../services/nicknameCache.js';
-import { formatTime, formatTimeShort, formatDateTime, formatRelativeTime } from '../services/timeFormat.js';
+import { formatTimeShort, formatDateTime, formatRelativeTime } from '../services/timeFormat.js';
 import { customConfirm } from '../services/dialogs.js';
 import { renderMarkdown, escapeHtml, replaceEmoticons, isEmojiOnly } from './chat-markdown.js';
 import { renderReactions, showQuickReactionPicker, onReactionUpdate, setReactionProvider } from './chat-reactions.js';
@@ -210,7 +210,7 @@ function onChatInputForMentions() {
   mentionTriggerChar = triggerChar;
 
   if (triggerChar === '@') {
-    const channelUsers = provider ? provider.getMentionCandidates() : (window.gimodiClients || []);
+    const channelUsers = provider ? provider.getMentionCandidates() : window.gimodiClients || [];
     const matches = channelUsers.filter((c) => c.nickname.toLowerCase().startsWith(searchText.toLowerCase())).slice(0, 10);
 
     if (matches.length === 0) {
@@ -742,7 +742,9 @@ function openNotificationDropdown() {
 }
 
 function closeNotificationDropdown() {
-  if (!notificationDropdown) return;
+  if (!notificationDropdown) {
+    return;
+  }
   notificationDropdown.classList.add('hidden');
   if (_onClickOutsideDropdown) {
     document.removeEventListener('click', _onClickOutsideDropdown);
@@ -795,7 +797,9 @@ export function initChatView(channelId, chatProvider, container) {
     notificationDropdown = document.getElementById('notification-dropdown');
   }
 
-  if (chatMessages && compactMode) chatMessages.classList.add('compact-mode');
+  if (chatMessages && compactMode) {
+    chatMessages.classList.add('compact-mode');
+  }
 
   activeTab = { type: 'channel' };
   tabOrder.length = 0;
@@ -1162,7 +1166,7 @@ function sendMessage() {
 
   const resolved = resolveStructuredMentions(content);
 
-  const replyTo = provider.supportsReplies ? (replyToMessage?.id || null) : null;
+  const replyTo = provider.supportsReplies ? replyToMessage?.id || null : null;
 
   if (activeTab.type === 'channel-view' && provider.sendMessageToChannel) {
     provider.sendMessageToChannel(activeTab.channelId, resolved, replyTo);
@@ -1235,7 +1239,9 @@ function updateInputForTab() {
   if (cvTab?.readRestricted) {
     chatInput.disabled = true;
     chatInput.placeholder = 'You do not have permission to read this channel';
-    if (btnAttach) btnAttach.style.display = 'none';
+    if (btnAttach) {
+      btnAttach.style.display = 'none';
+    }
     btnSend.disabled = true;
     return;
   }
@@ -1244,7 +1250,9 @@ function updateInputForTab() {
     chatInput.readOnly = true;
     chatInput.classList.add('input-write-restricted');
     chatInput.placeholder = 'You do not have permission to write in this channel';
-    if (btnAttach) btnAttach.style.display = 'none';
+    if (btnAttach) {
+      btnAttach.style.display = 'none';
+    }
     btnSend.disabled = true;
     return;
   }
@@ -1252,7 +1260,9 @@ function updateInputForTab() {
   btnSend.disabled = false;
   chatInput.disabled = false;
   chatInput.placeholder = 'Type a message…';
-  if (btnAttach) btnAttach.style.display = isAttachSupported ? '' : 'none';
+  if (btnAttach) {
+    btnAttach.style.display = isAttachSupported ? '' : 'none';
+  }
 }
 
 async function loadHistory(channelId) {
@@ -1462,9 +1472,7 @@ export function getChannelViewTabsState() {
       })
       .filter(Boolean),
     activeChannelId,
-    tabOrder: tabOrder
-      .map((entry) => ({ type: entry.type, id: entry.id }))
-      .filter(Boolean),
+    tabOrder: tabOrder.map((entry) => ({ type: entry.type, id: entry.id })).filter(Boolean),
   };
 }
 
@@ -2340,7 +2348,9 @@ function maybeInsertDaySeparator(timestamp) {
  * @returns {string}
  */
 function nicknameColor(str) {
-  if (!str) return '#FFD700';
+  if (!str) {
+    return '#FFD700';
+  }
   let hash = 5381;
   for (let i = 0; i < str.length; i++) {
     hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
@@ -2365,7 +2375,6 @@ function buildMessageEl(msg, prevEl) {
   const displayNickname = (msg.userId && getCachedNickname(msg.userId)) || msg.nickname || '[Anonymous]';
   el.dataset.nickname = displayNickname;
 
-  const time = formatTime(msg.timestamp);
   const compactTime = formatTimeShort(msg.timestamp);
   const headerTime = formatRelativeTime(msg.timestamp);
   const fullTime = formatDateTime(msg.timestamp);
@@ -2714,7 +2723,9 @@ export function setMediaEmbedPrivacy(enabled) {
 }
 
 export function refreshTimestamps() {
-  if (!chatMessages) return;
+  if (!chatMessages) {
+    return;
+  }
   // Live DOM children
   for (const el of chatMessages.children) {
     refreshNodeTimestamps(el);
@@ -2786,7 +2797,9 @@ function showReadRestrictionBanner() {
 }
 
 export function appendSystemMessage(text) {
-  if (!chatMessages) return;
+  if (!chatMessages) {
+    return;
+  }
   const el = document.createElement('div');
   el.className = 'chat-system';
   el.textContent = text;
@@ -2795,7 +2808,9 @@ export function appendSystemMessage(text) {
 }
 
 function scrollToBottom() {
-  if (!chatMessages) return;
+  if (!chatMessages) {
+    return;
+  }
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
@@ -2936,8 +2951,7 @@ function onNavigateChannel(e) {
 
 function switchToTab(tab) {
   console.log('[chat] switchToTab', tab.type, tab.channelId || '', 'from', activeTab.type, activeTab.channelId || '');
-  const isSameTab =
-    activeTab.type === tab.type && (tab.type === 'channel' || (tab.type === 'channel-view' && activeTab.channelId === tab.channelId));
+  const isSameTab = activeTab.type === tab.type && (tab.type === 'channel' || (tab.type === 'channel-view' && activeTab.channelId === tab.channelId));
   if (isSameTab) {
     renderTabs();
     return;

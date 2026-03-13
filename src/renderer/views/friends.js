@@ -1,5 +1,4 @@
 import dmService from '../services/dm.js';
-import connectionManager from '../services/connectionManager.js';
 import { renderDmMessageEl, maybeInsertDaySeparator, createLinkPreviewEl } from './chat-renderer.js';
 import { formatRelativeTime } from '../services/timeFormat.js';
 import { customConfirm, customPrompt } from '../services/dialogs.js';
@@ -295,7 +294,7 @@ function sendMessage() {
  * Sets reply context (placeholder for future reply support).
  * @param {object} msg
  */
-function setReplyTo(msg) {
+function setReplyTo(_msg) {
   const input = document.getElementById('dm-chat-input');
   if (input) {
     input.focus();

@@ -115,8 +115,12 @@ export class FriendsService extends EventTarget {
       conn.removeEventListener('friend:accepted', handlers.accepted);
       conn.removeEventListener('friend:rejected', handlers.rejected);
       conn.removeEventListener('friend:removed', handlers.removed);
-      if (handlers._presenceJoined) conn.removeEventListener('server:client-joined', handlers._presenceJoined);
-      if (handlers._presenceLeft) conn.removeEventListener('server:client-left', handlers._presenceLeft);
+      if (handlers._presenceJoined) {
+        conn.removeEventListener('server:client-joined', handlers._presenceJoined);
+      }
+      if (handlers._presenceLeft) {
+        conn.removeEventListener('server:client-left', handlers._presenceLeft);
+      }
     }
 
     this._listeners.delete(key);
@@ -308,7 +312,9 @@ export class FriendsService extends EventTarget {
     try {
       const conn = this._getConnection();
       await conn.request('friend:remove', { friendFingerprint });
-    } catch {}
+    } catch {
+      /* ignore */
+    }
   }
 
   /**
@@ -361,8 +367,12 @@ export class FriendsService extends EventTarget {
     const friends = loadFriends(this._fingerprint);
     const existing = friends.find((f) => f.fingerprint === fingerprint);
     if (existing) {
-      if (nickname) existing.nickname = nickname;
-      if (publicKey) existing.publicKey = publicKey;
+      if (nickname) {
+        existing.nickname = nickname;
+      }
+      if (publicKey) {
+        existing.publicKey = publicKey;
+      }
       saveFriends(this._fingerprint, friends);
       return;
     }
@@ -450,7 +460,9 @@ export class FriendsService extends EventTarget {
         ignored.push(fingerprint);
         localStorage.setItem(key, JSON.stringify(ignored));
       }
-    } catch {}
+    } catch {
+      /* ignore */
+    }
   }
 
   /**
@@ -483,7 +495,9 @@ export class FriendsService extends EventTarget {
         blocked.push(fingerprint);
         localStorage.setItem(key, JSON.stringify(blocked));
       }
-    } catch {}
+    } catch {
+      /* ignore */
+    }
   }
 
   /**
@@ -496,7 +510,9 @@ export class FriendsService extends EventTarget {
       const raw = localStorage.getItem(key);
       const blocked = (raw ? JSON.parse(raw) : []).filter((fp) => fp !== fingerprint);
       localStorage.setItem(key, JSON.stringify(blocked));
-    } catch {}
+    } catch {
+      /* ignore */
+    }
   }
 
   /**

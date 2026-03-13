@@ -447,7 +447,9 @@ export class ServerService extends EventTarget {
         const err = new Error(data.message || data.code);
         err.code = data.code;
         for (const [k, v] of Object.entries(data)) {
-          if (k !== 'message' && k !== 'code') err[k] = v;
+          if (k !== 'message' && k !== 'code') {
+            err[k] = v;
+          }
         }
         reject(err);
       } else {

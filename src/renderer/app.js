@@ -1,5 +1,5 @@
 import serverService from './services/server.js';
-import connectionManager, { connKey, addressFromKey } from './services/connectionManager.js';
+import connectionManager, { connKey } from './services/connectionManager.js';
 import voiceService from './services/voice.js';
 import notificationService from './services/notifications.js';
 import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects, removeServerByIdentity } from './views/connect.js';
@@ -395,7 +395,10 @@ loadSettings();
 (async () => {
   const servers = (await window.gimodi.servers.list()) || [];
   const identities = (await window.gimodi.identity.loadAll()) || [];
-  connectionManager.connectAll(servers.flatMap((s) => (s.type === 'group' ? s.servers : [s])), identities);
+  connectionManager.connectAll(
+    servers.flatMap((s) => (s.type === 'group' ? s.servers : [s])),
+    identities,
+  );
 })();
 
 // Menu: Disconnect (leave voice on the currently viewed server)
@@ -1927,19 +1930,23 @@ window.addEventListener('gimodi:add-friend', async (e) => {
   }
 });
 
-window.addEventListener('gimodi:connected', (e) => {
-  let identityFingerprint = e.detail.identityFingerprint;
-  if (!identityFingerprint) {
-    const key = e.detail._connKey;
-    if (key) {
-      const idx = key.indexOf('\0');
-      identityFingerprint = idx >= 0 ? key.slice(idx + 1) : null;
+window.addEventListener(
+  'gimodi:connected',
+  (e) => {
+    let identityFingerprint = e.detail.identityFingerprint;
+    if (!identityFingerprint) {
+      const key = e.detail._connKey;
+      if (key) {
+        const idx = key.indexOf('\0');
+        identityFingerprint = idx >= 0 ? key.slice(idx + 1) : null;
+      }
     }
-  }
-  if (identityFingerprint) {
-    ensureDmServices(identityFingerprint);
-  }
-}, true);
+    if (identityFingerprint) {
+      ensureDmServices(identityFingerprint);
+    }
+  },
+  true,
+);
 
 /**
  * DevTools utilities. Callable via gimodiDebug.clearAllFriends() in the console.

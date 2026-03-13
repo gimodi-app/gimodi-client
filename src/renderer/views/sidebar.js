@@ -736,7 +736,16 @@ function showTooltip(e, server) {
   const sKey = connKey(server.address, server.identityFingerprint);
   const sStatus = connectionManager.getStatus(sKey);
   const sMode = connectionManager.getMode(sKey);
-  const statusLabel = sStatus === 'connected' && sMode === 'observe' ? ' · Observing' : sStatus === 'connected' ? ' · Connected' : sStatus === 'reconnecting' ? ' · Reconnecting...' : sStatus === 'connecting' ? ' · Connecting...' : '';
+  const statusLabel =
+    sStatus === 'connected' && sMode === 'observe'
+      ? ' · Observing'
+      : sStatus === 'connected'
+        ? ' · Connected'
+        : sStatus === 'reconnecting'
+          ? ' · Reconnecting...'
+          : sStatus === 'connecting'
+            ? ' · Connecting...'
+            : '';
   addr.textContent = `${server.address} · ${server.nickname}${statusLabel}`;
   tooltipEl.appendChild(addr);
   document.body.appendChild(tooltipEl);

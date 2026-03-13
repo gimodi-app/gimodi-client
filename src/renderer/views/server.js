@@ -817,8 +817,19 @@ function onForceJoined(e) {
 
 function onClientJoined(e) {
   const { clientId, userId, nickname, channelId, badge, roleColor, rolePosition, fingerprint, observe } = e.detail;
-  if (observe) return;
-  const newClient = { id: clientId, userId: userId || null, nickname, channelId, badge: badge || null, roleColor: roleColor || null, rolePosition: rolePosition ?? Infinity, fingerprint: fingerprint || null };
+  if (observe) {
+    return;
+  }
+  const newClient = {
+    id: clientId,
+    userId: userId || null,
+    nickname,
+    channelId,
+    badge: badge || null,
+    roleColor: roleColor || null,
+    rolePosition: rolePosition ?? Infinity,
+    fingerprint: fingerprint || null,
+  };
   clients.push(newClient);
   window.gimodiClients = clients;
   renderChannelTree();

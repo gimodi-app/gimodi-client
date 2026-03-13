@@ -605,8 +605,13 @@ body {
 }
 
 @keyframes reconnect-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 .server-sidebar-add {
@@ -5662,7 +5667,9 @@ input.is-invalid {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .dm-tab:hover {
@@ -5958,7 +5965,7 @@ input.is-invalid {
   border-radius: 6px;
   padding: 4px 0;
   min-width: 140px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 .dm-context-item {
@@ -6087,7 +6094,7 @@ input.is-invalid {
   background: var(--bg-hover);
 }
 
-.dm-new-conv-friend-item input[type="checkbox"] {
+.dm-new-conv-friend-item input[type='checkbox'] {
   accent-color: var(--accent);
 }
 

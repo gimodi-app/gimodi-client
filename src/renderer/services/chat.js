@@ -56,7 +56,6 @@ class ChatService extends EventTarget {
     serverService.addEventListener('chat:purged', (e) => {
       this.dispatchEvent(new CustomEvent('purged', { detail: e.detail }));
     });
-
   }
 
   /**
@@ -189,7 +188,6 @@ class ChatService extends EventTarget {
   removePreview(messageId) {
     return serverService.request('chat:remove-preview', { messageId });
   }
-
 }
 
 const chatService = new ChatService();

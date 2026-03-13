@@ -203,10 +203,14 @@ export class DmService extends EventTarget {
    * @param {string} key
    */
   _bindConnection(key) {
-    if (this._receiveListeners.has(key)) return;
+    if (this._receiveListeners.has(key)) {
+      return;
+    }
 
     const conn = connectionManager.getConnection(key);
-    if (!conn) return;
+    if (!conn) {
+      return;
+    }
 
     const onReceive = (e) => this._handleReceived(e.detail);
     const onDelivered = (e) => this._handleDelivered(e.detail);
@@ -247,7 +251,9 @@ export class DmService extends EventTarget {
       ];
       for (const [event, map] of listeners) {
         const fn = map.get(key);
-        if (fn) conn.removeEventListener(event, fn);
+        if (fn) {
+          conn.removeEventListener(event, fn);
+        }
         map.delete(key);
       }
     }
@@ -261,13 +267,19 @@ export class DmService extends EventTarget {
     const activeKey = connectionManager.activeKey;
     if (activeKey) {
       const conn = connectionManager.getConnection(activeKey);
-      if (conn?.connected) return { key: activeKey, conn };
+      if (conn?.connected) {
+        return { key: activeKey, conn };
+      }
     }
     let fallback = null;
     for (const [key, conn] of connectionManager.connections) {
       if (conn.connected) {
-        if (connectionManager.getMode(key) === 'full') return { key, conn };
-        if (!fallback) fallback = { key, conn };
+        if (connectionManager.getMode(key) === 'full') {
+          return { key, conn };
+        }
+        if (!fallback) {
+          fallback = { key, conn };
+        }
       }
     }
     return fallback;
@@ -281,7 +293,9 @@ export class DmService extends EventTarget {
   _getServerForConversation(conv) {
     if (conv.serverKey) {
       const conn = connectionManager.getConnection(conv.serverKey);
-      if (conn?.connected) return { key: conv.serverKey, conn };
+      if (conn?.connected) {
+        return { key: conv.serverKey, conn };
+      }
     }
     return this._pickServer();
   }
@@ -293,7 +307,9 @@ export class DmService extends EventTarget {
    * @returns {Array}
    */
   _mergeParticipants(oldParticipants, newParticipants) {
-    if (!oldParticipants?.length) return newParticipants;
+    if (!oldParticipants?.length) {
+      return newParticipants;
+    }
     const cached = new Map(oldParticipants.map((p) => [p.fingerprint, p]));
     return newParticipants.map((p) => {
       const old = cached.get(p.fingerprint);
@@ -314,7 +330,9 @@ export class DmService extends EventTarget {
    */
   async createConversation(participants, name = null) {
     const server = this._pickServer();
-    if (!server) throw new Error('No server connected');
+    if (!server) {
+      throw new Error('No server connected');
+    }
 
     const fingerprints = participants.map((p) => p.fingerprint);
     const needKeys = participants.filter((p) => !p.publicKeyArmored).map((p) => p.fingerprint);
@@ -332,10 +350,7 @@ export class DmService extends EventTarget {
 
     if (isGroup) {
       const sessionKey = await window.gimodi.identity.generateSessionKey();
-      const allParticipants = [
-        { fingerprint: this._fingerprint, publicKeyArmored: this._publicKey },
-        ...participants,
-      ];
+      const allParticipants = [{ fingerprint: this._fingerprint, publicKeyArmored: this._publicKey }, ...participants];
       encryptedKeys = await window.gimodi.identity.encryptSessionKey(sessionKey, allParticipants);
     }
 
@@ -352,7 +367,9 @@ export class DmService extends EventTarget {
       if (err.code === 'CONVERSATION_EXISTS' && err.conversationId) {
         await this.fetchConversations();
         const existing = this._conversations.get(err.conversationId);
-        if (existing) return existing;
+        if (existing) {
+          return existing;
+        }
       }
       throw err;
     }
@@ -384,10 +401,14 @@ export class DmService extends EventTarget {
    */
   async fetchConversations() {
     for (const [key, conn] of connectionManager.connections) {
-      if (!conn.connected) continue;
+      if (!conn.connected) {
+        continue;
+      }
       try {
         await this._fetchConversationsFrom(key, conn);
-      } catch {}
+      } catch {
+        /* ignore servers that don't respond */
+      }
     }
     this._saveConversationsToStorage();
     this.dispatchEvent(new CustomEvent('conversations-loaded'));
@@ -503,7 +524,9 @@ export class DmService extends EventTarget {
    */
   async leaveConversation(conversationId) {
     const server = this._pickServer();
-    if (!server) throw new Error('No server connected');
+    if (!server) {
+      throw new Error('No server connected');
+    }
 
     await server.conn.request('conversation:leave', { conversationId });
     this._conversations.delete(conversationId);
@@ -518,7 +541,9 @@ export class DmService extends EventTarget {
    */
   async removeParticipant(conversationId, fingerprint) {
     const server = this._pickServer();
-    if (!server) throw new Error('No server connected');
+    if (!server) {
+      throw new Error('No server connected');
+    }
 
     await server.conn.request('conversation:remove-participant', { conversationId, fingerprint });
   }
@@ -530,10 +555,14 @@ export class DmService extends EventTarget {
    */
   async addParticipant(conversationId, participant) {
     const conv = this._conversations.get(conversationId);
-    if (!conv || conv.type !== 'group') throw new Error('Invalid conversation');
+    if (!conv || conv.type !== 'group') {
+      throw new Error('Invalid conversation');
+    }
 
     const server = this._pickServer();
-    if (!server) throw new Error('No server connected');
+    if (!server) {
+      throw new Error('No server connected');
+    }
 
     if (!participant.publicKeyArmored) {
       const { keys } = await server.conn.request('user:get-public-keys', { fingerprints: [participant.fingerprint] });
@@ -564,21 +593,23 @@ export class DmService extends EventTarget {
    */
   async sendDm(conversationId, content, replyTo = null) {
     const conv = this._conversations.get(conversationId);
-    if (!conv) throw new Error('Conversation not found');
+    if (!conv) {
+      throw new Error('Conversation not found');
+    }
 
     const server = this._getServerForConversation(conv);
-    if (!server) throw new Error('No server connected');
+    if (!server) {
+      throw new Error('No server connected');
+    }
 
     const id = crypto.randomUUID();
     const now = Date.now();
 
     let encryptedContent;
-    let keyIndex = 0;
+    const keyIndex = 0;
 
     if (conv.type === 'direct') {
-      let recipientPubKeys = conv.participants
-        .map((p) => p.publicKeyArmored)
-        .filter(Boolean);
+      let recipientPubKeys = conv.participants.map((p) => p.publicKeyArmored).filter(Boolean);
 
       if (recipientPubKeys.length < conv.participants.length) {
         const needKeys = conv.participants.filter((p) => !p.publicKeyArmored).map((p) => p.fingerprint);
@@ -597,7 +628,9 @@ export class DmService extends EventTarget {
       recipientPubKeys.push(this._publicKey);
       encryptedContent = await window.gimodi.identity.encrypt(recipientPubKeys, content);
     } else {
-      if (!conv.sessionKey) throw new Error('Session key not available');
+      if (!conv.sessionKey) {
+        throw new Error('Session key not available');
+      }
       encryptedContent = await window.gimodi.identity.encryptSymmetric(conv.sessionKey, content);
     }
 
@@ -626,12 +659,8 @@ export class DmService extends EventTarget {
       payload.replyToContent = replyTo.content ?? null;
     }
 
-    try {
-      await server.conn.request('dm:send', payload);
-      this._updateStatus(id, 'sent');
-    } catch (err) {
-      throw err;
-    }
+    await server.conn.request('dm:send', payload);
+    this._updateStatus(id, 'sent');
 
     return this._getMessage(id);
   }
@@ -643,13 +672,19 @@ export class DmService extends EventTarget {
    */
   async retrySend(messageId, serverKey) {
     const msg = this._getMessage(messageId);
-    if (!msg) throw new Error('Message not found');
+    if (!msg) {
+      throw new Error('Message not found');
+    }
 
     const conv = this._conversations.get(msg.conversationId);
-    if (!conv) throw new Error('Conversation not found');
+    if (!conv) {
+      throw new Error('Conversation not found');
+    }
 
     const conn = connectionManager.getConnection(serverKey);
-    if (!conn?.connected) throw new Error('Server not connected');
+    if (!conn?.connected) {
+      throw new Error('Server not connected');
+    }
 
     let encryptedContent;
     if (conv.type === 'direct') {
@@ -670,7 +705,9 @@ export class DmService extends EventTarget {
       recipientPubKeys.push(this._publicKey);
       encryptedContent = await window.gimodi.identity.encrypt(recipientPubKeys, msg.content);
     } else {
-      if (!conv.sessionKey) throw new Error('Session key not available');
+      if (!conv.sessionKey) {
+        throw new Error('Session key not available');
+      }
       encryptedContent = await window.gimodi.identity.encryptSymmetric(conv.sessionKey, msg.content);
     }
 
@@ -688,18 +725,26 @@ export class DmService extends EventTarget {
    */
   async fetchHistory(conversationId, serverKey, { before, limit } = {}) {
     const conn = connectionManager.getConnection(serverKey);
-    if (!conn?.connected) return;
+    if (!conn?.connected) {
+      return;
+    }
 
     const conv = this._conversations.get(conversationId);
-    if (!conv) return;
-    if (conv.type === 'group' && !conv.sessionKey) return;
+    if (!conv) {
+      return;
+    }
+    if (conv.type === 'group' && !conv.sessionKey) {
+      return;
+    }
 
     const { messages: rawMessages } = await conn.request('dm:history', { conversationId, before, limit });
     const stored = loadMessages(this._fingerprint);
     const knownIds = new Set(stored.map((m) => m.id));
 
     for (const raw of rawMessages) {
-      if (knownIds.has(raw.id)) continue;
+      if (knownIds.has(raw.id)) {
+        continue;
+      }
 
       let plaintext;
       try {
@@ -737,7 +782,9 @@ export class DmService extends EventTarget {
     const { id, conversationId, senderFingerprint, content, createdAt, keyIndex, replyTo, replyToNickname, replyToContent } = detail;
 
     const conv = this._conversations.get(conversationId);
-    if (!conv) return;
+    if (!conv) {
+      return;
+    }
 
     const purgeLog = loadPurgeLog(this._fingerprint);
     const purgedAt = purgeLog[conversationId];
@@ -800,7 +847,9 @@ export class DmService extends EventTarget {
       const existing = this._conversations.get(conversationId);
       existing.participants = this._mergeParticipants(existing.participants, participants);
       existing.name = name;
-      if (serverKey) existing.serverKey = serverKey;
+      if (serverKey) {
+        existing.serverKey = serverKey;
+      }
       if (!existing.sessionKey && existing.type === 'group' && encryptedKey) {
         try {
           existing.sessionKey = await window.gimodi.identity.decryptSessionKey(encryptedKey);
@@ -855,7 +904,9 @@ export class DmService extends EventTarget {
   _handleParticipantJoined(detail) {
     const { conversationId, fingerprint, nickname } = detail;
     const conv = this._conversations.get(conversationId);
-    if (!conv) return;
+    if (!conv) {
+      return;
+    }
 
     if (!conv.participants.some((p) => p.fingerprint === fingerprint)) {
       conv.participants.push({ fingerprint, nickname });
@@ -871,7 +922,9 @@ export class DmService extends EventTarget {
   _handleParticipantLeft(detail) {
     const { conversationId, fingerprint } = detail;
     const conv = this._conversations.get(conversationId);
-    if (!conv) return;
+    if (!conv) {
+      return;
+    }
 
     if (fingerprint === this._fingerprint) {
       this._conversations.delete(conversationId);
@@ -896,7 +949,9 @@ export class DmService extends EventTarget {
   async _handleKeyUpdate(detail) {
     const { conversationId, encryptedKey, keyIndex } = detail;
     const conv = this._conversations.get(conversationId);
-    if (!conv) return;
+    if (!conv) {
+      return;
+    }
 
     try {
       conv.sessionKey = await window.gimodi.identity.decryptSessionKey(encryptedKey);
@@ -904,7 +959,9 @@ export class DmService extends EventTarget {
       conv.keyIndex = keyIndex ?? 0;
       this._saveConversationsToStorage();
       this.dispatchEvent(new CustomEvent('key-updated', { detail: { conversationId, keyIndex } }));
-    } catch {}
+    } catch {
+      /* ignore */
+    }
   }
 
   /**
@@ -914,10 +971,14 @@ export class DmService extends EventTarget {
    */
   async _rotateKey(conversationId) {
     const conv = this._conversations.get(conversationId);
-    if (!conv || conv.type !== 'group') return;
+    if (!conv || conv.type !== 'group') {
+      return;
+    }
 
     const server = this._pickServer();
-    if (!server) return;
+    if (!server) {
+      return;
+    }
 
     const allParticipants = [
       ...conv.participants.map((p) => ({ fingerprint: p.fingerprint, publicKeyArmored: p.publicKeyArmored ?? null })),
@@ -962,7 +1023,9 @@ export class DmService extends EventTarget {
     if (conv.type === 'direct') {
       return window.gimodi.identity.decrypt(encryptedContent);
     }
-    if (!conv.sessionKey) throw new Error('No session key');
+    if (!conv.sessionKey) {
+      throw new Error('No session key');
+    }
     return window.gimodi.identity.decryptSymmetric(conv.sessionKey, encryptedContent);
   }
 
@@ -1013,7 +1076,10 @@ export class DmService extends EventTarget {
     const purgedAt = Date.now();
     const all = loadMessages(this._fingerprint);
 
-    saveMessages(this._fingerprint, all.filter((m) => m.conversationId !== conversationId));
+    saveMessages(
+      this._fingerprint,
+      all.filter((m) => m.conversationId !== conversationId),
+    );
 
     const log = loadPurgeLog(this._fingerprint);
     log[conversationId] = purgedAt;
@@ -1021,7 +1087,11 @@ export class DmService extends EventTarget {
 
     for (const msg of all) {
       if (msg.conversationId === conversationId && msg.direction === 'received') {
-        try { this._sendAck(msg.id, msg.senderFingerprint); } catch {}
+        try {
+          this._sendAck(msg.id, msg.senderFingerprint);
+        } catch {
+          /* ignore */
+        }
       }
     }
 
