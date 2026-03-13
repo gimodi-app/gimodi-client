@@ -17,13 +17,15 @@ let dropTarget = null;
 let _connectCallback = null;
 let _editServerCallback = null;
 
-
 /** @returns {Array} Flattened array of all servers (ungrouped). */
 function flatServers() {
   const result = [];
   for (const item of servers) {
-    if (item.type === 'group') result.push(...item.servers);
-    else result.push(item);
+    if (item.type === 'group') {
+      result.push(...item.servers);
+    } else {
+      result.push(item);
+    }
   }
   return result;
 }
@@ -36,10 +38,16 @@ async function saveServers() {
 /** @param {Object} item - Server or group to remove from the list. */
 function removeItem(item) {
   for (let i = servers.length - 1; i >= 0; i--) {
-    if (servers[i] === item) { servers.splice(i, 1); return; }
+    if (servers[i] === item) {
+      servers.splice(i, 1);
+      return;
+    }
     if (servers[i].type === 'group') {
       const idx = servers[i].servers.indexOf(item);
-      if (idx >= 0) { servers[i].servers.splice(idx, 1); return; }
+      if (idx >= 0) {
+        servers[i].servers.splice(idx, 1);
+        return;
+      }
     }
   }
 }
@@ -51,14 +59,18 @@ function removeItem(item) {
  */
 export function removeServerByIdentity(address, nickname, identityFingerprint) {
   const fp = identityFingerprint || null;
-  const matches = s => s.address === address && s.nickname === nickname && (s.identityFingerprint || null) === fp;
+  const matches = (s) => s.address === address && s.nickname === nickname && (s.identityFingerprint || null) === fp;
   for (let i = servers.length - 1; i >= 0; i--) {
     const item = servers[i];
     if (item.type === 'group') {
       const idx = item.servers.findIndex(matches);
-      if (idx >= 0) { item.servers.splice(idx, 1); return; }
+      if (idx >= 0) {
+        item.servers.splice(idx, 1);
+        return;
+      }
     } else if (matches(item)) {
-      servers.splice(i, 1); return;
+      servers.splice(i, 1);
+      return;
     }
   }
 }
@@ -67,8 +79,11 @@ export function removeServerByIdentity(address, nickname, identityFingerprint) {
 function cleanupGroups() {
   for (let i = servers.length - 1; i >= 0; i--) {
     if (servers[i].type === 'group') {
-      if (servers[i].servers.length === 0) servers.splice(i, 1);
-      else if (servers[i].servers.length === 1) servers[i] = servers[i].servers[0];
+      if (servers[i].servers.length === 0) {
+        servers.splice(i, 1);
+      } else if (servers[i].servers.length === 1) {
+        servers[i] = servers[i].servers[0];
+      }
     }
   }
 }
@@ -79,14 +94,18 @@ function cleanupGroups() {
  */
 export function updateServerInList(serverData) {
   const fp = serverData.identityFingerprint || null;
-  const matches = s => s.address === serverData.address && s.nickname === serverData.nickname && (s.identityFingerprint || null) === fp;
+  const matches = (s) => s.address === serverData.address && s.nickname === serverData.nickname && (s.identityFingerprint || null) === fp;
   for (let i = 0; i < servers.length; i++) {
     const item = servers[i];
     if (item.type === 'group') {
       const idx = item.servers.findIndex(matches);
-      if (idx >= 0) { Object.assign(item.servers[idx], serverData); return true; }
+      if (idx >= 0) {
+        Object.assign(item.servers[idx], serverData);
+        return true;
+      }
     } else if (matches(item)) {
-      Object.assign(servers[i], serverData); return true;
+      Object.assign(servers[i], serverData);
+      return true;
     }
   }
   return false;
@@ -112,14 +131,18 @@ export function addOrUpdateServer(server) {
  */
 export function replaceServerInPlace(oldAddress, oldNickname, oldIdentityFingerprint, newServer) {
   const fp = oldIdentityFingerprint || null;
-  const matches = s => s.address === oldAddress && s.nickname === oldNickname && (s.identityFingerprint || null) === fp;
+  const matches = (s) => s.address === oldAddress && s.nickname === oldNickname && (s.identityFingerprint || null) === fp;
   for (let i = 0; i < servers.length; i++) {
     const item = servers[i];
     if (item.type === 'group') {
       const idx = item.servers.findIndex(matches);
-      if (idx >= 0) { item.servers[idx] = newServer; return true; }
+      if (idx >= 0) {
+        item.servers[idx] = newServer;
+        return true;
+      }
     } else if (matches(item)) {
-      servers[i] = newServer; return true;
+      servers[i] = newServer;
+      return true;
     }
   }
   return false;
@@ -127,7 +150,7 @@ export function replaceServerInPlace(oldAddress, oldNickname, oldIdentityFingerp
 
 /** Clears all drag-and-drop visual indicators. */
 function clearDropIndicators() {
-  document.querySelectorAll('.drag-merge, .drag-into-group').forEach(el => {
+  document.querySelectorAll('.drag-merge, .drag-into-group').forEach((el) => {
     el.classList.remove('drag-merge', 'drag-into-group');
   });
   dropTarget = null;
@@ -144,11 +167,18 @@ function reconstructFromDOM() {
       } else {
         const groupServers = [];
         for (const el of child.children) {
-          if (el._server) groupServers.push(el._server);
+          if (el._server) {
+            groupServers.push(el._server);
+          }
         }
         group.servers = groupServers;
-        if (groupServers.length === 0) continue;
-        if (groupServers.length === 1) { result.push(groupServers[0]); continue; }
+        if (groupServers.length === 0) {
+          continue;
+        }
+        if (groupServers.length === 1) {
+          result.push(groupServers[0]);
+          continue;
+        }
         result.push(group);
       }
     } else if (child._server) {
@@ -160,9 +190,11 @@ function reconstructFromDOM() {
 
 /** Completes a drag operation by applying the drop action and saving. */
 async function finalizeDrag() {
-  if (!dragData) return;
+  if (!dragData) {
+    return;
+  }
 
-  sidebarList.querySelectorAll('.server-group').forEach(g => g.style.minHeight = '');
+  sidebarList.querySelectorAll('.server-group').forEach((g) => (g.style.minHeight = ''));
 
   if (dropTarget?.zone === 'merge') {
     const targetServer = dropTarget.element._server;
@@ -210,9 +242,7 @@ export function renderSidebar() {
 
   if (connectWelcomeHint) {
     const allServers = flatServers();
-    connectWelcomeHint.textContent = allServers.length === 0
-      ? 'Add a server to get started'
-      : 'Select a server from the sidebar';
+    connectWelcomeHint.textContent = allServers.length === 0 ? 'Add a server to get started' : 'Select a server from the sidebar';
   }
 
   for (let i = 0; i < servers.length; i++) {
@@ -240,9 +270,15 @@ function createServerButton(server, pathStr) {
   const isConnected = connectionManager.isConnected(key);
   const isVoice = connectionManager.voiceKey === key;
 
-  if (isActive) btn.classList.add('active');
-  if (isConnected) btn.classList.add('connected');
-  if (isVoice) btn.classList.add('voice-active');
+  if (isActive) {
+    btn.classList.add('active');
+  }
+  if (isConnected) {
+    btn.classList.add('connected');
+  }
+  if (isVoice) {
+    btn.classList.add('voice-active');
+  }
 
   const img = document.createElement('img');
   const cachedUrl = iconUrlCache.get(server.address);
@@ -261,7 +297,9 @@ function createServerButton(server, pathStr) {
             img.src = url;
           }
         }
-      } catch {}
+      } catch {
+        /* ignored */
+      }
     })();
   }
 
@@ -270,27 +308,36 @@ function createServerButton(server, pathStr) {
 
   let clickTimer = null;
   btn.addEventListener('click', () => {
-    if (clickTimer) return;
+    if (clickTimer) {
+      return;
+    }
     clickTimer = setTimeout(() => {
       clickTimer = null;
       if (isConnected && !isActive) {
-        window.dispatchEvent(new CustomEvent('gimodi:switch-server', {
-          detail: { connKey: connKey(server.address, server.identityFingerprint) },
-        }));
+        window.dispatchEvent(
+          new CustomEvent('gimodi:switch-server', {
+            detail: { connKey: connKey(server.address, server.identityFingerprint) },
+          }),
+        );
       } else if (!isConnected) {
         _connectCallback(server);
       }
     }, 250);
   });
   btn.addEventListener('dblclick', () => {
-    if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+    if (clickTimer) {
+      clearTimeout(clickTimer);
+      clickTimer = null;
+    }
     if (!isConnected) {
       _connectCallback(server, { autoJoin: true });
     } else {
       if (!isActive) {
-        window.dispatchEvent(new CustomEvent('gimodi:switch-server', {
-          detail: { connKey: connKey(server.address, server.identityFingerprint) },
-        }));
+        window.dispatchEvent(
+          new CustomEvent('gimodi:switch-server', {
+            detail: { connKey: connKey(server.address, server.identityFingerprint) },
+          }),
+        );
       }
       window.dispatchEvent(new CustomEvent('gimodi:auto-join-voice'));
     }
@@ -326,13 +373,17 @@ function createServerButton(server, pathStr) {
   });
 
   btn.addEventListener('dragover', (e) => {
-    if (!dragData || dragData.item === server) return;
+    if (!dragData || dragData.item === server) {
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
 
     const draggingEl = document.querySelector('.dragging');
-    if (!draggingEl || draggingEl === btn || draggingEl.contains(btn)) return;
+    if (!draggingEl || draggingEl === btn || draggingEl.contains(btn)) {
+      return;
+    }
 
     const rect = btn.getBoundingClientRect();
     const ratio = (e.clientY - rect.top) / rect.height;
@@ -340,7 +391,9 @@ function createServerButton(server, pathStr) {
     const dragIsGroup = dragData.type === 'group';
 
     if (isUngrouped && !dragIsGroup && ratio > 0.3 && ratio < 0.7) {
-      if (dropTarget?.zone === 'merge' && dropTarget?.element === btn) return;
+      if (dropTarget?.zone === 'merge' && dropTarget?.element === btn) {
+        return;
+      }
       clearDropIndicators();
       btn.classList.add('drag-merge');
       dropTarget = { zone: 'merge', element: btn };
@@ -351,7 +404,9 @@ function createServerButton(server, pathStr) {
 
     if (dragIsGroup) {
       let ref = btn;
-      while (ref.parentElement !== sidebarList) ref = ref.parentElement;
+      while (ref.parentElement !== sidebarList) {
+        ref = ref.parentElement;
+      }
       if (ratio < 0.5) {
         sidebarList.insertBefore(draggingEl, ref);
       } else {
@@ -434,9 +489,14 @@ function createCollapsedGroup(group, topIndex) {
           const health = await window.gimodi.iconCache.health(server.address);
           if (health && health.iconHash) {
             const url = await getServerIcon(server.address, health.iconHash);
-            if (url) { iconUrlCache.set(server.address, url); mini.src = url; }
+            if (url) {
+              iconUrlCache.set(server.address, url);
+              mini.src = url;
+            }
           }
-        } catch {}
+        } catch {
+          /* ignored */
+        }
       })();
     }
     grid.appendChild(mini);
@@ -468,7 +528,10 @@ function createCollapsedGroup(group, topIndex) {
     clone.style.cssText = 'position:absolute;top:-9999px;width:48px;height:48px;border-radius:16px;overflow:hidden;';
     document.body.appendChild(clone);
     e.dataTransfer.setDragImage(clone, 24, 24);
-    requestAnimationFrame(() => { clone.remove(); btn.classList.add('dragging'); });
+    requestAnimationFrame(() => {
+      clone.remove();
+      btn.classList.add('dragging');
+    });
   });
 
   btn.addEventListener('dragend', () => {
@@ -477,12 +540,16 @@ function createCollapsedGroup(group, topIndex) {
   });
 
   btn.addEventListener('dragover', (e) => {
-    if (!dragData || dragData.item === group) return;
+    if (!dragData || dragData.item === group) {
+      return;
+    }
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
 
     const draggingEl = document.querySelector('.dragging');
-    if (!draggingEl) return;
+    if (!draggingEl) {
+      return;
+    }
 
     clearDropIndicators();
 
@@ -554,19 +621,25 @@ function createGroupElement(group, topIndex) {
   }
 
   container.addEventListener('contextmenu', (e) => {
-    if (e.target.closest('.server-sidebar-btn')) return;
+    if (e.target.closest('.server-sidebar-btn')) {
+      return;
+    }
     e.preventDefault();
     showGroupContextMenu(e, group, topIndex);
   });
 
   container.addEventListener('mouseenter', (e) => {
-    if (e.target.closest('.server-sidebar-btn')) return;
+    if (e.target.closest('.server-sidebar-btn')) {
+      return;
+    }
     showGroupTooltip(e, group);
   });
   container.addEventListener('mouseleave', hideTooltip);
 
   container.addEventListener('dragstart', (e) => {
-    if (e.target.closest('.server-sidebar-btn')) return;
+    if (e.target.closest('.server-sidebar-btn')) {
+      return;
+    }
     hideTooltip();
     dragData = { type: 'group', item: group };
     e.dataTransfer.effectAllowed = 'move';
@@ -581,15 +654,23 @@ function createGroupElement(group, topIndex) {
   });
 
   container.addEventListener('dragover', (e) => {
-    if (!dragData) return;
-    if (e.target.closest('.server-sidebar-btn')) return;
+    if (!dragData) {
+      return;
+    }
+    if (e.target.closest('.server-sidebar-btn')) {
+      return;
+    }
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
 
     const draggingEl = document.querySelector('.dragging');
-    if (!draggingEl || draggingEl === container) return;
+    if (!draggingEl || draggingEl === container) {
+      return;
+    }
 
-    if (dragData.originGroup === container) return;
+    if (dragData.originGroup === container) {
+      return;
+    }
 
     clearDropIndicators();
 
@@ -696,9 +777,11 @@ function showServerContextMenu(e, server, isConnected) {
     disconnectItem.addEventListener('click', (ev) => {
       ev.stopPropagation();
       dismissContextMenu();
-      window.dispatchEvent(new CustomEvent('gimodi:disconnect-server', {
-        detail: { connKey: connKey(server.address, server.identityFingerprint) },
-      }));
+      window.dispatchEvent(
+        new CustomEvent('gimodi:disconnect-server', {
+          detail: { connKey: connKey(server.address, server.identityFingerprint) },
+        }),
+      );
     });
     contextMenuEl.appendChild(disconnectItem);
   } else {
@@ -713,7 +796,7 @@ function showServerContextMenu(e, server, isConnected) {
     contextMenuEl.appendChild(openItem);
   }
 
-  const parentGroup = servers.find(item => item.type === 'group' && item.servers.includes(server));
+  const parentGroup = servers.find((item) => item.type === 'group' && item.servers.includes(server));
   if (parentGroup) {
     const removeFromGroupItem = document.createElement('div');
     removeFromGroupItem.className = 'context-menu-item';
@@ -741,7 +824,9 @@ function showServerContextMenu(e, server, isConnected) {
   editItem.addEventListener('click', (ev) => {
     ev.stopPropagation();
     dismissContextMenu();
-    if (_editServerCallback) _editServerCallback(server, isConnected);
+    if (_editServerCallback) {
+      _editServerCallback(server, isConnected);
+    }
   });
   contextMenuEl.appendChild(editItem);
 
@@ -752,9 +837,11 @@ function showServerContextMenu(e, server, isConnected) {
     ev.stopPropagation();
     dismissContextMenu();
     if (isConnected) {
-      window.dispatchEvent(new CustomEvent('gimodi:disconnect-server', {
-        detail: { connKey: connKey(server.address, server.identityFingerprint) },
-      }));
+      window.dispatchEvent(
+        new CustomEvent('gimodi:disconnect-server', {
+          detail: { connKey: connKey(server.address, server.identityFingerprint) },
+        }),
+      );
     }
     await window.gimodi.servers.remove(server.address, server.nickname, server.identityFingerprint);
     removeServerByIdentity(server.address, server.nickname, server.identityFingerprint);
@@ -837,24 +924,30 @@ export function clearActiveServer() {
 export async function initSidebar(connectCallback, onAddServer, onEditServer) {
   _connectCallback = connectCallback;
   _editServerCallback = onEditServer;
-  servers = await window.gimodi.servers.list() || [];
+  servers = (await window.gimodi.servers.list()) || [];
   renderSidebar();
 
   document.getElementById('btn-add-server').addEventListener('click', onAddServer);
 
   sidebarList.addEventListener('dragover', (e) => {
     e.preventDefault();
-    if (!dragData) return;
+    if (!dragData) {
+      return;
+    }
 
     const draggingEl = document.querySelector('.dragging');
-    if (!draggingEl) return;
+    if (!draggingEl) {
+      return;
+    }
 
     const listRect = sidebarList.getBoundingClientRect();
     const edgeSize = 20;
     const atTop = e.clientY < listRect.top + edgeSize;
     const atBottom = e.clientY > listRect.bottom - edgeSize;
 
-    if (e.target !== sidebarList && !atTop && !atBottom) return;
+    if (e.target !== sidebarList && !atTop && !atBottom) {
+      return;
+    }
 
     clearDropIndicators();
 
@@ -863,7 +956,7 @@ export async function initSidebar(connectCallback, onAddServer, onEditServer) {
     } else if (atBottom) {
       sidebarList.appendChild(draggingEl);
     } else {
-      const children = [...sidebarList.children].filter(c => c !== draggingEl);
+      const children = [...sidebarList.children].filter((c) => c !== draggingEl);
       let inserted = false;
       for (const child of children) {
         const rect = child.getBoundingClientRect();

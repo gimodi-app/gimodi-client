@@ -32,9 +32,12 @@ const btnScreenShare = document.getElementById('btn-screen-share');
 const mediaGrid = document.getElementById('media-grid');
 const btnBackToGrid = document.getElementById('btn-back-to-grid');
 
+// eslint-disable-next-line no-unused-vars
 let voiceServerName = '';
-let screenViewMode = 'grid'; // 'grid' or 'focused'
-let webcamViewMode = 'grid'; // 'grid' or 'focused'
+// eslint-disable-next-line no-unused-vars
+let screenViewMode = 'grid';
+// eslint-disable-next-line no-unused-vars
+let webcamViewMode = 'grid';
 let focusMode = null; // null or { type: 'webcam'|'screen', clientId }
 const focusStrip = document.getElementById('focus-strip');
 
@@ -66,14 +69,16 @@ const chkScreenAudio = document.getElementById('chk-screen-audio');
 const btnCancelScreen = document.getElementById('btn-cancel-screen');
 const selectScreenResolution = document.getElementById('select-screen-resolution');
 const savedScreenResolution = localStorage.getItem('screenShareResolution');
-if (savedScreenResolution) selectScreenResolution.value = savedScreenResolution;
+if (savedScreenResolution) {
+  selectScreenResolution.value = savedScreenResolution;
+}
 
 let isMuted = false;
 let isDeafened = false;
 let isWebcamOn = false;
 let isScreenSharing = false;
 const audioElements = new Map(); // consumerId -> { audio, clientId, track }
-const clientUserMap = new Map();  // clientId -> userId (persistent identity)
+const clientUserMap = new Map(); // clientId -> userId (persistent identity)
 const webcamConsumers = new Map(); // clientId -> { consumer, nickname }
 const screenVideoConsumers = new Map(); // clientId -> { consumer, nickname }
 let watchingScreenClientId = null; // clientId of screen share we're watching
@@ -94,7 +99,9 @@ export function setVoiceServerName(name) {
 
 export function setVoiceControlsVisible(visible) {
   const voiceBar = document.querySelector('.voice-controls');
-  if (!voiceBar) return;
+  if (!voiceBar) {
+    return;
+  }
   // Always keep the bar visible, but hide voice-specific buttons when voice is unavailable
   for (const btn of voiceBar.querySelectorAll('.btn-icon:not(#btn-settings)')) {
     btn.style.display = visible ? '' : 'none';
@@ -115,7 +122,9 @@ export function syncVoiceControlsUI() {
 export function initVoiceView(initialClients = [], serverName = '') {
   voiceServerName = serverName;
   for (const c of initialClients) {
-    if (c.userId) clientUserMap.set(c.id, c.userId);
+    if (c.userId) {
+      clientUserMap.set(c.id, c.userId);
+    }
   }
 
   // Voice-specific buttons are hidden until user joins a voice channel
@@ -318,7 +327,9 @@ export function cleanup() {
 
 function onClientJoined(e) {
   const { clientId, userId } = e.detail;
-  if (userId) clientUserMap.set(clientId, userId);
+  if (userId) {
+    clientUserMap.set(clientId, userId);
+  }
 }
 
 function onClientLeft(e) {
@@ -369,7 +380,7 @@ function updateMuteUI() {
   const showMuted = isMuted || isDeafened;
   btnMute.classList.toggle('active', showMuted);
   btnMute.innerHTML = showMuted ? '<i class="bi bi-mic-mute"></i>' : '<i class="bi bi-mic"></i>';
-  btnMute.title = isDeafened ? 'Undeafen to unmute' : (isMuted ? 'Unmute' : 'Mute');
+  btnMute.title = isDeafened ? 'Undeafen to unmute' : isMuted ? 'Unmute' : 'Mute';
   window.gimodi.setVoiceMuteState(isMuted, isDeafened);
 }
 
@@ -499,7 +510,9 @@ async function onNewConsumer(e) {
     const userId = clientUserMap.get(clientId);
     if (userId) {
       const vol = voiceService.getUserVolume(userId);
-      if (vol !== 100) audio.volume = Math.min(vol / 100, 1.0);
+      if (vol !== 100) {
+        audio.volume = Math.min(vol / 100, 1.0);
+      }
     }
 
     // Set audio output device if specified
@@ -512,7 +525,9 @@ async function onNewConsumer(e) {
     }
 
     // Respect current deafen state
-    if (isDeafened) audio.muted = true;
+    if (isDeafened) {
+      audio.muted = true;
+    }
 
     // Start muted, assign the stream, then fade in after a short delay
     // to avoid the initial crackle from empty WebRTC buffers
@@ -522,7 +537,9 @@ async function onNewConsumer(e) {
     audio.autoplay = true;
     document.body.appendChild(audio);
     audioElements.set(consumer.id, { audio, clientId, track });
-    setTimeout(() => { audio.volume = origVolume; }, 150);
+    setTimeout(() => {
+      audio.volume = origVolume;
+    }, 150);
   }
 }
 
@@ -561,7 +578,7 @@ function onConsumerRemoved(e) {
 }
 
 function onConsumerClosed(e) {
-  const { consumerId, clientId, kind, screen, webcam, screenAudio } = e.detail;
+  const { consumerId, clientId, kind, screen, webcam } = e.detail;
   const entry = audioElements.get(consumerId);
   if (entry) {
     cleanupAudioEntry(consumerId, entry);
@@ -611,7 +628,9 @@ async function handleWebcamClick() {
     return;
   }
 
-  if (!await customConfirm('Do you want to share your webcam?')) return;
+  if (!(await customConfirm('Do you want to share your webcam?'))) {
+    return;
+  }
 
   try {
     await voiceService.startWebcam();
@@ -672,7 +691,9 @@ function addTileResizeHandle(tile) {
 }
 
 function onTileResizeMove(e) {
-  if (!tileResizeTarget) return;
+  if (!tileResizeTarget) {
+    return;
+  }
   const delta = e.clientX - tileResizeStartX;
   const newWidth = Math.max(120, tileResizeStartW + delta);
   tileResizeTarget.style.width = `${newWidth}px`;
@@ -709,7 +730,9 @@ function createWebcamTile(clientId, nickname, track, isSelf) {
   // Click to focus in viewer (ignore bottom 10% to avoid accidental focus from resize)
   tile.addEventListener('click', (e) => {
     const rect = tile.getBoundingClientRect();
-    if (e.clientY > rect.top + rect.height * 0.8) return;
+    if (e.clientY > rect.top + rect.height * 0.8) {
+      return;
+    }
     focusWebcamTile(clientId);
   });
 
@@ -730,7 +753,9 @@ function removeWebcamTile(clientId) {
   const tile = mediaGrid.querySelector(`.webcam-tile[data-client-id="${clientId}"]`);
   if (tile) {
     const video = tile.querySelector('video');
-    if (video) video.srcObject = null;
+    if (video) {
+      video.srcObject = null;
+    }
     tile.remove();
   }
   if (wasFocused) {
@@ -764,9 +789,13 @@ async function toggleWcPopout(clientId, nickname, isSelf) {
     stream = focusedWebcamStream;
   } else {
     const tile = mediaGrid.querySelector(`.webcam-tile[data-client-id="${clientId}"]`);
-    if (!tile) return;
+    if (!tile) {
+      return;
+    }
     const video = tile.querySelector('video');
-    if (!video || !video.srcObject) return;
+    if (!video || !video.srcObject) {
+      return;
+    }
     stream = video.srcObject;
   }
   wcPopoutClientId = clientId;
@@ -793,7 +822,10 @@ async function toggleWcPopout(clientId, nickname, isSelf) {
   });
 
   await window.gimodi.wcPopout.open();
-  tile.classList.add('popped-out');
+  const poppedTile = mediaGrid.querySelector(`.webcam-tile[data-client-id="${clientId}"]`);
+  if (poppedTile) {
+    poppedTile.classList.add('popped-out');
+  }
 }
 
 async function startWcPopoutWebRTC(stream) {
@@ -823,7 +855,9 @@ function cleanupWcPopout() {
   window.gimodi.wcPopout.removeListeners();
   if (wcPopoutClientId) {
     const tile = mediaGrid.querySelector(`.webcam-tile[data-client-id="${wcPopoutClientId}"]`);
-    if (tile) tile.classList.remove('popped-out');
+    if (tile) {
+      tile.classList.remove('popped-out');
+    }
     wcPopoutClientId = null;
   }
 }
@@ -849,9 +883,15 @@ function focusStream(type, clientId) {
   if (type === 'webcam') {
     webcamViewMode = 'focused';
     const tile = mediaGrid.querySelector(`.webcam-tile[data-client-id="${clientId}"]`);
-    if (!tile) { unfocus(); return; }
+    if (!tile) {
+      unfocus();
+      return;
+    }
     const video = tile.querySelector('video');
-    if (!video || !video.srcObject) { unfocus(); return; }
+    if (!video || !video.srcObject) {
+      unfocus();
+      return;
+    }
 
     const stream = video.srcObject;
     const isSelf = tile.classList.contains('self');
@@ -896,9 +936,13 @@ function buildFocusStrip() {
   // Collect all webcam streams
   for (const tile of mediaGrid.querySelectorAll('.webcam-tile')) {
     const cid = tile.dataset.clientId;
-    if (focusMode.type === 'webcam' && focusMode.clientId === cid) continue;
+    if (focusMode.type === 'webcam' && focusMode.clientId === cid) {
+      continue;
+    }
     const video = tile.querySelector('video');
-    if (!video || !video.srcObject) continue;
+    if (!video || !video.srcObject) {
+      continue;
+    }
     const label = tile.querySelector('.webcam-name');
     tiles.push({ type: 'webcam', clientId: cid, stream: video.srcObject, label: label ? label.textContent : '' });
   }
@@ -906,9 +950,13 @@ function buildFocusStrip() {
   // Collect all screen streams
   for (const tile of mediaGrid.querySelectorAll('.screen-tile')) {
     const cid = tile.dataset.clientId;
-    if (focusMode.type === 'screen' && focusMode.clientId === cid) continue;
+    if (focusMode.type === 'screen' && focusMode.clientId === cid) {
+      continue;
+    }
     const video = tile.querySelector('video');
-    if (!video || !video.srcObject) continue;
+    if (!video || !video.srcObject) {
+      continue;
+    }
     const label = tile.querySelector('.screen-tile-label');
     tiles.push({ type: 'screen', clientId: cid, stream: video.srcObject, label: label ? label.textContent : '' });
   }
@@ -953,7 +1001,9 @@ function unfocus() {
   webcamViewerContainer.classList.add('hidden');
   webcamViewerContainer.classList.remove('maximized');
   isWebcamMaximized = false;
-  if (isInBrowserFullscreen(webcamViewerContainer)) exitBrowserFullscreen();
+  if (isInBrowserFullscreen(webcamViewerContainer)) {
+    exitBrowserFullscreen();
+  }
   updateWebcamButtons();
 
   // Hide screen viewer
@@ -969,7 +1019,9 @@ function unfocus() {
   screenVolumeControl.classList.add('hidden');
   isScreenMaximized = false;
   isScreenResized = false;
-  if (isInBrowserFullscreen(screenShareContainer)) exitBrowserFullscreen();
+  if (isInBrowserFullscreen(screenShareContainer)) {
+    exitBrowserFullscreen();
+  }
   updateScreenButtons();
 
   // Hide strip
@@ -1053,7 +1105,9 @@ function showMediaContextMenu(e, videoEl) {
   e.preventDefault();
   // Remove any existing menu
   const existing = document.getElementById('media-context-menu');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const container = videoEl.closest('#screen-share-container, #webcam-viewer-container');
   const inFullscreen = document.fullscreenElement === container;
@@ -1079,8 +1133,16 @@ function showMediaContextMenu(e, videoEl) {
   });
 
   // Close on click outside or Escape
-  const close = () => { menu.remove(); document.removeEventListener('click', close); document.removeEventListener('keydown', onKey); };
-  const onKey = (ev) => { if (ev.key === 'Escape') close(); };
+  const close = () => {
+    menu.remove();
+    document.removeEventListener('click', close);
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (ev) => {
+    if (ev.key === 'Escape') {
+      close();
+    }
+  };
   setTimeout(() => {
     document.addEventListener('click', close);
     document.addEventListener('keydown', onKey);
@@ -1098,7 +1160,9 @@ function enterBrowserFullscreen(videoEl) {
 }
 
 function onPopoutWebcamClick() {
-  if (!focusedWebcamClientId) return;
+  if (!focusedWebcamClientId) {
+    return;
+  }
   const tile = mediaGrid.querySelector(`.webcam-tile[data-client-id="${focusedWebcamClientId}"]`);
   const isSelf = tile ? tile.classList.contains('self') : false;
   const nickname = webcamViewerLabel.textContent;
@@ -1131,8 +1195,8 @@ function showScreenPicker(sources) {
   screenSourcesDiv.innerHTML = '';
 
   // Separate screens and windows
-  const screens = sources.filter(s => s.id.startsWith('screen:'));
-  const windows = sources.filter(s => s.id.startsWith('window:'));
+  const screens = sources.filter((s) => s.id.startsWith('screen:'));
+  const windows = sources.filter((s) => s.id.startsWith('window:'));
 
   if (screens.length > 0) {
     const header = document.createElement('div');
@@ -1255,7 +1319,7 @@ function watchScreen(clientId, nickname, track) {
   screenShareContainer.classList.remove('hidden');
   screenVideo.play().catch(() => {});
   // Show volume control if there's screen audio from any peer
-  const hasScreenAudio = [...audioElements.values()].some(e => e.screenAudio);
+  const hasScreenAudio = [...audioElements.values()].some((e) => e.screenAudio);
   if (hasScreenAudio) {
     screenVolumeControl.classList.remove('hidden');
   } else {
@@ -1298,7 +1362,9 @@ function createScreenTile(clientId, nickname, track, isLocal) {
 
   tile.addEventListener('click', (e) => {
     const rect = tile.getBoundingClientRect();
-    if (e.clientY > rect.top + rect.height * 0.8) return;
+    if (e.clientY > rect.top + rect.height * 0.8) {
+      return;
+    }
     focusScreenTile(clientId);
   });
 
@@ -1315,7 +1381,9 @@ function removeScreenTile(clientId) {
   const tile = mediaGrid.querySelector(`.screen-tile[data-client-id="${clientId}"]`);
   if (tile) {
     const video = tile.querySelector('video');
-    if (video) video.srcObject = null;
+    if (video) {
+      video.srcObject = null;
+    }
     tile.remove();
   }
   if (wasFocused) {
@@ -1330,7 +1398,9 @@ function removeScreenTile(clientId) {
 function clearScreenGrid() {
   for (const tile of [...mediaGrid.querySelectorAll('.screen-tile')]) {
     const video = tile.querySelector('video');
-    if (video) video.srcObject = null;
+    if (video) {
+      video.srcObject = null;
+    }
     tile.remove();
   }
   updateMediaGridVisibility();
@@ -1393,6 +1463,7 @@ function backToGrid() {
   unfocus();
 }
 
+// eslint-disable-next-line no-unused-vars
 function autoWatchNextScreen() {
   // Auto-watch first available screen share
   for (const [clientId, entry] of screenVideoConsumers) {
@@ -1435,7 +1506,9 @@ function hideScreenShare() {
   isScreenMaximized = false;
   isScreenResized = false;
   screenViewMode = 'grid';
-  if (isInBrowserFullscreen(screenShareContainer)) exitBrowserFullscreen();
+  if (isInBrowserFullscreen(screenShareContainer)) {
+    exitBrowserFullscreen();
+  }
   updateScreenButtons();
   clearScreenGrid();
 }
@@ -1451,7 +1524,9 @@ async function togglePopout() {
 
   // Get the current screen video stream
   const stream = screenVideo.srcObject;
-  if (!stream) return;
+  if (!stream) {
+    return;
+  }
 
   const label = screenShareLabel.textContent;
 
@@ -1534,7 +1609,9 @@ function onResizeHandleMouseUp() {
 
 function onWatchStreamEvent(e) {
   const { clientId } = e.detail;
-  if (!clientId) return;
+  if (!clientId) {
+    return;
+  }
 
   // If clicking own username while screen sharing, focus local tile
   if (clientId === serverService.clientId && isScreenSharing && screenShareService.stream) {

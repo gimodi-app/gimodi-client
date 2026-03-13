@@ -25,7 +25,7 @@
 
 /* --- Theme Definitions --- */
 
-[data-theme="deeper-blue"] {
+[data-theme='deeper-blue'] {
   --bg-primary: #060d18;
   --bg-secondary: #0a1525;
   --bg-tertiary: #101e35;
@@ -44,7 +44,7 @@
   --reaction-border: color-mix(in srgb, var(--accent) 70%, black);
 }
 
-[data-theme="deep-ocean"] {
+[data-theme='deep-ocean'] {
   --bg-primary: #0a1628;
   --bg-secondary: #0f1f3a;
   --bg-tertiary: #162d50;
@@ -63,7 +63,7 @@
   --bg-voice-controls: #0f111a;
 }
 
-[data-theme="midnight-purple"] {
+[data-theme='midnight-purple'] {
   --bg-primary: #150f1e;
   --bg-secondary: #1c1528;
   --bg-tertiary: #2a2038;
@@ -82,7 +82,7 @@
   --reaction-border: color-mix(in srgb, var(--accent) 70%, black);
 }
 
-[data-theme="forest"] {
+[data-theme='forest'] {
   --bg-primary: #0e1510;
   --bg-secondary: #141e16;
   --bg-tertiary: #1e2e22;
@@ -101,7 +101,7 @@
   --reaction-border: color-mix(in srgb, var(--accent) 70%, black);
 }
 
-[data-theme="classic-dark"] {
+[data-theme='classic-dark'] {
   --bg-primary: #111111;
   --bg-secondary: #181818;
   --bg-tertiary: #242424;
@@ -120,7 +120,7 @@
   --reaction-border: color-mix(in srgb, var(--accent) 70%, black);
 }
 
-[data-theme="light"] {
+[data-theme='light'] {
   --bg-primary: #f5f5f5;
   --bg-secondary: #ffffff;
   --bg-tertiary: #e8e8e8;
@@ -276,13 +276,13 @@ body {
   position: relative;
 }
 
-.titlebar-submenu>.titlebar-dropdown-item::after {
+.titlebar-submenu > .titlebar-dropdown-item::after {
   content: '\203A';
   margin-left: auto;
   font-size: 14px;
 }
 
-.titlebar-submenu>.titlebar-dropdown {
+.titlebar-submenu > .titlebar-dropdown {
   position: absolute;
   left: 100%;
   top: -4px;
@@ -492,7 +492,6 @@ body {
   padding: 4px 0;
 }
 
-
 .server-sidebar-btn {
   position: relative;
   width: 48px;
@@ -634,7 +633,9 @@ body {
   font-size: 12px;
   border-radius: 4px;
   padding: 0;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .server-group-collapse-btn:hover {
@@ -802,7 +803,7 @@ select option {
   gap: 12px;
 }
 
-.range-row input[type="range"] {
+.range-row input[type='range'] {
   flex: 1;
   accent-color: var(--accent, #5865f2);
 }
@@ -830,9 +831,9 @@ select option {
   color: var(--text-secondary);
 }
 
-input[type="text"],
-input[type="password"],
-input[type="number"] {
+input[type='text'],
+input[type='password'],
+input[type='number'] {
   width: 100%;
   padding: 10px 12px;
   background: var(--bg-input);
@@ -852,14 +853,14 @@ input::placeholder {
   color: var(--text-muted);
 }
 
-input[type="checkbox"] {
+input[type='checkbox'] {
   width: auto;
   margin-right: 8px;
   cursor: pointer;
   accent-color: var(--text-primary);
 }
 
-label:has(input[type="checkbox"]) {
+label:has(input[type='checkbox']) {
   display: flex;
   align-items: center;
   cursor: pointer;
@@ -876,7 +877,7 @@ label:has(input[type="checkbox"]) {
   border-radius: 8px;
 }
 
-.ptt-key-config input[type="text"] {
+.ptt-key-config input[type='text'] {
   margin-top: 6px;
   text-align: center;
   font-weight: 600;
@@ -928,7 +929,9 @@ label:has(input[type="checkbox"]) {
   font-size: 16px;
   padding: 6px 8px;
   border-radius: 6px;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .btn-icon:hover {
@@ -942,7 +945,6 @@ label:has(input[type="checkbox"]) {
   margin-top: 8px;
   min-height: 20px;
 }
-
 
 /* --- Server View --- */
 
@@ -995,7 +997,6 @@ label:has(input[type="checkbox"]) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 
 .sidebar-resize-handle:hover,
 .sidebar-resize-handle.active {
@@ -1116,7 +1117,9 @@ label:has(input[type="checkbox"]) {
   font-size: 14px;
   border-radius: 4px;
   margin: 0 8px;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
   user-select: none;
 }
 
@@ -1207,7 +1210,7 @@ label:has(input[type="checkbox"]) {
   color: var(--text-muted);
 }
 
-.channel-temp~.channel-lock {
+.channel-temp ~ .channel-lock {
   margin-left: 4px;
 }
 
@@ -1249,7 +1252,6 @@ label:has(input[type="checkbox"]) {
   flex-shrink: 0;
 }
 
-
 .voice-muted-icon {
   padding-left: 4px;
   font-size: 11px;
@@ -1287,7 +1289,9 @@ label:has(input[type="checkbox"]) {
   height: 9px;
   border-radius: 50%;
   background: #333333;
-  transition: background 0.15s, box-shadow 0.15s;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
 }
 
 .voice-indicator.talking::before {
@@ -1357,7 +1361,10 @@ label:has(input[type="checkbox"]) {
   font-weight: 500;
   white-space: nowrap;
   border-bottom: 2px solid transparent;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
   position: relative;
 }
 
@@ -1401,7 +1408,9 @@ label:has(input[type="checkbox"]) {
   cursor: pointer;
   padding: 0 2px;
   border-radius: 3px;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .tab-close:hover {
@@ -1436,7 +1445,6 @@ label:has(input[type="checkbox"]) {
 }
 
 @keyframes ptt-pulse {
-
   0%,
   100% {
     opacity: 1;
@@ -1780,7 +1788,7 @@ label:has(input[type="checkbox"]) {
   font-size: 14px;
 }
 
-.screen-volume-control input[type="range"] {
+.screen-volume-control input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
   width: 100px;
@@ -1790,13 +1798,13 @@ label:has(input[type="checkbox"]) {
   cursor: pointer;
 }
 
-.screen-volume-control input[type="range"]::-webkit-slider-runnable-track {
+.screen-volume-control input[type='range']::-webkit-slider-runnable-track {
   height: 4px;
   background: rgba(255, 255, 255, 0.3);
   border-radius: 2px;
 }
 
-.screen-volume-control input[type="range"]::-webkit-slider-thumb {
+.screen-volume-control input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 14px;
@@ -1819,7 +1827,9 @@ label:has(input[type="checkbox"]) {
 #webcam-viewer-container .btn-maximize,
 #screen-share-container .screen-volume-control:not(.hidden) {
   opacity: 0;
-  transition: opacity 0.2s ease, background 0.15s;
+  transition:
+    opacity 0.2s ease,
+    background 0.15s;
 }
 
 #screen-share-container:hover .btn-maximize,
@@ -1867,7 +1877,6 @@ label:has(input[type="checkbox"]) {
 .maximized > .btn-popout {
   right: 48px;
 }
-
 
 /* Media viewer right-click context menu */
 .media-context-menu {
@@ -2308,7 +2317,6 @@ label:has(input[type="checkbox"]) {
   color: var(--text-primary, #ccc);
 }
 
-
 .chat-msg-reply i {
   color: var(--accent, #5865f2);
   font-size: 0.9em;
@@ -2338,11 +2346,15 @@ label:has(input[type="checkbox"]) {
 }
 
 @keyframes reply-highlight-fade {
-  0% { background-color: rgba(88, 101, 242, 0.25); }
-  100% { background-color: transparent; }
+  0% {
+    background-color: rgba(88, 101, 242, 0.25);
+  }
+  100% {
+    background-color: transparent;
+  }
 }
 
-.chat-msg-body[style*="display: none"] {
+.chat-msg-body[style*='display: none'] {
   display: none !important;
 }
 
@@ -2354,7 +2366,7 @@ label:has(input[type="checkbox"]) {
   margin-bottom: 2px;
 }
 
-.chat-msg-grouped+.chat-msg:not(.chat-msg-grouped) {
+.chat-msg-grouped + .chat-msg:not(.chat-msg-grouped) {
   margin-top: 10px;
 }
 
@@ -2753,7 +2765,6 @@ label:has(input[type="checkbox"]) {
   color: var(--danger, #e74c3c);
 }
 
-
 /* --- Mentions --- */
 
 .mention {
@@ -2930,7 +2941,7 @@ label:has(input[type="checkbox"]) {
   user-select: none;
 }
 
-.screen-audio-option input[type="checkbox"] {
+.screen-audio-option input[type='checkbox'] {
   width: 16px;
   height: 16px;
   accent-color: var(--accent, #5865f2);
@@ -3096,7 +3107,6 @@ label:has(input[type="checkbox"]) {
 }
 
 @keyframes screen-audio-warning-fade {
-
   0%,
   70% {
     opacity: 1;
@@ -3345,7 +3355,9 @@ label:has(input[type="checkbox"]) {
   padding: 0 4px;
   border-radius: 3px;
   opacity: 0;
-  transition: opacity 0.15s, color 0.15s;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
 }
 
 .link-preview-card:hover .link-preview-dismiss {
@@ -3502,7 +3514,9 @@ label:has(input[type="checkbox"]) {
   display: flex;
   align-items: center;
   gap: 6px;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
   z-index: 1;
 }
 
@@ -3590,7 +3604,9 @@ label:has(input[type="checkbox"]) {
   color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.1s, color 0.1s;
+  transition:
+    background 0.1s,
+    color 0.1s;
 }
 
 .settings-nav-item:hover {
@@ -3659,10 +3675,9 @@ label:has(input[type="checkbox"]) {
   cursor: pointer;
 }
 
-.radio-row input[type="radio"] {
+.radio-row input[type='radio'] {
   cursor: pointer;
 }
-
 
 .checkbox-label {
   display: flex;
@@ -3672,7 +3687,7 @@ label:has(input[type="checkbox"]) {
   font-size: 14px;
 }
 
-.checkbox-label input[type="checkbox"] {
+.checkbox-label input[type='checkbox'] {
   cursor: pointer;
 }
 
@@ -3894,7 +3909,9 @@ label:has(input[type="checkbox"]) {
   border-radius: 10px;
   padding: 14px;
   cursor: pointer;
-  transition: border-color 0.15s, transform 0.1s;
+  transition:
+    border-color 0.15s,
+    transform 0.1s;
 }
 
 .theme-card:hover {
@@ -4031,12 +4048,12 @@ label:has(input[type="checkbox"]) {
   background: var(--bg-hover);
 }
 
-.notif-item[data-type="mention"] .notif-icon {
+.notif-item[data-type='mention'] .notif-icon {
   color: var(--accent);
 }
 
-.notif-item[data-type="dm"] .notif-icon {
-  color: #FFD700;
+.notif-item[data-type='dm'] .notif-icon {
+  color: #ffd700;
 }
 
 .notif-icon {
@@ -4082,7 +4099,9 @@ label:has(input[type="checkbox"]) {
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 4px;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .notif-clear-all:hover {
@@ -4147,7 +4166,10 @@ label:has(input[type="checkbox"]) {
   font-size: 14px;
   color: var(--text-muted);
   opacity: 0;
-  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .reactions-row:hover .reaction-add-btn,
@@ -4194,7 +4216,9 @@ label:has(input[type="checkbox"]) {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .chat-msg-action-btn:hover {
@@ -4303,7 +4327,9 @@ label:has(input[type="checkbox"]) {
   cursor: pointer;
   padding: 4px;
   border-radius: 6px;
-  transition: background 0.12s ease, transform 0.1s ease;
+  transition:
+    background 0.12s ease,
+    transform 0.1s ease;
   line-height: 1;
   text-align: center;
 }
@@ -4342,7 +4368,9 @@ label:has(input[type="checkbox"]) {
   padding: 4px 6px;
   border-radius: 6px;
   line-height: 1;
-  transition: background 0.12s, transform 0.1s;
+  transition:
+    background 0.12s,
+    transform 0.1s;
 }
 
 .quick-reaction-btn:hover {
@@ -4372,7 +4400,9 @@ label:has(input[type="checkbox"]) {
   margin-left: 4px;
   color: var(--text-muted);
   opacity: 0.7;
-  transition: opacity 0.15s, color 0.15s;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
   flex-shrink: 0;
 }
 
@@ -4466,7 +4496,9 @@ label:has(input[type="checkbox"]) {
   background: transparent;
   text-align: left;
   width: 100%;
-  transition: background 0.1s, color 0.1s;
+  transition:
+    background 0.1s,
+    color 0.1s;
 }
 
 .admin-nav-item:hover {
@@ -4647,7 +4679,9 @@ input.is-invalid {
   background: none;
   border: none;
   cursor: pointer;
-  transition: color 0.15s, box-shadow 0.15s;
+  transition:
+    color 0.15s,
+    box-shadow 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4801,7 +4835,9 @@ input.is-invalid {
   background: var(--bg-hover);
   border-radius: 22px;
   border: 1px solid var(--border);
-  transition: background 0.2s, border-color 0.2s;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
 }
 
 .toggle-slider::before {
@@ -4813,7 +4849,9 @@ input.is-invalid {
   bottom: 2px;
   background: var(--text-muted);
   border-radius: 50%;
-  transition: transform 0.2s, background 0.2s;
+  transition:
+    transform 0.2s,
+    background 0.2s;
 }
 
 .toggle-switch input:checked + .toggle-slider {
@@ -4868,7 +4906,9 @@ input.is-invalid {
 .roles-save-success {
   background: var(--success, #2ea043) !important;
   border-color: var(--success, #2ea043) !important;
-  transition: background 0.3s, border-color 0.3s;
+  transition:
+    background 0.3s,
+    border-color 0.3s;
 }
 
 .roles-perms-search-wrap {

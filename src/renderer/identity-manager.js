@@ -54,7 +54,9 @@ async function render() {
         const result = await window.gimodi.identity.export(btn.dataset.fp);
         if (!result.canceled) {
           statusEl.textContent = `Exported to ${result.filePath}`;
-          setTimeout(() => { statusEl.textContent = ''; }, 4000);
+          setTimeout(() => {
+            statusEl.textContent = '';
+          }, 4000);
         }
       } catch (err) {
         statusEl.textContent = err.message || 'Export failed.';
@@ -83,7 +85,9 @@ async function render() {
       let done = false;
       /** @param {boolean} save */
       async function finish(save) {
-        if (done) return;
+        if (done) {
+          return;
+        }
         done = true;
         const newName = input.value.trim();
         if (save && newName && newName !== currentName) {
@@ -98,8 +102,14 @@ async function render() {
 
       input.addEventListener('blur', () => finish(true));
       input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-        if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          input.blur();
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        }
       });
     });
   }
@@ -129,8 +139,12 @@ btnCreateCancel.addEventListener('click', () => {
 
 btnCreateConfirm.addEventListener('click', handleCreate);
 inputName.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') handleCreate();
-  if (e.key === 'Escape') createForm.classList.remove('active');
+  if (e.key === 'Enter') {
+    handleCreate();
+  }
+  if (e.key === 'Escape') {
+    createForm.classList.remove('active');
+  }
 });
 
 /**
@@ -162,7 +176,9 @@ btnImport.addEventListener('click', async () => {
     const result = await window.gimodi.identity.import();
     if (!result.canceled) {
       statusEl.textContent = `Imported "${result.identity.name}" successfully.`;
-      setTimeout(() => { statusEl.textContent = ''; }, 4000);
+      setTimeout(() => {
+        statusEl.textContent = '';
+      }, 4000);
       render();
     }
   } catch (err) {

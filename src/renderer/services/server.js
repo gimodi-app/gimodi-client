@@ -12,10 +12,16 @@ const nullTarget = {
   tempChannelDeleteDelay: 180,
   address: null,
   connected: false,
-  hasPermission() { return false; },
-  request() { return Promise.reject(new Error('Not connected')); },
+  hasPermission() {
+    return false;
+  },
+  request() {
+    return Promise.reject(new Error('Not connected'));
+  },
   send() {},
-  connect() { return Promise.reject(new Error('Use connectionManager.connect()')); },
+  connect() {
+    return Promise.reject(new Error('Use connectionManager.connect()'));
+  },
   disconnect() {},
   addEventListener() {},
   removeEventListener() {},
@@ -43,12 +49,16 @@ const serverService = new Proxy(nullTarget, {
     const conn = connectionManager.getActive();
     if (!conn) {
       const val = nullTarget[prop];
-      if (typeof val === 'function') return val.bind(nullTarget);
+      if (typeof val === 'function') {
+        return val.bind(nullTarget);
+      }
       return val;
     }
 
     const val = conn[prop];
-    if (typeof val === 'function') return val.bind(conn);
+    if (typeof val === 'function') {
+      return val.bind(conn);
+    }
     return val;
   },
 

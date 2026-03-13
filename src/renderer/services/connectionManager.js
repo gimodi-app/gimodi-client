@@ -67,8 +67,12 @@ class ConnectionManager extends EventTarget {
    * @param {string} key
    */
   switchView(key) {
-    if (key === this._activeKey) return;
-    if (!this._connections.has(key)) return;
+    if (key === this._activeKey) {
+      return;
+    }
+    if (!this._connections.has(key)) {
+      return;
+    }
 
     const oldKey = this._activeKey;
     const oldConn = oldKey ? this._connections.get(oldKey) : null;
@@ -77,9 +81,11 @@ class ConnectionManager extends EventTarget {
     this._rebindProxyListeners(oldConn, newConn);
     this._activeKey = key;
 
-    this.dispatchEvent(new CustomEvent('view-switched', {
-      detail: { from: oldKey, to: key },
-    }));
+    this.dispatchEvent(
+      new CustomEvent('view-switched', {
+        detail: { from: oldKey, to: key },
+      }),
+    );
   }
 
   /**
@@ -87,7 +93,9 @@ class ConnectionManager extends EventTarget {
    */
   disconnect(key) {
     const conn = this._connections.get(key);
-    if (!conn) return;
+    if (!conn) {
+      return;
+    }
 
     conn.disconnect();
     this._connections.delete(key);
@@ -109,9 +117,11 @@ class ConnectionManager extends EventTarget {
       }
     }
 
-    this.dispatchEvent(new CustomEvent('connection-removed', {
-      detail: { key },
-    }));
+    this.dispatchEvent(
+      new CustomEvent('connection-removed', {
+        detail: { key },
+      }),
+    );
   }
 
   /**
@@ -122,7 +132,9 @@ class ConnectionManager extends EventTarget {
       conn.disconnect();
     }
     const oldActive = this._activeKey ? this._connections.get(this._activeKey) : null;
-    if (oldActive) this._unbindProxyListeners(oldActive);
+    if (oldActive) {
+      this._unbindProxyListeners(oldActive);
+    }
     this._connections.clear();
     this._serverStates.clear();
     this._credentials.clear();
@@ -155,9 +167,11 @@ class ConnectionManager extends EventTarget {
       }
     }
 
-    this.dispatchEvent(new CustomEvent('connection-lost', {
-      detail: { key, reason, hadVoice },
-    }));
+    this.dispatchEvent(
+      new CustomEvent('connection-lost', {
+        detail: { key, reason, hadVoice },
+      }),
+    );
   }
 
   /**
@@ -165,9 +179,11 @@ class ConnectionManager extends EventTarget {
    */
   setVoiceServer(key) {
     this._voiceKey = key;
-    this.dispatchEvent(new CustomEvent('voice-server-changed', {
-      detail: { key },
-    }));
+    this.dispatchEvent(
+      new CustomEvent('voice-server-changed', {
+        detail: { key },
+      }),
+    );
   }
 
   /**
@@ -175,16 +191,20 @@ class ConnectionManager extends EventTarget {
    */
   clearVoiceServer() {
     this._voiceKey = null;
-    this.dispatchEvent(new CustomEvent('voice-server-changed', {
-      detail: { key: null },
-    }));
+    this.dispatchEvent(
+      new CustomEvent('voice-server-changed', {
+        detail: { key: null },
+      }),
+    );
   }
 
   /**
    * @returns {ServerService|null}
    */
   getActive() {
-    if (!this._activeKey) return null;
+    if (!this._activeKey) {
+      return null;
+    }
     return this._connections.get(this._activeKey) || null;
   }
 
@@ -192,7 +212,9 @@ class ConnectionManager extends EventTarget {
    * @returns {ServerService|null}
    */
   getVoice() {
-    if (!this._voiceKey) return null;
+    if (!this._voiceKey) {
+      return null;
+    }
     return this._connections.get(this._voiceKey) || null;
   }
 
@@ -281,9 +303,7 @@ class ConnectionManager extends EventTarget {
    * @param {object} [options]
    */
   removeProxyListener(type, listener, options) {
-    const idx = this._proxyListeners.findIndex(
-      l => l.type === type && l.listener === listener
-    );
+    const idx = this._proxyListeners.findIndex((l) => l.type === type && l.listener === listener);
     if (idx >= 0) {
       this._proxyListeners.splice(idx, 1);
     }
@@ -299,8 +319,12 @@ class ConnectionManager extends EventTarget {
    */
   _rebindProxyListeners(oldConn, newConn) {
     for (const { type, listener, options } of this._proxyListeners) {
-      if (oldConn) oldConn.removeEventListener(type, listener, options);
-      if (newConn) newConn.addEventListener(type, listener, options);
+      if (oldConn) {
+        oldConn.removeEventListener(type, listener, options);
+      }
+      if (newConn) {
+        newConn.addEventListener(type, listener, options);
+      }
     }
   }
 

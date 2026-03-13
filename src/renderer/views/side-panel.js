@@ -30,7 +30,9 @@ export function initSidePanel(getChannelId) {
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
       const serverView = document.getElementById('view-server');
-      if (!serverView.classList.contains('active')) return;
+      if (!serverView.classList.contains('active')) {
+        return;
+      }
       e.preventDefault();
       openSearchPanel();
     }
@@ -57,11 +59,15 @@ function openSearchPanel() {
  */
 export function closeSidePanel() {
   panel.classList.remove('open');
-  panel.addEventListener('transitionend', () => {
-    if (!panel.classList.contains('open')) {
-      panel.classList.add('hidden');
-    }
-  }, { once: true });
+  panel.addEventListener(
+    'transitionend',
+    () => {
+      if (!panel.classList.contains('open')) {
+        panel.classList.add('hidden');
+      }
+    },
+    { once: true },
+  );
 }
 
 /**
@@ -101,7 +107,7 @@ async function renderResults(messages, query) {
     return;
   }
 
-  const userIds = [...new Set(messages.map(m => m.userId).filter(Boolean))];
+  const userIds = [...new Set(messages.map((m) => m.userId).filter(Boolean))];
   if (userIds.length > 0) {
     await resolveNicknames(userIds);
   }
@@ -111,7 +117,7 @@ async function renderResults(messages, query) {
     const div = document.createElement('div');
     div.className = 'search-result-item';
 
-    const nickname = msg.userId ? (getCachedNickname(msg.userId) || 'Unknown') : 'Unknown';
+    const nickname = msg.userId ? getCachedNickname(msg.userId) || 'Unknown' : 'Unknown';
     const time = formatDateTime(msg.timestamp);
     const snippet = createSnippet(msg.content, query);
 

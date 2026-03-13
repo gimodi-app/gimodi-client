@@ -1,3 +1,5 @@
+/* global AudioWorkletProcessor, registerProcessor */
+
 /**
  * RNNoise AudioWorklet Processor
  *
@@ -10,6 +12,7 @@
  */
 
 const RNNOISE_FRAME_SIZE = 480;
+// eslint-disable-next-line no-unused-vars
 const WORKLET_FRAME_SIZE = 128;
 // LCM(128, 480) = 1920 - but we use 3840 (2×LCM) for extra headroom
 const BUFFER_SIZE = 3840;
@@ -59,17 +62,16 @@ class RNNoiseProcessor extends AudioWorkletProcessor {
           a: (requestedSize) => {
             const oldSize = memory.buffer.byteLength;
             const maxSize = 2147483648;
-            if (requestedSize > maxSize) return 0;
-            const newSize = Math.min(
-              maxSize,
-              Math.max(requestedSize, oldSize * 2)
-            );
+            if (requestedSize > maxSize) {
+              return 0;
+            }
+            const newSize = Math.min(maxSize, Math.max(requestedSize, oldSize * 2));
             const pages = (newSize - oldSize + 65535) >>> 16;
             try {
               memory.grow(pages);
               updateViews();
               return 1;
-            } catch (e) {
+            } catch {
               return 0;
             }
           },
@@ -90,7 +92,9 @@ class RNNoiseProcessor extends AudioWorkletProcessor {
       HEAPF32 = new Float32Array(wasmMemory.buffer);
 
       // Call __wasm_call_ctors (export "d")
-      if (exports.d) exports.d();
+      if (exports.d) {
+        exports.d();
+      }
 
       // Store exports
       this._malloc = exports.e;
@@ -130,12 +134,16 @@ class RNNoiseProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs, outputs) {
-    if (this._destroyed) return false;
+    if (this._destroyed) {
+      return false;
+    }
 
     const input = inputs[0];
     const output = outputs[0];
 
-    if (!input || !input[0] || !output || !output[0]) return true;
+    if (!input || !input[0] || !output || !output[0]) {
+      return true;
+    }
 
     const inputData = input[0];
     const outputData = output[0];
@@ -165,10 +173,8 @@ class RNNoiseProcessor extends AudioWorkletProcessor {
       // Copy 480 samples from input ring buffer to WASM heap
       // RNNoise expects samples scaled to 16-bit range [-32768, 32767]
       for (let i = 0; i < RNNOISE_FRAME_SIZE; i++) {
-        this._HEAPF32[heapOffset + i] =
-          this._inputBuffer[this._denoiseReadIndex] * 32768;
-        this._denoiseReadIndex =
-          (this._denoiseReadIndex + 1) % BUFFER_SIZE;
+        this._HEAPF32[heapOffset + i] = this._inputBuffer[this._denoiseReadIndex] * 32768;
+        this._denoiseReadIndex = (this._denoiseReadIndex + 1) % BUFFER_SIZE;
       }
       this._samplesAvailableForDenoise -= RNNOISE_FRAME_SIZE;
 
@@ -178,10 +184,7 @@ class RNNoiseProcessor extends AudioWorkletProcessor {
       // Copy denoised samples back to output ring buffer
       // Scale back from 16-bit range to [-1, 1]
       for (let i = 0; i < RNNOISE_FRAME_SIZE; i++) {
-        this._outputBuffer[
-          (this._outputReadIndex + this._samplesAvailableForOutput + i) %
-            BUFFER_SIZE
-        ] = this._HEAPF32[heapOffset + i] / 32768;
+        this._outputBuffer[(this._outputReadIndex + this._samplesAvailableForOutput + i) % BUFFER_SIZE] = this._HEAPF32[heapOffset + i] / 32768;
       }
       this._samplesAvailableForOutput += RNNOISE_FRAME_SIZE;
 
@@ -193,8 +196,7 @@ class RNNoiseProcessor extends AudioWorkletProcessor {
     if (this._samplesAvailableForOutput >= outputData.length) {
       for (let i = 0; i < outputData.length; i++) {
         outputData[i] = this._outputBuffer[this._outputReadIndex];
-        this._outputReadIndex =
-          (this._outputReadIndex + 1) % BUFFER_SIZE;
+        this._outputReadIndex = (this._outputReadIndex + 1) % BUFFER_SIZE;
       }
       this._samplesAvailableForOutput -= outputData.length;
     } else {

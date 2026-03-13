@@ -113,32 +113,38 @@ class VoiceService extends EventTarget {
 
     this.sendTransport.on('connect', ({ dtlsParameters }, callback, errback) => {
       log('Send transport connect event');
-      getVoiceConn().request('voice:connect-transport', {
-        transportId: this.sendTransport.id,
-        dtlsParameters,
-      }).then(() => {
-        log('Send transport connected');
-        callback();
-      }).catch((e) => {
-        err('Send transport connect failed:', e);
-        errback(e);
-      });
+      getVoiceConn()
+        .request('voice:connect-transport', {
+          transportId: this.sendTransport.id,
+          dtlsParameters,
+        })
+        .then(() => {
+          log('Send transport connected');
+          callback();
+        })
+        .catch((e) => {
+          err('Send transport connect failed:', e);
+          errback(e);
+        });
     });
 
     this.sendTransport.on('produce', ({ kind, rtpParameters, appData }, callback, errback) => {
       log('Send transport produce event, kind:', kind);
-      getVoiceConn().request('voice:produce', {
-        transportId: this.sendTransport.id,
-        kind,
-        rtpParameters,
-        appData,
-      }).then(({ producerId }) => {
-        log('Produced:', producerId, 'kind:', kind);
-        callback({ id: producerId });
-      }).catch((e) => {
-        err('Produce failed:', e);
-        errback(e);
-      });
+      getVoiceConn()
+        .request('voice:produce', {
+          transportId: this.sendTransport.id,
+          kind,
+          rtpParameters,
+          appData,
+        })
+        .then(({ producerId }) => {
+          log('Produced:', producerId, 'kind:', kind);
+          callback({ id: producerId });
+        })
+        .catch((e) => {
+          err('Produce failed:', e);
+          errback(e);
+        });
     });
 
     this.sendTransport.on('connectionstatechange', (state) => {
@@ -163,16 +169,19 @@ class VoiceService extends EventTarget {
 
     this.recvTransport.on('connect', ({ dtlsParameters }, callback, errback) => {
       log('Recv transport connect event');
-      getVoiceConn().request('voice:connect-transport', {
-        transportId: this.recvTransport.id,
-        dtlsParameters,
-      }).then(() => {
-        log('Recv transport connected');
-        callback();
-      }).catch((e) => {
-        err('Recv transport connect failed:', e);
-        errback(e);
-      });
+      getVoiceConn()
+        .request('voice:connect-transport', {
+          transportId: this.recvTransport.id,
+          dtlsParameters,
+        })
+        .then(() => {
+          log('Recv transport connected');
+          callback();
+        })
+        .catch((e) => {
+          err('Recv transport connect failed:', e);
+          errback(e);
+        });
     });
 
     this.recvTransport.on('connectionstatechange', (state) => {
@@ -198,7 +207,9 @@ class VoiceService extends EventTarget {
     }
 
     const audioConstraints = {};
-    if (this.selectedMicId) audioConstraints.deviceId = { exact: this.selectedMicId };
+    if (this.selectedMicId) {
+      audioConstraints.deviceId = { exact: this.selectedMicId };
+    }
     if (this.noiseSuppression) {
       audioConstraints.noiseSuppression = false;
       audioConstraints.echoCancellation = true;
@@ -272,7 +283,9 @@ class VoiceService extends EventTarget {
     }
 
     const videoConstraints = {};
-    if (this.selectedCameraId) videoConstraints.deviceId = { exact: this.selectedCameraId };
+    if (this.selectedCameraId) {
+      videoConstraints.deviceId = { exact: this.selectedCameraId };
+    }
     const constraints = { video: Object.keys(videoConstraints).length > 0 ? videoConstraints : true };
     log('Webcam getUserMedia with:', JSON.stringify(constraints));
 
@@ -305,12 +318,16 @@ class VoiceService extends EventTarget {
    * @returns {void}
    */
   stopWebcam() {
-    if (!this.webcamProducer) return;
+    if (!this.webcamProducer) {
+      return;
+    }
     log('Stopping webcam producer:', this.webcamProducer.id);
     const track = this.webcamProducer.track;
     this.webcamProducer.close();
     this.webcamProducer = null;
-    if (track) track.stop();
+    if (track) {
+      track.stop();
+    }
     getVoiceConn()?.send('webcam:stop', {});
     this.dispatchEvent(new CustomEvent('webcam-stopped'));
   }
@@ -319,7 +336,9 @@ class VoiceService extends EventTarget {
    * @returns {boolean} Whether the mic is now muted
    */
   toggleMute() {
-    if (!this.micProducer) return false;
+    if (!this.micProducer) {
+      return false;
+    }
 
     if (this.pushToTalkEnabled) {
       this.setPushToTalk(false);
@@ -329,9 +348,11 @@ class VoiceService extends EventTarget {
         log('Mic unmuted (PTT disabled)');
       }
       this._broadcastMuteState();
-      this.dispatchEvent(new CustomEvent('mute-changed', {
-        detail: { muted: this._manualMute },
-      }));
+      this.dispatchEvent(
+        new CustomEvent('mute-changed', {
+          detail: { muted: this._manualMute },
+        }),
+      );
       return this._manualMute;
     }
 
@@ -344,9 +365,11 @@ class VoiceService extends EventTarget {
       log('Mic unmuted');
     }
     this._broadcastMuteState();
-    this.dispatchEvent(new CustomEvent('mute-changed', {
-      detail: { muted: this._manualMute },
-    }));
+    this.dispatchEvent(
+      new CustomEvent('mute-changed', {
+        detail: { muted: this._manualMute },
+      }),
+    );
     return this._manualMute;
   }
 
@@ -370,9 +393,11 @@ class VoiceService extends EventTarget {
     }
 
     this._broadcastMuteState();
-    this.dispatchEvent(new CustomEvent('deafen-changed', {
-      detail: { deafened: this._deafened },
-    }));
+    this.dispatchEvent(
+      new CustomEvent('deafen-changed', {
+        detail: { deafened: this._deafened },
+      }),
+    );
 
     return this._deafened;
   }
@@ -416,8 +441,12 @@ class VoiceService extends EventTarget {
    * @returns {void}
    */
   handlePTTKeyDown() {
-    if (!this.pushToTalkEnabled || this._deafened || !this.micProducer) return;
-    if (this._pttActive) return;
+    if (!this.pushToTalkEnabled || this._deafened || !this.micProducer) {
+      return;
+    }
+    if (this._pttActive) {
+      return;
+    }
 
     this._pttActive = true;
     this.micProducer.resume();
@@ -427,9 +456,11 @@ class VoiceService extends EventTarget {
     const _myId = getVoiceConn()?.clientId;
     if (_myId && !this._talkingClients.has(_myId)) {
       this._talkingClients.add(_myId);
-      this.dispatchEvent(new CustomEvent('talking-changed', {
-        detail: { clientId: _myId, talking: true },
-      }));
+      this.dispatchEvent(
+        new CustomEvent('talking-changed', {
+          detail: { clientId: _myId, talking: true },
+        }),
+      );
     }
   }
 
@@ -437,7 +468,9 @@ class VoiceService extends EventTarget {
    * @returns {void}
    */
   handlePTTKeyUp() {
-    if (!this.pushToTalkEnabled || !this._pttActive) return;
+    if (!this.pushToTalkEnabled || !this._pttActive) {
+      return;
+    }
 
     this._pttActive = false;
     if (this.micProducer) {
@@ -449,9 +482,11 @@ class VoiceService extends EventTarget {
     const _myId2 = getVoiceConn()?.clientId;
     if (_myId2 && this._talkingClients.has(_myId2)) {
       this._talkingClients.delete(_myId2);
-      this.dispatchEvent(new CustomEvent('talking-changed', {
-        detail: { clientId: _myId2, talking: false },
-      }));
+      this.dispatchEvent(
+        new CustomEvent('talking-changed', {
+          detail: { clientId: _myId2, talking: false },
+        }),
+      );
     }
   }
 
@@ -486,17 +521,21 @@ class VoiceService extends EventTarget {
       consumer.on('producerclose', () => {
         log(`Consumer ${consumerId} producerclose from ${nickname}`);
         this._consumers.delete(consumerId);
-        this.dispatchEvent(new CustomEvent('consumer-closed', {
-          detail: { consumerId, clientId, kind, screen: !!screen, screenAudio: !!screenAudio, webcam: !!webcam },
-        }));
+        this.dispatchEvent(
+          new CustomEvent('consumer-closed', {
+            detail: { consumerId, clientId, kind, screen: !!screen, screenAudio: !!screenAudio, webcam: !!webcam },
+          }),
+        );
       });
 
       await getVoiceConn()?.request('voice:consumer-resume', { consumerId });
       log(`Consumer resumed on server: ${consumerId}`);
 
-      this.dispatchEvent(new CustomEvent('new-consumer', {
-        detail: { consumer, clientId, nickname, kind, screen: !!screen, screenAudio: !!screenAudio, webcam: !!webcam },
-      }));
+      this.dispatchEvent(
+        new CustomEvent('new-consumer', {
+          detail: { consumer, clientId, nickname, kind, screen: !!screen, screenAudio: !!screenAudio, webcam: !!webcam },
+        }),
+      );
     } catch (e) {
       err('Consume failed:', e);
     }
@@ -536,9 +575,9 @@ class VoiceService extends EventTarget {
   async getAudioDevices() {
     const devices = await navigator.mediaDevices.enumerateDevices();
     return {
-      microphones: devices.filter(d => d.kind === 'audioinput' && d.deviceId !== 'default'),
-      speakers: devices.filter(d => d.kind === 'audiooutput' && d.deviceId !== 'default'),
-      cameras: devices.filter(d => d.kind === 'videoinput' && d.deviceId !== 'default'),
+      microphones: devices.filter((d) => d.kind === 'audioinput' && d.deviceId !== 'default'),
+      speakers: devices.filter((d) => d.kind === 'audiooutput' && d.deviceId !== 'default'),
+      cameras: devices.filter((d) => d.kind === 'videoinput' && d.deviceId !== 'default'),
     };
   }
 
@@ -590,8 +629,12 @@ class VoiceService extends EventTarget {
     const wasDeafened = this._deafened;
     this.stopMicrophone();
     await this.startMicrophone();
-    if (wasMuted) this._manualMute = true;
-    if (wasDeafened) this._deafened = true;
+    if (wasMuted) {
+      this._manualMute = true;
+    }
+    if (wasDeafened) {
+      this._deafened = true;
+    }
     if ((wasMuted || wasDeafened) && this.micProducer) {
       this.micProducer.pause();
     }
@@ -704,13 +747,17 @@ class VoiceService extends EventTarget {
     const entry = this._analysers.get(clientId);
     if (entry) {
       entry.source.disconnect();
-      if (entry.track) entry.track.stop();
+      if (entry.track) {
+        entry.track.stop();
+      }
       this._analysers.delete(clientId);
       if (this._talkingClients.has(clientId)) {
         this._talkingClients.delete(clientId);
-        this.dispatchEvent(new CustomEvent('talking-changed', {
-          detail: { clientId, talking: false },
-        }));
+        this.dispatchEvent(
+          new CustomEvent('talking-changed', {
+            detail: { clientId, talking: false },
+          }),
+        );
       }
     }
     if (this._analysers.size === 0) {
@@ -720,7 +767,9 @@ class VoiceService extends EventTarget {
 
   /** @private */
   _startVADLoop() {
-    if (this._vadInterval) return;
+    if (this._vadInterval) {
+      return;
+    }
     this._vadInterval = setInterval(() => {
       const now = Date.now();
       const myClientId = getVoiceConn()?.clientId;
@@ -728,9 +777,11 @@ class VoiceService extends EventTarget {
         if (myClientId && clientId === myClientId && (this._manualMute || this._deafened) && !this._pttActive) {
           if (this._talkingClients.has(clientId)) {
             this._talkingClients.delete(clientId);
-            this.dispatchEvent(new CustomEvent('talking-changed', {
-              detail: { clientId, talking: false },
-            }));
+            this.dispatchEvent(
+              new CustomEvent('talking-changed', {
+                detail: { clientId, talking: false },
+              }),
+            );
           }
           continue;
         }
@@ -746,7 +797,9 @@ class VoiceService extends EventTarget {
         if (myClientId && clientId === myClientId && this.voiceActivationLevel > 0 && this.micProducer && !this._manualMute && !this._deafened) {
           if (avg > this.voiceActivationLevel) {
             entry._lastVoiceGate = now;
-            if (this.micProducer.paused) this.micProducer.resume();
+            if (this.micProducer.paused) {
+              this.micProducer.resume();
+            }
           } else if (!this.micProducer.paused && now - (entry._lastVoiceGate || 0) > 300) {
             this.micProducer.pause();
           }
@@ -757,22 +810,26 @@ class VoiceService extends EventTarget {
         }
 
         const isLocal = myClientId && clientId === myClientId;
-        const talkThreshold = (isLocal && this.voiceActivationLevel > 0) ? this.voiceActivationLevel : 15;
+        const talkThreshold = isLocal && this.voiceActivationLevel > 0 ? this.voiceActivationLevel : 15;
 
         const wasTalking = this._talkingClients.has(clientId);
         if (avg > talkThreshold) {
           entry.lastActivity = now;
           if (!wasTalking) {
             this._talkingClients.add(clientId);
-            this.dispatchEvent(new CustomEvent('talking-changed', {
-              detail: { clientId, talking: true },
-            }));
+            this.dispatchEvent(
+              new CustomEvent('talking-changed', {
+                detail: { clientId, talking: true },
+              }),
+            );
           }
         } else if (wasTalking && now - entry.lastActivity > 300) {
           this._talkingClients.delete(clientId);
-          this.dispatchEvent(new CustomEvent('talking-changed', {
-            detail: { clientId, talking: false },
-          }));
+          this.dispatchEvent(
+            new CustomEvent('talking-changed', {
+              detail: { clientId, talking: false },
+            }),
+          );
         }
       }
     }, 50);

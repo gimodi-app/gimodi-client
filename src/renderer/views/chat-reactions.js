@@ -65,7 +65,9 @@ export function showQuickReactionPicker(x, y, messageId) {
   closeEmojiPicker();
 
   const msgEl = document.querySelector(`[data-msg-id="${messageId}"]`);
-  if (msgEl) msgEl.classList.add('picker-active');
+  if (msgEl) {
+    msgEl.classList.add('picker-active');
+  }
 
   const bar = document.createElement('div');
   bar.id = 'quick-reaction-picker';
@@ -94,7 +96,7 @@ export function showQuickReactionPicker(x, y, messageId) {
     showEmojiPicker({
       x: rect.left,
       y: rect.bottom + 4,
-      onSelect: (emoji) => chatService.react(messageId, emoji)
+      onSelect: (emoji) => chatService.react(messageId, emoji),
     });
   });
   bar.appendChild(moreBtn);
@@ -105,10 +107,10 @@ export function showQuickReactionPicker(x, y, messageId) {
 
   const barRect = bar.getBoundingClientRect();
   if (barRect.right > window.innerWidth) {
-    bar.style.left = (window.innerWidth - barRect.width - 8) + 'px';
+    bar.style.left = window.innerWidth - barRect.width - 8 + 'px';
   }
   if (barRect.bottom > window.innerHeight) {
-    bar.style.top = (y - barRect.height - 8) + 'px';
+    bar.style.top = y - barRect.height - 8 + 'px';
   }
   if (barRect.left < 0) {
     bar.style.left = '8px';
@@ -149,12 +151,18 @@ function closeQuickReactionPicker() {
 export function onReactionUpdate(e) {
   const { messageId, reactions } = e.detail;
   const chatMessages = document.getElementById('chat-messages');
-  if (!chatMessages) return;
+  if (!chatMessages) {
+    return;
+  }
   const msgEl = chatMessages.querySelector(`[data-msg-id="${messageId}"]`);
-  if (!msgEl) return;
+  if (!msgEl) {
+    return;
+  }
 
   const oldRow = msgEl.querySelector('.reactions-row');
-  if (oldRow) oldRow.remove();
+  if (oldRow) {
+    oldRow.remove();
+  }
 
   if (reactions && reactions.length > 0) {
     renderReactions(msgEl, messageId, reactions);

@@ -77,7 +77,9 @@ export class ServerService extends EventTarget {
 
       let settled = false;
       const settle = (fn, value) => {
-        if (settled) return;
+        if (settled) {
+          return;
+        }
         settled = true;
         clearTimeout(connectTimer);
         fn(value);
@@ -181,8 +183,8 @@ export class ServerService extends EventTarget {
    * @param {string} reason
    */
   _rejectPendingRequests(reason) {
-    for (const [id, { reject }] of this._pendingRequests) {
-      reject(new Error(reason));
+    for (const entry of this._pendingRequests.values()) {
+      entry.reject(new Error(reason));
     }
     this._pendingRequests.clear();
   }
@@ -236,7 +238,9 @@ export class ServerService extends EventTarget {
 
     this._resetInactivityTimeout();
 
-    if (type === 'server:ping') return;
+    if (type === 'server:ping') {
+      return;
+    }
 
     if (id && this._pendingRequests.has(id)) {
       const { resolve, reject } = this._pendingRequests.get(id);
@@ -253,11 +257,12 @@ export class ServerService extends EventTarget {
     }
 
     if (type === 'server:kicked' || type === 'server:banned' || type === 'server:shutdown') {
-      this._disconnectReason = type === 'server:banned'
-        ? `Banned: ${data.reason || 'No reason given.'}`
-        : type === 'server:shutdown'
-          ? `Server shut down: ${data.reason || 'The server is shutting down.'}`
-          : `Kicked: ${data.reason || 'No reason given.'}`;
+      this._disconnectReason =
+        type === 'server:banned'
+          ? `Banned: ${data.reason || 'No reason given.'}`
+          : type === 'server:shutdown'
+            ? `Server shut down: ${data.reason || 'The server is shutting down.'}`
+            : `Kicked: ${data.reason || 'No reason given.'}`;
     }
 
     this.dispatchEvent(new CustomEvent(type, { detail: data }));

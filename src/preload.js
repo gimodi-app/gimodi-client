@@ -81,8 +81,12 @@ contextBridge.exposeInMainWorld('gimodi', {
     open: () => ipcRenderer.invoke('wcpopout:open'),
     close: () => ipcRenderer.send('wcpopout:close'),
     sendSignal: (data) => ipcRenderer.send('wcpopout:to-popout', data),
-    onSignal: (cb) => { ipcRenderer.on('wcpopout:from-popout', (_, data) => cb(data)); },
-    onClosed: (cb) => { ipcRenderer.on('wcpopout:closed', () => cb()); },
+    onSignal: (cb) => {
+      ipcRenderer.on('wcpopout:from-popout', (_, data) => cb(data));
+    },
+    onClosed: (cb) => {
+      ipcRenderer.on('wcpopout:closed', () => cb());
+    },
     removeListeners: () => {
       ipcRenderer.removeAllListeners('wcpopout:from-popout');
       ipcRenderer.removeAllListeners('wcpopout:closed');
@@ -92,8 +96,12 @@ contextBridge.exposeInMainWorld('gimodi', {
     open: () => ipcRenderer.invoke('popout:open'),
     close: () => ipcRenderer.send('popout:close'),
     sendSignal: (data) => ipcRenderer.send('popout:to-popout', data),
-    onSignal: (cb) => { ipcRenderer.on('popout:from-popout', (_, data) => cb(data)); },
-    onClosed: (cb) => { ipcRenderer.on('popout:closed', () => cb()); },
+    onSignal: (cb) => {
+      ipcRenderer.on('popout:from-popout', (_, data) => cb(data));
+    },
+    onClosed: (cb) => {
+      ipcRenderer.on('popout:closed', () => cb());
+    },
     removeListeners: () => {
       ipcRenderer.removeAllListeners('popout:from-popout');
       ipcRenderer.removeAllListeners('popout:closed');

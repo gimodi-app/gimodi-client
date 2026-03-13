@@ -13,9 +13,15 @@ function formatUptime(ms) {
   const secs = seconds % 60;
 
   const parts = [];
-  if (days > 0) parts.push(`${days}d`);
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0) parts.push(`${minutes}m`);
+  if (days > 0) {
+    parts.push(`${days}d`);
+  }
+  if (hours > 0) {
+    parts.push(`${hours}h`);
+  }
+  if (minutes > 0) {
+    parts.push(`${minutes}m`);
+  }
   parts.push(`${secs}s`);
   return parts.join(' ');
 }
@@ -83,8 +89,10 @@ const COMMAND_REGISTRY = {
 
       const close = () => overlay.remove();
       okBtn.addEventListener('click', close);
-      overlay.addEventListener('keydown', e => {
-        if (e.key === 'Enter' || e.key === 'Escape') close();
+      overlay.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === 'Escape') {
+          close();
+        }
       });
     },
   },
@@ -102,7 +110,9 @@ const COMMAND_REGISTRY = {
     permission: 'chat.slash.purge',
     execute({ args }) {
       const nickname = args.startsWith('@') ? args.slice(1) : args;
-      if (!nickname) return;
+      if (!nickname) {
+        return;
+      }
       serverService.send('chat:command', { name: 'purge', nickname });
     },
   },
@@ -129,7 +139,9 @@ const COMMAND_REGISTRY = {
  * @returns {boolean}
  */
 export function tryHandleCommand(input, context) {
-  if (!input.startsWith('/')) return false;
+  if (!input.startsWith('/')) {
+    return false;
+  }
 
   const trimmed = input.slice(1).trim();
   const spaceIdx = trimmed.indexOf(' ');
@@ -137,7 +149,9 @@ export function tryHandleCommand(input, context) {
   const args = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim();
 
   const cmd = COMMAND_REGISTRY[name];
-  if (!cmd) return false;
+  if (!cmd) {
+    return false;
+  }
 
   cmd.execute({ ...context, args });
   return true;

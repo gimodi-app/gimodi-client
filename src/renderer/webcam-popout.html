@@ -1,94 +1,126 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Webcam</title>
-  <link rel="stylesheet" href="../../node_modules/bootstrap-icons/font/bootstrap-icons.css">
-  <style>
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: #000;
-      overflow: hidden;
-      height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
-    video { width: 100%; height: 100%; object-fit: contain; }
-    video.mirrored { transform: scaleX(-1); }
-    .toolbar {
-      position: fixed; top: 8px; right: 8px;
-      display: flex; gap: 6px; z-index: 10;
-      opacity: 0; transition: opacity 0.2s;
-    }
-    body:hover .toolbar { opacity: 1; }
-    .toolbar-btn {
-      background: rgba(0,0,0,0.7);
-      border: 1px solid rgba(255,255,255,0.15);
-      color: #eee; padding: 6px 10px;
-      border-radius: 6px; font-size: 16px; cursor: pointer;
-    }
-    .toolbar-btn:hover { background: rgba(0,0,0,0.9); }
-    .label {
-      position: fixed; top: 8px; left: 8px;
-      background: rgba(0,0,0,0.7); color: #eee;
-      padding: 4px 10px; border-radius: 6px;
-      font-size: 12px; z-index: 10;
-      opacity: 0; transition: opacity 0.2s;
-    }
-    body:hover .label { opacity: 1; }
-  </style>
-</head>
-<body>
-  <div class="label" id="label"></div>
-  <video id="video" autoplay playsinline muted></video>
-  <div class="toolbar">
-    <button class="toolbar-btn" id="btn-fs" title="Fullscreen"><i class="bi bi-fullscreen"></i></button>
-  </div>
-  <script>
-    const video = document.getElementById('video');
-    const label = document.getElementById('label');
-    const btnFs = document.getElementById('btn-fs');
-
-    function toggleFullscreen() {
-      if (document.fullscreenElement) document.exitFullscreen();
-      else document.documentElement.requestFullscreen();
-    }
-
-    btnFs.addEventListener('click', toggleFullscreen);
-    video.addEventListener('dblclick', toggleFullscreen);
-
-    const pc = new RTCPeerConnection();
-
-    pc.ontrack = (e) => {
-      if (!video.srcObject) {
-        video.srcObject = new MediaStream();
+  <head>
+    <meta charset="UTF-8" />
+    <title>Webcam</title>
+    <link rel="stylesheet" href="../../node_modules/bootstrap-icons/font/bootstrap-icons.css" />
+    <style>
+      *,
+      *::before,
+      *::after {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
       }
-      video.srcObject.addTrack(e.track);
-    };
-
-    pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        window.wcPopout.sendSignal({ type: 'ice', candidate: e.candidate.toJSON() });
+      body {
+        background: #000;
+        overflow: hidden;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
-    };
-
-    window.wcPopout.onSignal(async (data) => {
-      if (data.type === 'offer') {
-        await pc.setRemoteDescription(data.sdp);
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        window.wcPopout.sendSignal({ type: 'answer', sdp: { type: answer.type, sdp: answer.sdp } });
-      } else if (data.type === 'ice') {
-        await pc.addIceCandidate(data.candidate);
-      } else if (data.type === 'meta') {
-        label.textContent = data.label || '';
-        if (data.mirrored) video.classList.add('mirrored');
+      video {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
       }
-    });
+      video.mirrored {
+        transform: scaleX(-1);
+      }
+      .toolbar {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        display: flex;
+        gap: 6px;
+        z-index: 10;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      body:hover .toolbar {
+        opacity: 1;
+      }
+      .toolbar-btn {
+        background: rgba(0, 0, 0, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: #eee;
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 16px;
+        cursor: pointer;
+      }
+      .toolbar-btn:hover {
+        background: rgba(0, 0, 0, 0.9);
+      }
+      .label {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        background: rgba(0, 0, 0, 0.7);
+        color: #eee;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        z-index: 10;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      body:hover .label {
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="label" id="label"></div>
+    <video id="video" autoplay playsinline muted></video>
+    <div class="toolbar">
+      <button class="toolbar-btn" id="btn-fs" title="Fullscreen"><i class="bi bi-fullscreen"></i></button>
+    </div>
+    <script>
+      const video = document.getElementById('video');
+      const label = document.getElementById('label');
+      const btnFs = document.getElementById('btn-fs');
 
-    window.wcPopout.ready();
-  </script>
-</body>
+      function toggleFullscreen() {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else document.documentElement.requestFullscreen();
+      }
+
+      btnFs.addEventListener('click', toggleFullscreen);
+      video.addEventListener('dblclick', toggleFullscreen);
+
+      const pc = new RTCPeerConnection();
+
+      pc.ontrack = (e) => {
+        if (!video.srcObject) {
+          video.srcObject = new MediaStream();
+        }
+        video.srcObject.addTrack(e.track);
+      };
+
+      pc.onicecandidate = (e) => {
+        if (e.candidate) {
+          window.wcPopout.sendSignal({ type: 'ice', candidate: e.candidate.toJSON() });
+        }
+      };
+
+      window.wcPopout.onSignal(async (data) => {
+        if (data.type === 'offer') {
+          await pc.setRemoteDescription(data.sdp);
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          window.wcPopout.sendSignal({ type: 'answer', sdp: { type: answer.type, sdp: answer.sdp } });
+        } else if (data.type === 'ice') {
+          await pc.addIceCandidate(data.candidate);
+        } else if (data.type === 'meta') {
+          label.textContent = data.label || '';
+          if (data.mirrored) video.classList.add('mirrored');
+        }
+      });
+
+      window.wcPopout.ready();
+    </script>
+  </body>
 </html>

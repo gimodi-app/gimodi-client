@@ -49,19 +49,21 @@ hljs.registerLanguage('md', markdown);
 hljs.registerLanguage('typescript', typescript);
 hljs.registerLanguage('ts', typescript);
 
-marked.use(markedHighlight({
-  langPrefix: 'hljs language-',
-  highlight(code, lang) {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return hljs.highlight(code, { language: lang }).value;
-      } catch {
-        // Fall through to no highlighting
+marked.use(
+  markedHighlight({
+    langPrefix: 'hljs language-',
+    highlight(code, lang) {
+      if (lang && hljs.getLanguage(lang)) {
+        try {
+          return hljs.highlight(code, { language: lang }).value;
+        } catch {
+          // Fall through to no highlighting
+        }
       }
-    }
-    return code;
-  }
-}));
+      return code;
+    },
+  }),
+);
 marked.use({
   breaks: true,
   gfm: true,
@@ -85,40 +87,57 @@ export function escapeHtml(str) {
 }
 
 export const EMOTICON_MAP = {
-  ':)': '\u{1F642}', ':-)': '\u{1F642}',
-  ':(': '\u{1F641}', ':-(': '\u{1F641}',
-  ':D': '\u{1F604}', ':-D': '\u{1F604}',
-  ';)': '\u{1F609}', ';-)': '\u{1F609}',
-  ':P': '\u{1F61B}', ':-P': '\u{1F61B}',
-  ':p': '\u{1F61B}', ':-p': '\u{1F61B}',
-  'xD': '\u{1F606}', 'XD': '\u{1F606}',
-  ':O': '\u{1F62E}', ':-O': '\u{1F62E}',
-  ':o': '\u{1F62E}', ':-o': '\u{1F62E}',
-  ":'(": '\u{1F622}', ":'-(": '\u{1F622}',
-  ':*': '\u{1F618}', ':-*': '\u{1F618}',
+  ':)': '\u{1F642}',
+  ':-)': '\u{1F642}',
+  ':(': '\u{1F641}',
+  ':-(': '\u{1F641}',
+  ':D': '\u{1F604}',
+  ':-D': '\u{1F604}',
+  ';)': '\u{1F609}',
+  ';-)': '\u{1F609}',
+  ':P': '\u{1F61B}',
+  ':-P': '\u{1F61B}',
+  ':p': '\u{1F61B}',
+  ':-p': '\u{1F61B}',
+  xD: '\u{1F606}',
+  XD: '\u{1F606}',
+  ':O': '\u{1F62E}',
+  ':-O': '\u{1F62E}',
+  ':o': '\u{1F62E}',
+  ':-o': '\u{1F62E}',
+  ":'(": '\u{1F622}',
+  ":'-(": '\u{1F622}',
+  ':*': '\u{1F618}',
+  ':-*': '\u{1F618}',
   '<3': '\u{2764}\u{FE0F}',
   '</3': '\u{1F494}',
-  'B)': '\u{1F60E}', 'B-)': '\u{1F60E}',
-  ':/': '\u{1F615}', ':-/': '\u{1F615}',
-  ':\\': '\u{1F615}', ':-\\': '\u{1F615}',
-  ':S': '\u{1F616}', ':-S': '\u{1F616}',
-  '>:(': '\u{1F620}', '>:-(': '\u{1F620}',
+  'B)': '\u{1F60E}',
+  'B-)': '\u{1F60E}',
+  ':/': '\u{1F615}',
+  ':-/': '\u{1F615}',
+  ':\\': '\u{1F615}',
+  ':-\\': '\u{1F615}',
+  ':S': '\u{1F616}',
+  ':-S': '\u{1F616}',
+  '>:(': '\u{1F620}',
+  '>:-(': '\u{1F620}',
   ':3': '\u{1F60A}',
-  'o.O': '\u{1F928}', 'O.o': '\u{1F928}',
+  'o.O': '\u{1F928}',
+  'O.o': '\u{1F928}',
   '^_^': '\u{1F60A}',
   '-_-': '\u{1F611}',
-  'T_T': '\u{1F62D}',
+  T_T: '\u{1F62D}',
 };
 
 // Build regex: sort by length descending so longer emoticons match first
 export const EMOTICON_RE = new RegExp(
   '(?<=^|\\s)(' +
-  Object.keys(EMOTICON_MAP)
-    .sort((a, b) => b.length - a.length)
-    .map(k => k.replace(/([.*+?^${}()|[\]\\/<>])/g, '\\$1'))
-    .join('|') +
-  ')(?=$|\\s)',
-  'g'
+    Object.keys(EMOTICON_MAP)
+      .sort((a, b) => b.length - a.length)
+      .map((k) => k.replace(/([.*+?^${}()|[\]\\/<>])/g, '\\$1'))
+      .join('|') +
+    ')(?=$|\\s)',
+  'g',
 );
 
 export const EMOJI_RE = /(\p{Emoji_Presentation}|\p{Extended_Pictographic})(\u{FE0F}|\u{200D}|\p{Emoji_Modifier}|\p{Emoji_Component}|\p{Emoji_Presentation}|\p{Extended_Pictographic})*/gu;
@@ -129,11 +148,15 @@ export const EMOJI_RE = /(\p{Emoji_Presentation}|\p{Extended_Pictographic})(\u{F
  */
 export function replaceEmoticons(text) {
   const parts = text.split(/(```[\s\S]*?```|`[^`]+`)/g);
-  return parts.map((part, i) => {
-    if (i % 2 === 1) return part;
-    const withShortcodes = replaceEmojiShortcodes(part);
-    return withShortcodes.replace(EMOTICON_RE, (m) => EMOTICON_MAP[m] || m);
-  }).join('');
+  return parts
+    .map((part, i) => {
+      if (i % 2 === 1) {
+        return part;
+      }
+      const withShortcodes = replaceEmojiShortcodes(part);
+      return withShortcodes.replace(EMOTICON_RE, (m) => EMOTICON_MAP[m] || m);
+    })
+    .join('');
 }
 
 /**
@@ -142,10 +165,14 @@ export function replaceEmoticons(text) {
  */
 export function autoLinkUrls(text) {
   const parts = text.split(/(```[\s\S]*?```|`[^`]+`)/g);
-  return parts.map((part, i) => {
-    if (i % 2 === 1) return part;
-    return part.replace(/(?<!\]\()https?:\/\/[^\s<>)\]]+/g, (url) => `[${url}](${url})`);
-  }).join('');
+  return parts
+    .map((part, i) => {
+      if (i % 2 === 1) {
+        return part;
+      }
+      return part.replace(/(?<!\]\()https?:\/\/[^\s<>)\]]+/g, (url) => `[${url}](${url})`);
+    })
+    .join('');
 }
 
 /**
@@ -153,10 +180,13 @@ export function autoLinkUrls(text) {
  * @returns {string}
  */
 export function wrapEmojis(html) {
-  return html.replace(/(<[^>]+>)|(<code[\s\S]*?<\/code>)/gi, '\0$&\0')
+  return html
+    .replace(/(<[^>]+>)|(<code[\s\S]*?<\/code>)/gi, '\0$&\0')
     .split('\0')
-    .map(part => {
-      if (part.startsWith('<')) return part;
+    .map((part) => {
+      if (part.startsWith('<')) {
+        return part;
+      }
       return part.replace(EMOJI_RE, '<span class="emoji">$&</span>');
     })
     .join('');
@@ -168,29 +198,39 @@ export function wrapEmojis(html) {
  */
 export function highlightMentions(html) {
   const parts = html.split(/(<pre[\s\S]*?<\/pre>|<code>[^<]*<\/code>)/gi);
-  return parts.map((part, i) => {
-    if (i % 2 === 1) return part;
-    return part.replace(/(<[^>]*>)|([^<]+)/g, (match, tag, text) => {
-      if (tag) return tag;
-      let result = text.replace(/@u\(([^)]+)\)/g, (full, id) => {
-        let nick = null;
-        if (window.gimodiClients) {
-          const c = window.gimodiClients.find(cl => cl.userId === id || cl.id === id);
-          nick = c?.nickname ?? null;
+  return parts
+    .map((part, i) => {
+      if (i % 2 === 1) {
+        return part;
+      }
+      return part.replace(/(<[^>]*>)|([^<]+)/g, (match, tag, text) => {
+        if (tag) {
+          return tag;
         }
-        if (!nick) nick = getCachedNickname(id);
-        if (!nick) nick = id.slice(0, 8);
-        return `<span class="mention">@${escapeHtml(nick)}</span>`;
+        let result = text.replace(/@u\(([^)]+)\)/g, (full, id) => {
+          let nick = null;
+          if (window.gimodiClients) {
+            const c = window.gimodiClients.find((cl) => cl.userId === id || cl.id === id);
+            nick = c?.nickname ?? null;
+          }
+          if (!nick) {
+            nick = getCachedNickname(id);
+          }
+          if (!nick) {
+            nick = id.slice(0, 8);
+          }
+          return `<span class="mention">@${escapeHtml(nick)}</span>`;
+        });
+        result = result.replace(/#c\(([^)]+)\)/g, (full, channelId) => {
+          const channels = window.gimodiChannels || [];
+          const ch = channels.find((c) => c.id === channelId);
+          const name = ch ? ch.name : channelId.slice(0, 8);
+          return `<span class="channel-mention" data-channel-id="${escapeHtml(channelId)}">#${escapeHtml(name)}</span>`;
+        });
+        return result;
       });
-      result = result.replace(/#c\(([^)]+)\)/g, (full, channelId) => {
-        const channels = window.gimodiChannels || [];
-        const ch = channels.find(c => c.id === channelId);
-        const name = ch ? ch.name : channelId.slice(0, 8);
-        return `<span class="channel-mention" data-channel-id="${escapeHtml(channelId)}">#${escapeHtml(name)}</span>`;
-      });
-      return result;
-    });
-  }).join('');
+    })
+    .join('');
 }
 
 /**
@@ -198,6 +238,7 @@ export function highlightMentions(html) {
  * @returns {boolean}
  */
 export function isEmojiOnly(text) {
+  // eslint-disable-next-line no-misleading-character-class
   const stripped = text.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}\p{Emoji_Modifier}\p{Emoji_Component}\s]/gu, '');
   return stripped.length === 0 && text.trim().length > 0;
 }
@@ -219,7 +260,7 @@ export function renderMarkdown(text) {
       html += marked.parse(segments[i]).replace(/\n$/, '');
     } else {
       const lines = segments[i].split('\n');
-      html += lines.map(line => marked.parseInline(line)).join('<br>');
+      html += lines.map((line) => marked.parseInline(line)).join('<br>');
     }
   }
 

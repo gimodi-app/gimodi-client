@@ -67,7 +67,8 @@ class ScreenShareService extends EventTarget {
         audio: true,
       });
     } catch (e) {
-      throw e;
+      err('Failed to get display media:', e.message);
+      return;
     }
 
     const videoTrack = this.stream.getVideoTracks()[0];
@@ -101,7 +102,7 @@ class ScreenShareService extends EventTarget {
         appData: { screen: true },
       });
     } catch (e) {
-      this.stream.getTracks().forEach(t => t.stop());
+      this.stream.getTracks().forEach((t) => t.stop());
       this.stream = null;
       if (this._platform === 'linux' && this._venmicAvailable) {
         window.gimodi.venmic.stopSystem?.();
@@ -136,13 +137,10 @@ class ScreenShareService extends EventTarget {
    */
   async _getVenmicAudioTrack() {
     try {
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 200));
 
       const devices = await navigator.mediaDevices.enumerateDevices();
-      const venmicDevice = devices.find(d =>
-        d.kind === 'audioinput' &&
-        (d.label.toLowerCase().includes('vencord') || d.label.toLowerCase().includes('venmic'))
-      );
+      const venmicDevice = devices.find((d) => d.kind === 'audioinput' && (d.label.toLowerCase().includes('vencord') || d.label.toLowerCase().includes('venmic')));
 
       if (!venmicDevice) {
         log('Venmic device not found in audio inputs');
@@ -177,14 +175,18 @@ class ScreenShareService extends EventTarget {
       const track = this.videoProducer.track;
       this.videoProducer.close();
       this.videoProducer = null;
-      if (track) track.stop();
+      if (track) {
+        track.stop();
+      }
     }
 
     if (this.audioProducer) {
       const track = this.audioProducer.track;
       this.audioProducer.close();
       this.audioProducer = null;
-      if (track) track.stop();
+      if (track) {
+        track.stop();
+      }
     }
 
     if (this.stream) {

@@ -26,7 +26,7 @@ function createButtons(...buttons) {
   const div = document.createElement('div');
   div.className = 'modal-buttons';
   div.style.justifyContent = 'flex-end';
-  buttons.forEach(b => div.appendChild(b));
+  buttons.forEach((b) => div.appendChild(b));
   return div;
 }
 
@@ -47,7 +47,7 @@ function makeButton(label, className = 'btn-secondary') {
  * @returns {Promise<void>}
  */
 export function customAlert(message) {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const overlay = createOverlay();
     const content = createContent();
     const msg = document.createElement('p');
@@ -60,9 +60,15 @@ export function customAlert(message) {
     overlay.appendChild(content);
     document.body.appendChild(overlay);
     okBtn.focus();
-    okBtn.addEventListener('click', () => { overlay.remove(); resolve(); });
-    overlay.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === 'Escape') { overlay.remove(); resolve(); }
+    okBtn.addEventListener('click', () => {
+      overlay.remove();
+      resolve();
+    });
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === 'Escape') {
+        overlay.remove();
+        resolve();
+      }
     });
   });
 }
@@ -72,7 +78,7 @@ export function customAlert(message) {
  * @returns {Promise<boolean>}
  */
 export function customConfirm(message) {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const overlay = createOverlay();
     const content = createContent();
     const msg = document.createElement('p');
@@ -86,10 +92,19 @@ export function customConfirm(message) {
     overlay.appendChild(content);
     document.body.appendChild(overlay);
     okBtn.focus();
-    okBtn.addEventListener('click', () => { overlay.remove(); resolve(true); });
-    cancelBtn.addEventListener('click', () => { overlay.remove(); resolve(false); });
-    overlay.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { overlay.remove(); resolve(false); }
+    okBtn.addEventListener('click', () => {
+      overlay.remove();
+      resolve(true);
+    });
+    cancelBtn.addEventListener('click', () => {
+      overlay.remove();
+      resolve(false);
+    });
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        overlay.remove();
+        resolve(false);
+      }
     });
   });
 }
@@ -100,7 +115,7 @@ export function customConfirm(message) {
  * @returns {Promise<string|null>}
  */
 export function customPrompt(message, defaultValue = '') {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const overlay = createOverlay();
     const content = createContent();
     const msg = document.createElement('label');
@@ -121,16 +136,28 @@ export function customPrompt(message, defaultValue = '') {
     document.body.appendChild(overlay);
     input.focus();
     input.select();
-    const submit = () => { overlay.remove(); resolve(input.value); };
-    const cancel = () => { overlay.remove(); resolve(null); };
+    const submit = () => {
+      overlay.remove();
+      resolve(input.value);
+    };
+    const cancel = () => {
+      overlay.remove();
+      resolve(null);
+    };
     okBtn.addEventListener('click', submit);
     cancelBtn.addEventListener('click', cancel);
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') submit();
-      if (e.key === 'Escape') cancel();
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        submit();
+      }
+      if (e.key === 'Escape') {
+        cancel();
+      }
     });
-    overlay.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && e.target !== input) cancel();
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && e.target !== input) {
+        cancel();
+      }
     });
   });
 }

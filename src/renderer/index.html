@@ -1,565 +1,535 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src ws: wss: http: https:; media-src *; img-src 'self' data: http: https:; style-src 'self' 'unsafe-inline'; frame-src https://www.youtube-nocookie.com;"
+    />
+    <title>Gimodi</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="../../node_modules/bootstrap-icons/font/bootstrap-icons.css" />
+    <link rel="stylesheet" href="../../node_modules/highlight.js/styles/github-dark.css" />
+  </head>
 
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src ws: wss: http: https:; media-src *; img-src 'self' data: http: https:; style-src 'self' 'unsafe-inline'; frame-src https://www.youtube-nocookie.com;">
-  <title>Gimodi</title>
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="../../node_modules/bootstrap-icons/font/bootstrap-icons.css">
-  <link rel="stylesheet" href="../../node_modules/highlight.js/styles/github-dark.css">
-</head>
-
-<body>
-  <!-- Custom Titlebar -->
-  <div id="titlebar">
-    <div id="titlebar-menu" class="titlebar-menu"></div>
-    <div class="titlebar-drag">
-      <img src="../../assets/logo.png" class="titlebar-logo" alt="">
-      <span class="titlebar-title">Gimodi</span>
-      <span id="titlebar-version" class="titlebar-version"></span>
-    </div>
-    <div class="titlebar-controls">
-      <button id="btn-win-minimize" class="titlebar-btn" title="Minimize"><i class="bi bi-dash-lg"></i></button>
-      <button id="btn-win-maximize" class="titlebar-btn" title="Maximize"><i class="bi bi-square"></i></button>
-      <button id="btn-win-close" class="titlebar-btn titlebar-btn-close" title="Close"><i
-          class="bi bi-x-lg"></i></button>
-    </div>
-  </div>
-
-  <div class="app-layout">
-    <!-- Server Sidebar -->
-    <div id="server-sidebar" class="server-sidebar">
-      <div id="server-sidebar-list" class="server-sidebar-list"></div>
-      <button id="btn-add-server" class="server-sidebar-btn server-sidebar-add" title="Add Server">
-        <i class="bi bi-plus-lg"></i>
-      </button>
+  <body>
+    <!-- Custom Titlebar -->
+    <div id="titlebar">
+      <div id="titlebar-menu" class="titlebar-menu"></div>
+      <div class="titlebar-drag">
+        <img src="../../assets/logo.png" class="titlebar-logo" alt="" />
+        <span class="titlebar-title">Gimodi</span>
+        <span id="titlebar-version" class="titlebar-version"></span>
+      </div>
+      <div class="titlebar-controls">
+        <button id="btn-win-minimize" class="titlebar-btn" title="Minimize"><i class="bi bi-dash-lg"></i></button>
+        <button id="btn-win-maximize" class="titlebar-btn" title="Maximize"><i class="bi bi-square"></i></button>
+        <button id="btn-win-close" class="titlebar-btn titlebar-btn-close" title="Close"><i class="bi bi-x-lg"></i></button>
+      </div>
     </div>
 
-    <div class="app-main">
-      <!-- Connect View -->
-      <div id="view-connect" class="view active">
-        <div id="update-banner" class="update-banner hidden">
-          <span id="update-banner-text">A new version is available!</span>
-          <button id="btn-update-download" class="btn-update-download">Download &amp; Install</button>
-          <button id="btn-update-dismiss" class="btn-update-dismiss">&times;</button>
-        </div>
-        <div id="update-progress-overlay" class="update-progress-overlay hidden">
-          <div class="update-progress-dialog">
-            <button id="btn-update-close" class="update-progress-close">&times;</button>
-            <h3>Downloading Update</h3>
-            <div class="update-progress-bar-container">
-              <div id="update-progress-bar" class="update-progress-bar" style="width: 0%"></div>
-            </div>
-            <span id="update-progress-text" class="update-progress-text">Starting download...</span>
-          </div>
-        </div>
-        <div class="connect-welcome">
-          <img src="../../assets/logo.png" class="connect-welcome-logo" alt="Gimodi">
-          <h1 class="connect-welcome-title">Gimodi</h1>
-          <p class="connect-welcome-hint" id="connect-welcome-hint">Add a server to get started</p>
-        </div>
+    <div class="app-layout">
+      <!-- Server Sidebar -->
+      <div id="server-sidebar" class="server-sidebar">
+        <div id="server-sidebar-list" class="server-sidebar-list"></div>
+        <button id="btn-add-server" class="server-sidebar-btn server-sidebar-add" title="Add Server">
+          <i class="bi bi-plus-lg"></i>
+        </button>
       </div>
 
-      <!-- Server View -->
-      <div id="view-server" class="view">
-        <div class="server-layout">
-          <!-- Sidebar: channels + users -->
-          <aside class="sidebar">
-            <div class="sidebar-header">
-              <div class="sidebar-header-left">
-                <img src="../../assets/icon.png" alt="" class="sidebar-header-icon">
-                <span id="server-name">Server</span>
-                <button id="btn-admin" class="btn-icon admin-gear-icon hidden" title="Server Admin"><i
-                    class="bi bi-gear-fill"></i></button>
+      <div class="app-main">
+        <!-- Connect View -->
+        <div id="view-connect" class="view active">
+          <div id="update-banner" class="update-banner hidden">
+            <span id="update-banner-text">A new version is available!</span>
+            <button id="btn-update-download" class="btn-update-download">Download &amp; Install</button>
+            <button id="btn-update-dismiss" class="btn-update-dismiss">&times;</button>
+          </div>
+          <div id="update-progress-overlay" class="update-progress-overlay hidden">
+            <div class="update-progress-dialog">
+              <button id="btn-update-close" class="update-progress-close">&times;</button>
+              <h3>Downloading Update</h3>
+              <div class="update-progress-bar-container">
+                <div id="update-progress-bar" class="update-progress-bar" style="width: 0%"></div>
               </div>
-              <div style="position:relative">
-                <button id="btn-notifications" class="btn-icon notification-bell" title="Notifications"
-                  aria-label="Notifications">
-                  <i class="bi bi-bell"></i>
-                  <span id="notification-badge" class="notification-badge hidden"></span>
-                </button>
-                <div id="notification-dropdown" class="notif-dropdown hidden"></div>
-              </div>
+              <span id="update-progress-text" class="update-progress-text">Starting download...</span>
             </div>
-            <div class="sidebar-section">
-              <div class="sidebar-section-header">
-                <span>Channels</span>
-                <div style="position:relative">
-                  <button id="btn-create-channel" class="btn-icon" title="Create"><i class="bi bi-plus-lg"></i></button>
-                  <div id="create-dropdown" class="context-menu hidden"
-                    style="position:absolute;right:0;top:100%;margin-top:4px">
-                    <div id="create-dropdown-channel" class="context-menu-item">Channel</div>
-                    <div id="create-dropdown-group" class="context-menu-item">Group</div>
-                    <div id="create-dropdown-placeholder" class="context-menu-item">Placeholder</div>
+          </div>
+          <div class="connect-welcome">
+            <img src="../../assets/logo.png" class="connect-welcome-logo" alt="Gimodi" />
+            <h1 class="connect-welcome-title">Gimodi</h1>
+            <p class="connect-welcome-hint" id="connect-welcome-hint">Add a server to get started</p>
+          </div>
+        </div>
+
+        <!-- Server View -->
+        <div id="view-server" class="view">
+          <div class="server-layout">
+            <!-- Sidebar: channels + users -->
+            <aside class="sidebar">
+              <div class="sidebar-header">
+                <div class="sidebar-header-left">
+                  <img src="../../assets/icon.png" alt="" class="sidebar-header-icon" />
+                  <span id="server-name">Server</span>
+                  <button id="btn-admin" class="btn-icon admin-gear-icon hidden" title="Server Admin"><i class="bi bi-gear-fill"></i></button>
+                </div>
+                <div style="position: relative">
+                  <button id="btn-notifications" class="btn-icon notification-bell" title="Notifications" aria-label="Notifications">
+                    <i class="bi bi-bell"></i>
+                    <span id="notification-badge" class="notification-badge hidden"></span>
+                  </button>
+                  <div id="notification-dropdown" class="notif-dropdown hidden"></div>
+                </div>
+              </div>
+              <div class="sidebar-section">
+                <div class="sidebar-section-header">
+                  <span>Channels</span>
+                  <div style="position: relative">
+                    <button id="btn-create-channel" class="btn-icon" title="Create"><i class="bi bi-plus-lg"></i></button>
+                    <div id="create-dropdown" class="context-menu hidden" style="position: absolute; right: 0; top: 100%; margin-top: 4px">
+                      <div id="create-dropdown-channel" class="context-menu-item">Channel</div>
+                      <div id="create-dropdown-group" class="context-menu-item">Group</div>
+                      <div id="create-dropdown-placeholder" class="context-menu-item">Placeholder</div>
+                    </div>
+                  </div>
+                </div>
+                <div id="channel-tree"></div>
+              </div>
+              <div class="voice-controls">
+                <button id="btn-disconnect" class="btn-icon" title="Disconnect"><i class="bi bi-x-lg"></i></button>
+                <button id="btn-mute" class="btn-icon" title="Toggle Mute"><i class="bi bi-mic"></i></button>
+                <button id="btn-deafen" class="btn-icon" title="Deafen"><i class="bi bi-headphones"></i></button>
+                <button id="btn-webcam" class="btn-icon" title="Camera"><i class="bi bi-camera-video"></i></button>
+                <button id="btn-screen-share" class="btn-icon" title="Share Screen"><i class="bi bi-display"></i></button>
+                <button id="btn-settings" class="btn-icon" title="Settings"><i class="bi bi-gear"></i></button>
+              </div>
+            </aside>
+            <div class="sidebar-resize-handle"></div>
+
+            <!-- Main content: chat + voice -->
+            <main class="main-content">
+              <div class="main-header">
+                <div class="tab-bar">
+                  <div id="tab-channel" class="tab active" data-type="channel">
+                    <span class="tab-label">#Lobby</span>
                   </div>
                 </div>
               </div>
-              <div id="channel-tree"></div>
-            </div>
-            <div class="voice-controls">
-              <button id="btn-disconnect" class="btn-icon" title="Disconnect"><i class="bi bi-x-lg"></i></button>
-              <button id="btn-mute" class="btn-icon" title="Toggle Mute"><i class="bi bi-mic"></i></button>
-              <button id="btn-deafen" class="btn-icon" title="Deafen"><i class="bi bi-headphones"></i></button>
-              <button id="btn-webcam" class="btn-icon" title="Camera"><i class="bi bi-camera-video"></i></button>
-              <button id="btn-screen-share" class="btn-icon" title="Share Screen"><i class="bi bi-display"></i></button>
-              <button id="btn-settings" class="btn-icon" title="Settings"><i class="bi bi-gear"></i></button>
-            </div>
-          </aside>
-          <div class="sidebar-resize-handle"></div>
 
-          <!-- Main content: chat + voice -->
-          <main class="main-content">
-            <div class="main-header">
-              <div class="tab-bar">
-                <div id="tab-channel" class="tab active" data-type="channel">
-                  <span class="tab-label">#Lobby</span>
+              <!-- Media grid (webcam + screen tiles together) -->
+              <div id="media-grid" class="media-grid hidden"></div>
+
+              <!-- Webcam viewer -->
+              <div id="webcam-viewer-container" class="hidden">
+                <video id="webcam-viewer-video" autoplay playsinline muted></video>
+                <div id="webcam-viewer-label"></div>
+                <button id="btn-back-to-webcam-grid" class="btn-maximize btn-back-grid" title="Minimize"><i class="bi bi-dash-lg"></i></button>
+                <button id="btn-popout-webcam" class="btn-maximize btn-popout" title="Pop Out"><i class="bi bi-box-arrow-up-right"></i></button>
+                <button id="btn-maximize-webcam" class="btn-maximize" title="Maximize"><i class="bi bi-fullscreen"></i></button>
+              </div>
+
+              <!-- Screen share viewer -->
+              <div id="screen-share-container" class="hidden">
+                <video id="screen-video" autoplay playsinline></video>
+                <div id="screen-share-label"></div>
+                <button id="btn-back-to-grid" class="btn-maximize btn-back-grid" title="Minimize"><i class="bi bi-dash-lg"></i></button>
+                <button id="btn-popout-screen" class="btn-maximize btn-popout" title="Pop Out"><i class="bi bi-box-arrow-up-right"></i></button>
+                <button id="btn-maximize-screen" class="btn-maximize" title="Maximize"><i class="bi bi-fullscreen"></i></button>
+                <div id="screen-volume-control" class="screen-volume-control hidden">
+                  <span class="screen-volume-icon"><i class="bi bi-volume-up"></i></span>
+                  <input type="range" id="range-screen-volume" min="0" max="100" value="100" step="1" />
+                  <span id="screen-volume-value">100%</span>
+                </div>
+                <div id="screen-audio-warning" class="screen-audio-warning hidden">Sharing full system audio - voice chat echo may occur</div>
+                <div id="screen-resize-handle"></div>
+              </div>
+
+              <!-- Focus strip (thumbnails of other streams when one is focused) -->
+              <div id="focus-strip" class="focus-strip hidden"></div>
+
+              <!-- Chat area -->
+              <div id="pinned-messages" class="pinned-messages hidden"></div>
+              <div id="chat-messages"></div>
+              <div class="chat-input-row">
+                <button id="btn-attach" class="btn-icon btn-attach" title="Attach file"><i class="bi bi-paperclip"></i></button>
+                <input type="file" id="file-input" class="hidden" multiple />
+                <div class="chat-input-wrapper">
+                  <textarea id="chat-input" placeholder="Type a message..." rows="1" autocomplete="off"></textarea>
+                  <span id="chat-char-count" class="chat-char-count"></span>
+                  <div class="chat-input-actions">
+                    <button id="btn-emoji" class="btn-icon btn-emoji" title="Emoji"><i class="bi bi-emoji-laughing"></i></button>
+                    <button id="btn-send" class="btn-icon btn-send" title="Send"><i class="bi bi-arrow-right"></i></button>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <!-- Media grid (webcam + screen tiles together) -->
-            <div id="media-grid" class="media-grid hidden"></div>
-
-            <!-- Webcam viewer -->
-            <div id="webcam-viewer-container" class="hidden">
-              <video id="webcam-viewer-video" autoplay playsinline muted></video>
-              <div id="webcam-viewer-label"></div>
-              <button id="btn-back-to-webcam-grid" class="btn-maximize btn-back-grid" title="Minimize"><i
-                  class="bi bi-dash-lg"></i></button>
-              <button id="btn-popout-webcam" class="btn-maximize btn-popout" title="Pop Out"><i
-                  class="bi bi-box-arrow-up-right"></i></button>
-              <button id="btn-maximize-webcam" class="btn-maximize" title="Maximize"><i
-                  class="bi bi-fullscreen"></i></button>
-            </div>
-
-            <!-- Screen share viewer -->
-            <div id="screen-share-container" class="hidden">
-              <video id="screen-video" autoplay playsinline></video>
-              <div id="screen-share-label"></div>
-              <button id="btn-back-to-grid" class="btn-maximize btn-back-grid" title="Minimize"><i
-                  class="bi bi-dash-lg"></i></button>
-              <button id="btn-popout-screen" class="btn-maximize btn-popout" title="Pop Out"><i
-                  class="bi bi-box-arrow-up-right"></i></button>
-              <button id="btn-maximize-screen" class="btn-maximize" title="Maximize"><i
-                  class="bi bi-fullscreen"></i></button>
-              <div id="screen-volume-control" class="screen-volume-control hidden">
-                <span class="screen-volume-icon"><i class="bi bi-volume-up"></i></span>
-                <input type="range" id="range-screen-volume" min="0" max="100" value="100" step="1">
-                <span id="screen-volume-value">100%</span>
+              <div id="dm-encryption-notice" class="chat-dm-notice hidden">
+                <i class="bi bi-lock-fill"></i> Messages are end-to-end encrypted with OpenPGP when both parties have an identity configured.
               </div>
-              <div id="screen-audio-warning" class="screen-audio-warning hidden">
-                Sharing full system audio - voice chat echo may occur
+            </main>
+
+            <!-- Right Side Panel -->
+            <div id="side-panel" class="side-panel hidden">
+              <div class="side-panel-header">
+                <span class="side-panel-title">Search Messages</span>
+                <button id="btn-close-side-panel" class="btn-icon" title="Close"><i class="bi bi-x-lg"></i></button>
               </div>
-              <div id="screen-resize-handle"></div>
-            </div>
-
-            <!-- Focus strip (thumbnails of other streams when one is focused) -->
-            <div id="focus-strip" class="focus-strip hidden"></div>
-
-            <!-- Chat area -->
-            <div id="pinned-messages" class="pinned-messages hidden"></div>
-            <div id="chat-messages"></div>
-            <div class="chat-input-row">
-              <button id="btn-attach" class="btn-icon btn-attach" title="Attach file"><i
-                  class="bi bi-paperclip"></i></button>
-              <input type="file" id="file-input" class="hidden" multiple>
-              <div class="chat-input-wrapper">
-                <textarea id="chat-input" placeholder="Type a message..." rows="1" autocomplete="off"></textarea>
-                <span id="chat-char-count" class="chat-char-count"></span>
-                <div class="chat-input-actions">
-                  <button id="btn-emoji" class="btn-icon btn-emoji" title="Emoji"><i
-                      class="bi bi-emoji-laughing"></i></button>
-                  <button id="btn-send" class="btn-icon btn-send" title="Send"><i
-                      class="bi bi-arrow-right"></i></button>
+              <div class="side-panel-body">
+                <div class="side-panel-search">
+                  <input type="text" id="side-panel-search-input" placeholder="Search messages (min 3 chars)..." autocomplete="off" />
                 </div>
+                <div id="side-panel-results" class="side-panel-results"></div>
               </div>
-            </div>
-            <div id="dm-encryption-notice" class="chat-dm-notice hidden">
-              <i class="bi bi-lock-fill"></i> Messages are end-to-end encrypted with OpenPGP when both parties have an identity configured.
-            </div>
-          </main>
-
-          <!-- Right Side Panel -->
-          <div id="side-panel" class="side-panel hidden">
-            <div class="side-panel-header">
-              <span class="side-panel-title">Search Messages</span>
-              <button id="btn-close-side-panel" class="btn-icon" title="Close"><i class="bi bi-x-lg"></i></button>
-            </div>
-            <div class="side-panel-body">
-              <div class="side-panel-search">
-                <input type="text" id="side-panel-search-input" placeholder="Search messages (min 3 chars)..." autocomplete="off">
-              </div>
-              <div id="side-panel-results" class="side-panel-results"></div>
             </div>
           </div>
         </div>
       </div>
-
-    </div><!-- /.app-main -->
-  </div><!-- /.app-layout -->
-
-  <!-- Add Server modal -->
-  <div id="modal-add-server" class="modal hidden">
-    <div class="modal-content">
-      <h2>Add Server</h2>
-      <div class="form-group">
-        <label for="add-server-address">Server Address</label>
-        <input type="text" id="add-server-address" placeholder="192.168.1.50" autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label for="add-server-nickname">Nickname</label>
-        <input type="text" id="add-server-nickname" placeholder="Player" maxlength="32" autocomplete="off">
-      </div>
-      <div class="form-group" id="add-server-identity-group" style="display:none">
-        <label for="add-server-identity">Identity</label>
-        <select id="add-server-identity"></select>
-      </div>
-      <div class="form-group">
-        <label for="add-server-password">Password (optional)</label>
-        <input type="password" id="add-server-password" placeholder="">
-      </div>
-      <div id="add-server-error" class="error-text"></div>
-      <div class="modal-buttons">
-        <button id="btn-confirm-add-server" class="btn-primary">Add &amp; Connect</button>
-        <button id="btn-cancel-add-server" class="btn-secondary">Cancel</button>
-      </div>
+      <!-- /.app-main -->
     </div>
-  </div>
+    <!-- /.app-layout -->
 
-  <div id="modal-edit-server" class="modal hidden">
-    <div class="modal-content">
-      <h2>Edit Server</h2>
-      <div class="form-group">
-        <label for="edit-server-address">Server Address</label>
-        <input type="text" id="edit-server-address" placeholder="192.168.1.50" autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label for="edit-server-nickname">Nickname</label>
-        <input type="text" id="edit-server-nickname" placeholder="Player" maxlength="32" autocomplete="off">
-      </div>
-      <div class="form-group" id="edit-server-identity-group" style="display:none">
-        <label for="edit-server-identity">Identity</label>
-        <select id="edit-server-identity"></select>
-      </div>
-      <div class="form-group">
-        <label for="edit-server-password">Password (optional)</label>
-        <input type="password" id="edit-server-password" placeholder="">
-      </div>
-      <div id="edit-server-error" class="error-text"></div>
-      <div class="modal-buttons">
-        <button id="btn-confirm-edit-server" class="btn-primary">Save</button>
-        <button id="btn-cancel-edit-server" class="btn-secondary">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Screen source picker modal -->
-  <div id="modal-screen-picker" class="modal hidden">
-    <div class="modal-content">
-      <h2>Share Screen</h2>
-      <div id="screen-sources"></div>
-      <div class="screen-picker-options">
-        <label class="screen-audio-option">
-          <input type="checkbox" id="chk-screen-audio" checked>
-          Share audio
-        </label>
-        <label class="screen-resolution-option">
-          Resolution
-          <select id="select-screen-resolution">
-            <option value="720">720p</option>
-            <option value="1080" selected>1080p</option>
-            <option value="1440">1440p</option>
-            <option value="2160">2160p</option>
-          </select>
-        </label>
-      </div>
-      <button id="btn-cancel-screen" class="btn-secondary">Cancel</button>
-    </div>
-  </div>
-
-  <!-- Reconnect modal -->
-  <div id="modal-connect-error" class="modal hidden">
-    <div class="modal-content">
-      <h2>Connection Failed</h2>
-      <p id="connect-error-message"></p>
-      <div class="modal-buttons">
-        <button id="btn-connect-error-ok" class="btn-primary">OK</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="modal-reconnect" class="modal hidden">
-    <div class="modal-content">
-      <h2>Connection Lost</h2>
-      <p id="reconnect-status">Reconnecting...</p>
-      <div class="modal-buttons">
-        <button id="btn-cancel-reconnect" class="btn-secondary">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Channel password modal -->
-  <div id="modal-channel-password" class="modal hidden">
-    <div class="modal-content">
-      <h2>Channel Password</h2>
-      <div class="form-group">
-        <label for="input-channel-password">This channel is password protected</label>
-        <input type="password" id="input-channel-password" placeholder="Enter password">
-      </div>
-      <div class="modal-buttons">
-        <button id="btn-confirm-channel-password" class="btn-primary">Join</button>
-        <button id="btn-cancel-channel-password" class="btn-secondary">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Create channel modal -->
-  <div id="modal-create-channel" class="modal hidden">
-    <div class="modal-content">
-      <h2 id="create-channel-title">Create Channel</h2>
-      <p id="create-channel-hint" class="modal-hint" style="display:none"></p>
-      <div class="form-group">
-        <label for="new-channel-name">Name</label>
-        <input type="text" id="new-channel-name" placeholder="Channel name">
-      </div>
-      <div class="form-group">
-        <label for="new-channel-password">Password (optional)</label>
-        <input type="text" id="new-channel-password" placeholder="">
-      </div>
-      <div class="form-group">
-        <label for="new-channel-max-users">Max Users (optional)</label>
-        <input type="number" id="new-channel-max-users" min="1" placeholder="Unlimited">
-      </div>
-      <div class="form-group" id="new-channel-temporary-group" style="display:none">
-        <label class="checkbox-label">
-          <input type="checkbox" id="new-channel-temporary"> <span id="new-channel-temporary-label">Temporary
-            (auto-deletes after 3 minutes of inactivity)</span>
-        </label>
-      </div>
-      <input type="hidden" id="new-channel-parent-id" value="">
-      <div class="modal-buttons">
-        <button id="btn-confirm-create-channel" class="btn-primary">Create</button>
-        <button id="btn-cancel-create-channel" class="btn-secondary">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Create group modal -->
-  <div id="modal-create-group" class="modal hidden">
-    <div class="modal-content">
-      <h2>Create Group</h2>
-      <div class="form-group">
-        <label for="new-group-name">Name</label>
-        <input type="text" id="new-group-name" placeholder="Group name">
-      </div>
-      <div class="modal-buttons">
-        <button id="btn-confirm-create-group" class="btn-primary">Create</button>
-        <button id="btn-cancel-create-group" class="btn-secondary">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Create placeholder modal -->
-  <div id="modal-create-placeholder" class="modal hidden">
-    <div class="modal-content">
-      <h2>Create Placeholder</h2>
-      <div class="form-group">
-        <label for="new-placeholder-name">Name</label>
-        <input type="text" id="new-placeholder-name" placeholder="Placeholder name">
-      </div>
-      <input type="hidden" id="new-placeholder-parent-id" value="">
-      <div class="modal-buttons">
-        <button id="btn-confirm-create-placeholder" class="btn-primary">Create</button>
-        <button id="btn-cancel-create-placeholder" class="btn-secondary">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Unified Settings modal -->
-  <div id="modal-settings" class="modal hidden">
-    <div class="modal-content settings-dialog-content">
-      <div class="settings-dialog-header">
-        <h2>Settings</h2>
-        <button id="btn-close-settings" class="btn-icon" title="Close"><i class="bi bi-x-lg"></i></button>
-      </div>
-      <div class="settings-dialog-layout">
-        <nav class="settings-nav">
-          <button class="settings-nav-item active" data-tab="general">General</button>
-          <button class="settings-nav-item" data-tab="appearance">Appearance</button>
-          <button class="settings-nav-item" data-tab="audio">Audio / Video</button>
-          <button class="settings-nav-item" data-tab="identities">Identities</button>
-          <button class="settings-nav-item" data-tab="advanced">Advanced</button>
-        </nav>
-        <div class="settings-panels">
-
-          <!-- General Panel -->
-          <div id="settings-panel-general" class="settings-panel active">
-            <div class="settings-section-label">Notifications</div>
-            <div class="form-group">
-              <label for="select-notification-mode">Desktop Notifications</label>
-              <select id="select-notification-mode">
-                <option value="all">All messages</option>
-                <option value="mentions">Mentions and DMs only</option>
-                <option value="dms">DMs only</option>
-                <option value="none">Disabled</option>
-              </select>
-              <small style="color: var(--text-muted);">Show desktop notifications when the app is not focused</small>
-            </div>
-          </div>
-
-          <!-- Appearance Panel -->
-          <div id="settings-panel-appearance" class="settings-panel">
-            <div class="settings-section-label">Theme</div>
-            <div class="form-group">
-              <div id="theme-grid" class="theme-grid settings-theme-grid"></div>
-            </div>
-            <div class="settings-section-label">Time Format</div>
-            <div class="form-group">
-              <select id="select-time-format">
-                <option value="locale">Default (system locale)</option>
-                <option value="eu-24h">DD.MM.YYYY 24h</option>
-                <option value="us-12h">MM/DD/YYYY 12h</option>
-                <option value="iso-24h">YYYY-MM-DD 24h</option>
-              </select>
-            </div>
-            <div class="settings-section-label">Chat Display</div>
-            <div class="form-group">
-              <select id="select-chat-display">
-                <option value="default">Default</option>
-                <option value="compact">Compact</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Audio/Video Panel -->
-          <div id="settings-panel-audio" class="settings-panel">
-            <div class="settings-section-label">Microphone</div>
-            <div class="form-group">
-              <div class="device-select-row">
-                <select id="select-mic"></select>
-                <button id="btn-test-mic" class="btn-secondary btn-test" title="Test microphone">
-                  <i class="bi bi-mic"></i> Test
-                </button>
-              </div>
-            </div>
-            <div class="settings-section-label">Camera</div>
-            <div class="form-group">
-              <div class="device-select-row">
-                <select id="select-camera"></select>
-                <button id="btn-test-camera" class="btn-secondary btn-test" title="Test camera">
-                  <i class="bi bi-camera-video"></i> Test
-                </button>
-              </div>
-              <div id="camera-preview-container" class="camera-preview-container hidden">
-                <video id="camera-preview-video" class="hidden" autoplay playsinline muted></video>
-                <div id="camera-preview-placeholder" class="camera-preview-placeholder">
-                  <i class="bi bi-camera-video-off"></i>
-                  <span>No camera selected</span>
-                </div>
-              </div>
-            </div>
-            <div class="settings-section-label">Speaker</div>
-            <div class="form-group">
-              <div class="device-select-row">
-                <select id="select-speaker"></select>
-                <button id="btn-test-speaker" class="btn-secondary btn-test" title="Play test tone">
-                  <i class="bi bi-volume-up"></i> Test
-                </button>
-              </div>
-            </div>
-            <div class="settings-section-label">Voice Activation Level</div>
-            <div class="form-group">
-              <div class="range-row">
-                <input type="range" id="range-voice-activation" min="0" max="100" value="0" step="1">
-                <span id="voice-activation-value">Off</span>
-              </div>
-              <div class="mic-level-bar">
-                <div id="mic-level-fill" class="mic-level-fill"></div>
-              </div>
-            </div>
-            <div class="settings-section-label">Feedback Volume</div>
-            <div class="form-group">
-              <div class="range-row">
-                <input type="range" id="range-feedback-volume" min="0" max="100" value="10" step="1">
-                <span id="feedback-volume-value">10</span>
-              </div>
-            </div>
-            <div class="settings-section-label">Push to Talk</div>
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input type="checkbox" id="checkbox-push-to-talk"> Enable Push-to-Talk
-              </label>
-              <div class="ptt-key-config" id="ptt-key-config">
-                <label for="input-ptt-key">PTT Key</label>
-                <input type="text" id="input-ptt-key" placeholder="Press a key..." readonly>
-                <small style="color: var(--text-muted);">Click and press a key to set your push-to-talk keybind</small>
-              </div>
-            </div>
-          </div>
-
-          <!-- Identities Panel -->
-          <div id="settings-panel-identities" class="settings-panel">
-            <div id="identity-status" class="settings-status-text"></div>
-            <div id="identity-create-form" class="identity-create-form hidden">
-              <input type="text" id="input-identity-name" placeholder="Identity name" maxlength="64" autocomplete="off">
-              <button id="btn-identity-create-confirm" class="btn-primary">Create</button>
-              <button id="btn-identity-create-cancel" class="btn-secondary">Cancel</button>
-            </div>
-            <div id="settings-identity-list" class="settings-identity-list"></div>
-            <div class="modal-buttons">
-              <button id="btn-identity-new" class="btn-primary">New Identity</button>
-              <button id="btn-identity-import" class="btn-secondary">Import...</button>
-            </div>
-          </div>
-
-          <!-- Advanced Panel -->
-          <div id="settings-panel-advanced" class="settings-panel">
-            <div class="settings-section-label">Media Embeds</div>
-            <div class="form-group">
-              <label class="checkbox-label" for="checkbox-media-embed-privacy">
-                <input type="checkbox" id="checkbox-media-embed-privacy" checked>
-                <span>Require confirmation before loading external media</span>
-              </label>
-              <div class="form-hint">When enabled, embedded media (e.g. YouTube videos) will not connect to external servers until you explicitly allow it.</div>
-            </div>
-            <div class="settings-section-label">Update Channel</div>
-            <div id="update-channel-group" class="form-group">
-              <select id="select-update-channel">
-                <option value="stable">Stable</option>
-                <option value="beta">Beta</option>
-                <option value="nightly">Nightly</option>
-              </select>
-              <small style="color: var(--text-muted);">Choose which release channel to receive updates from</small>
-            </div>
-            <div class="settings-section-label">Check for Updates</div>
-            <div class="form-group">
-              <button id="btn-check-updates" class="btn-secondary">Check for Updates</button>
-            </div>
-            <div class="settings-section-label">Noise Suppression <span class="badge-experimental">Experimental</span></div>
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input type="checkbox" id="checkbox-noise-suppression"> Enable Noise Suppression
-              </label>
-            </div>
-            <div class="settings-section-label">Developer Mode</div>
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input type="checkbox" id="checkbox-dev-mode"> Enable Developer Mode
-              </label>
-              <small style="color: var(--text-muted);">Enables Reload, Force Reload, and DevTools in the menu</small>
-            </div>
-          </div>
-
+    <!-- Add Server modal -->
+    <div id="modal-add-server" class="modal hidden">
+      <div class="modal-content">
+        <h2>Add Server</h2>
+        <div class="form-group">
+          <label for="add-server-address">Server Address</label>
+          <input type="text" id="add-server-address" placeholder="192.168.1.50" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="add-server-nickname">Nickname</label>
+          <input type="text" id="add-server-nickname" placeholder="Player" maxlength="32" autocomplete="off" />
+        </div>
+        <div class="form-group" id="add-server-identity-group" style="display: none">
+          <label for="add-server-identity">Identity</label>
+          <select id="add-server-identity"></select>
+        </div>
+        <div class="form-group">
+          <label for="add-server-password">Password (optional)</label>
+          <input type="password" id="add-server-password" placeholder="" />
+        </div>
+        <div id="add-server-error" class="error-text"></div>
+        <div class="modal-buttons">
+          <button id="btn-confirm-add-server" class="btn-primary">Add &amp; Connect</button>
+          <button id="btn-cancel-add-server" class="btn-secondary">Cancel</button>
         </div>
       </div>
     </div>
-  </div>
 
+    <div id="modal-edit-server" class="modal hidden">
+      <div class="modal-content">
+        <h2>Edit Server</h2>
+        <div class="form-group">
+          <label for="edit-server-address">Server Address</label>
+          <input type="text" id="edit-server-address" placeholder="192.168.1.50" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="edit-server-nickname">Nickname</label>
+          <input type="text" id="edit-server-nickname" placeholder="Player" maxlength="32" autocomplete="off" />
+        </div>
+        <div class="form-group" id="edit-server-identity-group" style="display: none">
+          <label for="edit-server-identity">Identity</label>
+          <select id="edit-server-identity"></select>
+        </div>
+        <div class="form-group">
+          <label for="edit-server-password">Password (optional)</label>
+          <input type="password" id="edit-server-password" placeholder="" />
+        </div>
+        <div id="edit-server-error" class="error-text"></div>
+        <div class="modal-buttons">
+          <button id="btn-confirm-edit-server" class="btn-primary">Save</button>
+          <button id="btn-cancel-edit-server" class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
 
-  <script src="../../dist/bundle.js"></script>
-</body>
+    <!-- Screen source picker modal -->
+    <div id="modal-screen-picker" class="modal hidden">
+      <div class="modal-content">
+        <h2>Share Screen</h2>
+        <div id="screen-sources"></div>
+        <div class="screen-picker-options">
+          <label class="screen-audio-option">
+            <input type="checkbox" id="chk-screen-audio" checked />
+            Share audio
+          </label>
+          <label class="screen-resolution-option">
+            Resolution
+            <select id="select-screen-resolution">
+              <option value="720">720p</option>
+              <option value="1080" selected>1080p</option>
+              <option value="1440">1440p</option>
+              <option value="2160">2160p</option>
+            </select>
+          </label>
+        </div>
+        <button id="btn-cancel-screen" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
 
+    <!-- Reconnect modal -->
+    <div id="modal-connect-error" class="modal hidden">
+      <div class="modal-content">
+        <h2>Connection Failed</h2>
+        <p id="connect-error-message"></p>
+        <div class="modal-buttons">
+          <button id="btn-connect-error-ok" class="btn-primary">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modal-reconnect" class="modal hidden">
+      <div class="modal-content">
+        <h2>Connection Lost</h2>
+        <p id="reconnect-status">Reconnecting...</p>
+        <div class="modal-buttons">
+          <button id="btn-cancel-reconnect" class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Channel password modal -->
+    <div id="modal-channel-password" class="modal hidden">
+      <div class="modal-content">
+        <h2>Channel Password</h2>
+        <div class="form-group">
+          <label for="input-channel-password">This channel is password protected</label>
+          <input type="password" id="input-channel-password" placeholder="Enter password" />
+        </div>
+        <div class="modal-buttons">
+          <button id="btn-confirm-channel-password" class="btn-primary">Join</button>
+          <button id="btn-cancel-channel-password" class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create channel modal -->
+    <div id="modal-create-channel" class="modal hidden">
+      <div class="modal-content">
+        <h2 id="create-channel-title">Create Channel</h2>
+        <p id="create-channel-hint" class="modal-hint" style="display: none"></p>
+        <div class="form-group">
+          <label for="new-channel-name">Name</label>
+          <input type="text" id="new-channel-name" placeholder="Channel name" />
+        </div>
+        <div class="form-group">
+          <label for="new-channel-password">Password (optional)</label>
+          <input type="text" id="new-channel-password" placeholder="" />
+        </div>
+        <div class="form-group">
+          <label for="new-channel-max-users">Max Users (optional)</label>
+          <input type="number" id="new-channel-max-users" min="1" placeholder="Unlimited" />
+        </div>
+        <div class="form-group" id="new-channel-temporary-group" style="display: none">
+          <label class="checkbox-label">
+            <input type="checkbox" id="new-channel-temporary" /> <span id="new-channel-temporary-label">Temporary (auto-deletes after 3 minutes of inactivity)</span>
+          </label>
+        </div>
+        <input type="hidden" id="new-channel-parent-id" value="" />
+        <div class="modal-buttons">
+          <button id="btn-confirm-create-channel" class="btn-primary">Create</button>
+          <button id="btn-cancel-create-channel" class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create group modal -->
+    <div id="modal-create-group" class="modal hidden">
+      <div class="modal-content">
+        <h2>Create Group</h2>
+        <div class="form-group">
+          <label for="new-group-name">Name</label>
+          <input type="text" id="new-group-name" placeholder="Group name" />
+        </div>
+        <div class="modal-buttons">
+          <button id="btn-confirm-create-group" class="btn-primary">Create</button>
+          <button id="btn-cancel-create-group" class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create placeholder modal -->
+    <div id="modal-create-placeholder" class="modal hidden">
+      <div class="modal-content">
+        <h2>Create Placeholder</h2>
+        <div class="form-group">
+          <label for="new-placeholder-name">Name</label>
+          <input type="text" id="new-placeholder-name" placeholder="Placeholder name" />
+        </div>
+        <input type="hidden" id="new-placeholder-parent-id" value="" />
+        <div class="modal-buttons">
+          <button id="btn-confirm-create-placeholder" class="btn-primary">Create</button>
+          <button id="btn-cancel-create-placeholder" class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Unified Settings modal -->
+    <div id="modal-settings" class="modal hidden">
+      <div class="modal-content settings-dialog-content">
+        <div class="settings-dialog-header">
+          <h2>Settings</h2>
+          <button id="btn-close-settings" class="btn-icon" title="Close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="settings-dialog-layout">
+          <nav class="settings-nav">
+            <button class="settings-nav-item active" data-tab="general">General</button>
+            <button class="settings-nav-item" data-tab="appearance">Appearance</button>
+            <button class="settings-nav-item" data-tab="audio">Audio / Video</button>
+            <button class="settings-nav-item" data-tab="identities">Identities</button>
+            <button class="settings-nav-item" data-tab="advanced">Advanced</button>
+          </nav>
+          <div class="settings-panels">
+            <!-- General Panel -->
+            <div id="settings-panel-general" class="settings-panel active">
+              <div class="settings-section-label">Notifications</div>
+              <div class="form-group">
+                <label for="select-notification-mode">Desktop Notifications</label>
+                <select id="select-notification-mode">
+                  <option value="all">All messages</option>
+                  <option value="mentions">Mentions and DMs only</option>
+                  <option value="dms">DMs only</option>
+                  <option value="none">Disabled</option>
+                </select>
+                <small style="color: var(--text-muted)">Show desktop notifications when the app is not focused</small>
+              </div>
+            </div>
+
+            <!-- Appearance Panel -->
+            <div id="settings-panel-appearance" class="settings-panel">
+              <div class="settings-section-label">Theme</div>
+              <div class="form-group">
+                <div id="theme-grid" class="theme-grid settings-theme-grid"></div>
+              </div>
+              <div class="settings-section-label">Time Format</div>
+              <div class="form-group">
+                <select id="select-time-format">
+                  <option value="locale">Default (system locale)</option>
+                  <option value="eu-24h">DD.MM.YYYY 24h</option>
+                  <option value="us-12h">MM/DD/YYYY 12h</option>
+                  <option value="iso-24h">YYYY-MM-DD 24h</option>
+                </select>
+              </div>
+              <div class="settings-section-label">Chat Display</div>
+              <div class="form-group">
+                <select id="select-chat-display">
+                  <option value="default">Default</option>
+                  <option value="compact">Compact</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Audio/Video Panel -->
+            <div id="settings-panel-audio" class="settings-panel">
+              <div class="settings-section-label">Microphone</div>
+              <div class="form-group">
+                <div class="device-select-row">
+                  <select id="select-mic"></select>
+                  <button id="btn-test-mic" class="btn-secondary btn-test" title="Test microphone"><i class="bi bi-mic"></i> Test</button>
+                </div>
+              </div>
+              <div class="settings-section-label">Camera</div>
+              <div class="form-group">
+                <div class="device-select-row">
+                  <select id="select-camera"></select>
+                  <button id="btn-test-camera" class="btn-secondary btn-test" title="Test camera"><i class="bi bi-camera-video"></i> Test</button>
+                </div>
+                <div id="camera-preview-container" class="camera-preview-container hidden">
+                  <video id="camera-preview-video" class="hidden" autoplay playsinline muted></video>
+                  <div id="camera-preview-placeholder" class="camera-preview-placeholder">
+                    <i class="bi bi-camera-video-off"></i>
+                    <span>No camera selected</span>
+                  </div>
+                </div>
+              </div>
+              <div class="settings-section-label">Speaker</div>
+              <div class="form-group">
+                <div class="device-select-row">
+                  <select id="select-speaker"></select>
+                  <button id="btn-test-speaker" class="btn-secondary btn-test" title="Play test tone"><i class="bi bi-volume-up"></i> Test</button>
+                </div>
+              </div>
+              <div class="settings-section-label">Voice Activation Level</div>
+              <div class="form-group">
+                <div class="range-row">
+                  <input type="range" id="range-voice-activation" min="0" max="100" value="0" step="1" />
+                  <span id="voice-activation-value">Off</span>
+                </div>
+                <div class="mic-level-bar">
+                  <div id="mic-level-fill" class="mic-level-fill"></div>
+                </div>
+              </div>
+              <div class="settings-section-label">Feedback Volume</div>
+              <div class="form-group">
+                <div class="range-row">
+                  <input type="range" id="range-feedback-volume" min="0" max="100" value="10" step="1" />
+                  <span id="feedback-volume-value">10</span>
+                </div>
+              </div>
+              <div class="settings-section-label">Push to Talk</div>
+              <div class="form-group">
+                <label class="checkbox-label"> <input type="checkbox" id="checkbox-push-to-talk" /> Enable Push-to-Talk </label>
+                <div class="ptt-key-config" id="ptt-key-config">
+                  <label for="input-ptt-key">PTT Key</label>
+                  <input type="text" id="input-ptt-key" placeholder="Press a key..." readonly />
+                  <small style="color: var(--text-muted)">Click and press a key to set your push-to-talk keybind</small>
+                </div>
+              </div>
+            </div>
+
+            <!-- Identities Panel -->
+            <div id="settings-panel-identities" class="settings-panel">
+              <div id="identity-status" class="settings-status-text"></div>
+              <div id="identity-create-form" class="identity-create-form hidden">
+                <input type="text" id="input-identity-name" placeholder="Identity name" maxlength="64" autocomplete="off" />
+                <button id="btn-identity-create-confirm" class="btn-primary">Create</button>
+                <button id="btn-identity-create-cancel" class="btn-secondary">Cancel</button>
+              </div>
+              <div id="settings-identity-list" class="settings-identity-list"></div>
+              <div class="modal-buttons">
+                <button id="btn-identity-new" class="btn-primary">New Identity</button>
+                <button id="btn-identity-import" class="btn-secondary">Import...</button>
+              </div>
+            </div>
+
+            <!-- Advanced Panel -->
+            <div id="settings-panel-advanced" class="settings-panel">
+              <div class="settings-section-label">Media Embeds</div>
+              <div class="form-group">
+                <label class="checkbox-label" for="checkbox-media-embed-privacy">
+                  <input type="checkbox" id="checkbox-media-embed-privacy" checked />
+                  <span>Require confirmation before loading external media</span>
+                </label>
+                <div class="form-hint">When enabled, embedded media (e.g. YouTube videos) will not connect to external servers until you explicitly allow it.</div>
+              </div>
+              <div class="settings-section-label">Update Channel</div>
+              <div id="update-channel-group" class="form-group">
+                <select id="select-update-channel">
+                  <option value="stable">Stable</option>
+                  <option value="beta">Beta</option>
+                  <option value="nightly">Nightly</option>
+                </select>
+                <small style="color: var(--text-muted)">Choose which release channel to receive updates from</small>
+              </div>
+              <div class="settings-section-label">Check for Updates</div>
+              <div class="form-group">
+                <button id="btn-check-updates" class="btn-secondary">Check for Updates</button>
+              </div>
+              <div class="settings-section-label">Noise Suppression <span class="badge-experimental">Experimental</span></div>
+              <div class="form-group">
+                <label class="checkbox-label"> <input type="checkbox" id="checkbox-noise-suppression" /> Enable Noise Suppression </label>
+              </div>
+              <div class="settings-section-label">Developer Mode</div>
+              <div class="form-group">
+                <label class="checkbox-label"> <input type="checkbox" id="checkbox-dev-mode" /> Enable Developer Mode </label>
+                <small style="color: var(--text-muted)">Enables Reload, Force Reload, and DevTools in the menu</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="../../dist/bundle.js"></script>
+  </body>
 </html>

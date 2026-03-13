@@ -43,7 +43,7 @@ module.exports = {
     asar: true,
     electronLanguages: ['en-US'],
     ignore: [
-      /^\/src\/renderer\/app\.js$/,  // source entry; dist/bundle.js is what's needed
+      /^\/src\/renderer\/app\.js$/, // source entry; dist/bundle.js is what's needed
       /^\/node_modules\/.bin/,
       /^\/out\//,
       // Dev/build tools not needed at runtime
@@ -76,7 +76,7 @@ module.exports = {
       /^\/node_modules\/openpgp\/dist\/lightweight/,
       /^\/node_modules\/bootstrap-icons\/icons\//,
       /^\/node_modules\/bootstrap-icons\/bootstrap-icons\.svg$/,
-      /^\/node_modules\/highlight\.js\/lib\/languages\//,  // esbuild bundle includes what's needed
+      /^\/node_modules\/highlight\.js\/lib\/languages\//, // esbuild bundle includes what's needed
       /^\/node_modules\/highlight\.js\/es\//,
     ],
   },

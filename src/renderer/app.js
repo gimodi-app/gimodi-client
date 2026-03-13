@@ -3,8 +3,37 @@ import connectionManager, { connKey, addressFromKey } from './services/connectio
 import voiceService from './services/voice.js';
 import notificationService from './services/notifications.js';
 import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects } from './views/connect.js';
-import { initServerView, cleanup as cleanupServer, getCurrentChannelId, getFirstChannelId, setFeedbackVolume, isCurrentChannelModerated, hasVoiceGrant, showUnifiedAdminDialog, showRedeemTokenModal, switchChannel, saveState as saveServerState, restoreState as restoreServerState, syncLocalVoiceIndicators } from './views/server.js';
-import { initChatView, cleanup as cleanupChat, switchChannel as switchChatChannel, appendSystemMessage, refreshTimestamps, setChatDisplayMode, setMediaEmbedPrivacy, openChannelViewTab, setVoiceChannel, getChannelViewTabsState, restoreTabs, saveState as saveChatState, restoreState as restoreChatState, initUnreadState, getViewingChannelId } from './views/chat.js';
+import {
+  initServerView,
+  cleanup as cleanupServer,
+  getCurrentChannelId,
+  getFirstChannelId,
+  setFeedbackVolume,
+  isCurrentChannelModerated,
+  hasVoiceGrant,
+  showUnifiedAdminDialog,
+  showRedeemTokenModal,
+  switchChannel,
+  saveState as saveServerState,
+  restoreState as restoreServerState,
+  syncLocalVoiceIndicators,
+} from './views/server.js';
+import {
+  initChatView,
+  cleanup as cleanupChat,
+  switchChannel as switchChatChannel,
+  appendSystemMessage,
+  refreshTimestamps,
+  setChatDisplayMode,
+  setMediaEmbedPrivacy,
+  setVoiceChannel,
+  getChannelViewTabsState,
+  restoreTabs,
+  saveState as saveChatState,
+  restoreState as restoreChatState,
+  initUnreadState,
+  getViewingChannelId,
+} from './views/chat.js';
 import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoiceServerName, syncVoiceControlsUI } from './views/voice.js';
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
@@ -18,7 +47,7 @@ document.getElementById('btn-win-minimize').addEventListener('click', () => wind
 document.getElementById('btn-win-maximize').addEventListener('click', () => window.gimodi.windowControl.maximize());
 document.getElementById('btn-win-close').addEventListener('click', () => window.gimodi.windowControl.close());
 
-window.gimodi.getVersion().then(v => {
+window.gimodi.getVersion().then((v) => {
   document.getElementById('titlebar-version').textContent = `v${v}`;
 });
 
@@ -30,7 +59,9 @@ function closeAllMenus() {
   if (openMenuEl) {
     openMenuEl.classList.remove('open');
     const dd = openMenuEl.querySelector('.titlebar-dropdown');
-    if (dd) dd.remove();
+    if (dd) {
+      dd.remove();
+    }
     openMenuEl = null;
   }
   menuHoverMode = false;
@@ -57,14 +88,20 @@ function buildDropdown(items) {
       const subDD = buildDropdown(item.items);
       subDD.style.display = 'none';
       sub.appendChild(subDD);
-      sub.addEventListener('mouseenter', () => { subDD.style.display = ''; });
-      sub.addEventListener('mouseleave', () => { subDD.style.display = 'none'; });
+      sub.addEventListener('mouseenter', () => {
+        subDD.style.display = '';
+      });
+      sub.addEventListener('mouseleave', () => {
+        subDD.style.display = 'none';
+      });
       dd.appendChild(sub);
       continue;
     }
     const el = document.createElement('div');
     el.className = 'titlebar-dropdown-item';
-    if (item.disabled) el.classList.add('disabled');
+    if (item.disabled) {
+      el.classList.add('disabled');
+    }
     if (item.type === 'radio') {
       const dot = document.createElement('span');
       dot.className = 'radio-dot' + (item.checked ? ' checked' : '');
@@ -93,7 +130,10 @@ function renderMenu(menu) {
     el.textContent = top.label;
     el.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (openMenuEl === el) { closeAllMenus(); return; }
+      if (openMenuEl === el) {
+        closeAllMenus();
+        return;
+      }
       closeAllMenus();
       openMenuEl = el;
       el.classList.add('open');
@@ -243,11 +283,11 @@ function stopMicLevelMeter() {
     micLevelRAF = null;
   }
   if (_micMeterStream) {
-    _micMeterStream.getTracks().forEach(t => t.stop());
+    _micMeterStream.getTracks().forEach((t) => t.stop());
     _micMeterStream = null;
   }
   if (_micMeterCtx) {
-    _micMeterCtx.close().catch(() => { });
+    _micMeterCtx.close().catch(() => {});
     _micMeterCtx = null;
     _micMeterAnalyser = null;
   }
@@ -258,15 +298,15 @@ function stopMicLevelMeter() {
 let appSettings = {};
 
 async function loadSettings() {
-  appSettings = await window.gimodi.settings.load() || {};
+  appSettings = (await window.gimodi.settings.load()) || {};
   notificationService.updateSettings(appSettings);
-  if (appSettings.voiceActivationLevel != null) {
+  if (appSettings.voiceActivationLevel !== null && appSettings.voiceActivationLevel !== undefined) {
     voiceService.setVoiceActivationLevel(appSettings.voiceActivationLevel);
   }
-  if (appSettings.feedbackVolume != null) {
+  if (appSettings.feedbackVolume !== null && appSettings.feedbackVolume !== undefined) {
     setFeedbackVolume(appSettings.feedbackVolume / 100);
   }
-  if (appSettings.noiseSuppression != null) {
+  if (appSettings.noiseSuppression !== null && appSettings.noiseSuppression !== undefined) {
     voiceService.setNoiseSuppression(appSettings.noiseSuppression);
   }
   if (appSettings.theme) {
@@ -305,7 +345,9 @@ function saveSettings() {
 // Persist per-user volume changes (identity-based)
 voiceService.addEventListener('user-volume-changed', (e) => {
   const { userId, volume } = e.detail;
-  if (!appSettings.userVolumes) appSettings.userVolumes = {};
+  if (!appSettings.userVolumes) {
+    appSettings.userVolumes = {};
+  }
   if (volume === 100) {
     delete appSettings.userVolumes[userId];
   } else {
@@ -344,17 +386,23 @@ function showView(id) {
 // --- Multi-server helpers ---
 
 function saveCurrentViewState(key) {
-  if (!key) return;
+  if (!key) {
+    return;
+  }
   const serverState = saveServerState();
   const chatState = saveChatState();
   connectionManager.saveServerState(key, { server: serverState, chat: chatState });
 }
 
 function switchToServer(key) {
-  if (!connectionManager.isConnected(key)) return;
+  if (!connectionManager.isConnected(key)) {
+    return;
+  }
 
   const prevKey = connectionManager.activeKey;
-  if (prevKey === key) return;
+  if (prevKey === key) {
+    return;
+  }
 
   // Save current view state
   if (prevKey && connectionManager.isConnected(prevKey)) {
@@ -418,18 +466,26 @@ window.addEventListener('gimodi:disconnect-server', (e) => {
 window.addEventListener('gimodi:auto-join-voice', () => {
   if (!getCurrentChannelId()) {
     const channelId = getFirstChannelId();
-    if (channelId) switchChannel(channelId);
+    if (channelId) {
+      switchChannel(channelId);
+    }
   }
 });
 
 function disconnectServer(key) {
-  if (!key) return;
+  if (!key) {
+    return;
+  }
   const conn = connectionManager.getConnection(key);
-  if (!conn) return;
+  if (!conn) {
+    return;
+  }
 
   // Save tabs before cleanup
   const wasActive = connectionManager.activeKey === key;
-  if (wasActive) saveChannelTabs();
+  if (wasActive) {
+    saveChannelTabs();
+  }
 
   // If this server has voice, clean it up
   if (connectionManager.voiceKey === key) {
@@ -440,9 +496,11 @@ function disconnectServer(key) {
 
   conn.disconnect();
 
-  window.dispatchEvent(new CustomEvent('gimodi:disconnected', {
-    detail: { connKey: key },
-  }));
+  window.dispatchEvent(
+    new CustomEvent('gimodi:disconnected', {
+      detail: { connKey: key },
+    }),
+  );
 }
 
 // --- Connection events ---
@@ -450,10 +508,16 @@ function disconnectServer(key) {
 let suppressTabSave = false;
 
 function saveChannelTabs() {
-  if (suppressTabSave) return;
+  if (suppressTabSave) {
+    return;
+  }
   const key = connectionManager.activeKey;
-  if (!key) return;
-  if (!appSettings.channelTabs) appSettings.channelTabs = {};
+  if (!key) {
+    return;
+  }
+  if (!appSettings.channelTabs) {
+    appSettings.channelTabs = {};
+  }
   appSettings.channelTabs[key] = getChannelViewTabsState();
   saveSettings();
 }
@@ -508,22 +572,22 @@ window.addEventListener('gimodi:connected', async (e) => {
 
   // Auto-join first channel when connecting via double-click
   if (data.autoJoin) {
-    const defaultChannel = data.channels.find(c => c.isDefault && c.type !== 'group')
-      || data.channels.find(c => c.type !== 'group');
-    if (defaultChannel) switchChannel(defaultChannel.id);
+    const defaultChannel = data.channels.find((c) => c.isDefault && c.type !== 'group') || data.channels.find((c) => c.type !== 'group');
+    if (defaultChannel) {
+      switchChannel(defaultChannel.id);
+    }
   }
 
   suppressTabSave = true;
 
   const saved = appSettings.channelTabs?.[key];
   if (saved) {
-    const validChannelIds = new Set(data.channels.map(c => c.id));
-    const channelNameMap = new Map(data.channels.map(c => [c.id, c.name]));
+    const validChannelIds = new Set(data.channels.map((c) => c.id));
+    const channelNameMap = new Map(data.channels.map((c) => [c.id, c.name]));
     const cvTabs = (saved.tabs || [])
-      .filter(t => validChannelIds.has(t.channelId))
-      .map(t => ({ channelId: t.channelId, channelName: channelNameMap.get(t.channelId) || t.channelName, ...(t.password != null && { password: t.password }) }));
-    const activeChannelId = saved.activeChannelId && validChannelIds.has(saved.activeChannelId)
-      ? saved.activeChannelId : null;
+      .filter((t) => validChannelIds.has(t.channelId))
+      .map((t) => ({ channelId: t.channelId, channelName: channelNameMap.get(t.channelId) || t.channelName, ...(t.password !== null && t.password !== undefined && { password: t.password }) }));
+    const activeChannelId = saved.activeChannelId && validChannelIds.has(saved.activeChannelId) ? saved.activeChannelId : null;
     const savedDmTabs = saved.dmTabs || [];
     const savedTabOrder = saved.tabOrder || [];
     const activeDmUserId = saved.activeDmUserId || null;
@@ -546,7 +610,9 @@ window.addEventListener('gimodi:connected', async (e) => {
         return { major: parseInt(parts[0], 10) || 0, minor: parseInt(parts[1], 10) || 0 };
       };
       const compare = (a, b) => {
-        if (a.major !== b.major) return a.major - b.major;
+        if (a.major !== b.major) {
+          return a.major - b.major;
+        }
         return a.minor - b.minor;
       };
       const client = parse(clientVersion);
@@ -554,9 +620,13 @@ window.addEventListener('gimodi:connected', async (e) => {
       const max = parse(data.supportedVersions.maxVersion);
 
       if (compare(client, min) < 0) {
-        appendSystemMessage(`⚠ Your client version (${clientVersion}) is older than what this server supports (${data.supportedVersions.minVersion}–${data.supportedVersions.maxVersion}). Some features may not work correctly.`);
+        appendSystemMessage(
+          `⚠ Your client version (${clientVersion}) is older than what this server supports (${data.supportedVersions.minVersion}–${data.supportedVersions.maxVersion}). Some features may not work correctly.`,
+        );
       } else if (compare(client, max) > 0) {
-        appendSystemMessage(`⚠ Your client version (${clientVersion}) is newer than what this server supports (${data.supportedVersions.minVersion}–${data.supportedVersions.maxVersion}). The server may be outdated.`);
+        appendSystemMessage(
+          `⚠ Your client version (${clientVersion}) is newer than what this server supports (${data.supportedVersions.minVersion}–${data.supportedVersions.maxVersion}). The server may be outdated.`,
+        );
       }
     }
   }
@@ -570,7 +640,7 @@ window.addEventListener('gimodi:disconnected', (e) => {
     saveChannelTabs();
 
     // If there are other connected servers, handle gracefully
-    const remaining = [...connectionManager.connections.keys()].filter(k => k !== key);
+    const remaining = [...connectionManager.connections.keys()].filter((k) => k !== key);
     if (remaining.length > 0) {
       const isActiveServer = connectionManager.activeKey === key;
       const isVoiceServer = connectionManager.voiceKey === key;
@@ -618,7 +688,9 @@ window.addEventListener('gimodi:disconnected', (e) => {
     closeSettings();
     // Close unified admin dialog if open
     const adminDialog = document.querySelector('.modal-admin-unified');
-    if (adminDialog) adminDialog.remove();
+    if (adminDialog) {
+      adminDialog.remove();
+    }
     newChannelName.value = '';
     newChannelPassword.value = '';
     newChannelMaxUsers.value = '';
@@ -743,7 +815,9 @@ window.addEventListener('gimodi:channel-moderated-changed', async (e) => {
 
 btnConfirmCreate.addEventListener('click', async () => {
   const name = newChannelName.value.trim();
-  if (!name) return;
+  if (!name) {
+    return;
+  }
 
   const payload = {
     name,
@@ -786,7 +860,9 @@ btnCancelCreate.addEventListener('click', () => {
 
 btnConfirmCreateGroup.addEventListener('click', async () => {
   const name = newGroupName.value.trim();
-  if (!name) return;
+  if (!name) {
+    return;
+  }
 
   try {
     await serverService.request('channel:create', { name, type: 'group' });
@@ -804,7 +880,9 @@ btnCancelCreateGroup.addEventListener('click', () => {
 
 btnConfirmCreatePlaceholder.addEventListener('click', async () => {
   const name = newPlaceholderName.value.trim();
-  if (!name) return;
+  if (!name) {
+    return;
+  }
 
   const parentId = newPlaceholderParentId.value || undefined;
   try {
@@ -850,8 +928,8 @@ function renderThemeGrid() {
 }
 
 function switchSettingsTab(tab) {
-  settingsNavItems.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-  settingsPanels.forEach(p => p.classList.toggle('active', p.id === `settings-panel-${tab}`));
+  settingsNavItems.forEach((t) => t.classList.toggle('active', t.dataset.tab === tab));
+  settingsPanels.forEach((p) => p.classList.toggle('active', p.id === `settings-panel-${tab}`));
   if (tab === 'audio') {
     populateDeviceSelectors();
     startMicLevelMeter();
@@ -867,7 +945,7 @@ function switchSettingsTab(tab) {
   }
 }
 
-settingsNavItems.forEach(t => {
+settingsNavItems.forEach((t) => {
   t.addEventListener('click', () => switchSettingsTab(t.dataset.tab));
 });
 
@@ -910,11 +988,15 @@ btnSettings.addEventListener('click', () => openSettings('audio'));
 btnCloseSettings.addEventListener('click', closeSettings);
 
 modalSettings.addEventListener('click', (e) => {
-  if (e.target === modalSettings) closeSettings();
+  if (e.target === modalSettings) {
+    closeSettings();
+  }
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !modalSettings.classList.contains('hidden')) closeSettings();
+  if (e.key === 'Escape' && !modalSettings.classList.contains('hidden')) {
+    closeSettings();
+  }
 });
 
 // General tab handlers
@@ -971,7 +1053,7 @@ window.gimodi.onNotificationModeChanged((mode) => {
 async function loadSettingsIdentities() {
   identityStatus.textContent = '';
   settingsIdentityList.innerHTML = '';
-  const identities = await window.gimodi.identity.loadAll() || [];
+  const identities = (await window.gimodi.identity.loadAll()) || [];
   if (identities.length === 0) {
     identityStatus.textContent = 'No identities yet. Create one to get started.';
     return;
@@ -1004,7 +1086,9 @@ async function loadSettingsIdentities() {
       input.select();
       let done = false;
       async function finish(save) {
-        if (done) return;
+        if (done) {
+          return;
+        }
         done = true;
         const newName = input.value.trim();
         if (save && newName && newName !== id.name) {
@@ -1019,8 +1103,14 @@ async function loadSettingsIdentities() {
       }
       input.addEventListener('blur', () => finish(true));
       input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-        if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          input.blur();
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        }
       });
     });
     const fp = document.createElement('div');
@@ -1051,7 +1141,9 @@ async function loadSettingsIdentities() {
     btnDelete.className = 'btn-danger';
     btnDelete.textContent = 'Delete';
     btnDelete.addEventListener('click', async () => {
-      if (!await customConfirm(`Delete identity "${id.name}"? This cannot be undone.`)) return;
+      if (!(await customConfirm(`Delete identity "${id.name}"? This cannot be undone.`))) {
+        return;
+      }
       await window.gimodi.identity.delete(id.fingerprint);
       loadSettingsIdentities();
     });
@@ -1074,7 +1166,9 @@ btnIdentityCreateCancel.addEventListener('click', () => {
 
 btnIdentityCreateConfirm.addEventListener('click', async () => {
   const name = inputIdentityName.value.trim();
-  if (!name) return;
+  if (!name) {
+    return;
+  }
   btnIdentityCreateConfirm.disabled = true;
   identityStatus.textContent = 'Creating...';
   try {
@@ -1091,8 +1185,12 @@ btnIdentityCreateConfirm.addEventListener('click', async () => {
 });
 
 inputIdentityName.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') btnIdentityCreateConfirm.click();
-  if (e.key === 'Escape') btnIdentityCreateCancel.click();
+  if (e.key === 'Enter') {
+    btnIdentityCreateConfirm.click();
+  }
+  if (e.key === 'Escape') {
+    btnIdentityCreateCancel.click();
+  }
 });
 
 btnIdentityImport.addEventListener('click', async () => {
@@ -1117,7 +1215,9 @@ selectMic.addEventListener('change', () => {
   // Restart mic level meter with the newly selected device
   startMicLevelMeter();
   // If mic loopback is active, restart with newly selected device
-  if (_micLoopbackStream) startMicLoopback();
+  if (_micLoopbackStream) {
+    startMicLoopback();
+  }
 });
 
 selectCamera.addEventListener('change', () => {
@@ -1125,7 +1225,9 @@ selectCamera.addEventListener('change', () => {
   appSettings.cameraId = selectCamera.value || null;
   saveSettings();
   // If preview is active, restart with newly selected device
-  if (_cameraPreviewStream) startCameraPreview();
+  if (_cameraPreviewStream) {
+    startCameraPreview();
+  }
 });
 
 selectSpeaker.addEventListener('change', () => {
@@ -1260,7 +1362,7 @@ serverService.addEventListener('server:permissions-changed', (e) => {
 
 function updateAdminIconVisibility() {
   const adminPerms = ['server.admin_menu'];
-  const hasAny = adminPerms.some(p => serverService.hasPermission(p));
+  const hasAny = adminPerms.some((p) => serverService.hasPermission(p));
   btnAdmin.classList.toggle('hidden', !hasAny);
 }
 
@@ -1285,12 +1387,13 @@ connectionManager.addEventListener('connection-lost', (e) => {
   // Auto-reconnect on server shutdown (not kick/ban)
   // Capture channel state before disconnect cleanup clears it
   const creds = connectionManager.getCredentials(key);
-  const previousChannelId = (reason && reason.startsWith('Server shut down:') && creds && hadVoice)
-    ? getCurrentChannelId() : null;
+  const previousChannelId = reason && reason.startsWith('Server shut down:') && creds && hadVoice ? getCurrentChannelId() : null;
 
-  window.dispatchEvent(new CustomEvent('gimodi:disconnected', {
-    detail: { connKey: key, reason },
-  }));
+  window.dispatchEvent(
+    new CustomEvent('gimodi:disconnected', {
+      detail: { connKey: key, reason },
+    }),
+  );
 
   if (reason && reason.startsWith('Server shut down:') && creds) {
     attemptReconnect(key, creds, previousChannelId);
@@ -1302,7 +1405,9 @@ connectionManager.addEventListener('connection-lost', (e) => {
 
   if (reason) {
     const errorEl = document.getElementById('connect-error');
-    if (errorEl) errorEl.textContent = reason;
+    if (errorEl) {
+      errorEl.textContent = reason;
+    }
   }
 });
 
@@ -1327,22 +1432,20 @@ async function attemptReconnect(key, creds, previousChannelId) {
 
   const MAX_ATTEMPTS = 10;
   for (let i = 1; i <= MAX_ATTEMPTS; i++) {
-    if (controller.signal.aborted) break;
+    if (controller.signal.aborted) {
+      break;
+    }
 
     reconnectStatus.textContent = `Reconnecting... (attempt ${i}/${MAX_ATTEMPTS})`;
 
-    await new Promise(r => setTimeout(r, 1000));
-    if (controller.signal.aborted) break;
+    await new Promise((r) => setTimeout(r, 1000));
+    if (controller.signal.aborted) {
+      break;
+    }
 
     try {
       const address = addressFromKey(key);
-      const data = await connectionManager.connect(
-        key,
-        address,
-        creds.nickname,
-        creds.password,
-        creds.publicKey
-      );
+      const data = await connectionManager.connect(key, address, creds.nickname, creds.password, creds.publicKey);
       // Success
       _reconnectAbort = null;
       modalReconnect.classList.add('hidden');
@@ -1352,7 +1455,7 @@ async function attemptReconnect(key, creds, previousChannelId) {
 
       // Rejoin previous channel (which also sets up voice)
       if (previousChannelId) {
-        const channelStillExists = data.channels?.some(c => c.id === previousChannelId);
+        const channelStillExists = data.channels?.some((c) => c.id === previousChannelId);
         if (channelStillExists) {
           log('Rejoining channel', previousChannelId);
           await switchChannel(previousChannelId);
@@ -1371,14 +1474,10 @@ async function attemptReconnect(key, creds, previousChannelId) {
 
   if (!controller.signal.aborted) {
     const errorEl = document.getElementById('connect-error');
-    if (errorEl) errorEl.textContent = 'Failed to reconnect to server.';
+    if (errorEl) {
+      errorEl.textContent = 'Failed to reconnect to server.';
+    }
   }
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 // --- Menu: connect to server from history ---
@@ -1397,7 +1496,7 @@ window.gimodi.onConnectServer(async (server) => {
     let publicKey;
     if (server.identityFingerprint) {
       const allIdentities = await window.gimodi.identity.loadAll();
-      const match = allIdentities.find(i => i.fingerprint === server.identityFingerprint);
+      const match = allIdentities.find((i) => i.fingerprint === server.identityFingerprint);
       publicKey = match ? match.publicKeyArmored : undefined;
     }
     if (!publicKey) {
@@ -1405,13 +1504,7 @@ window.gimodi.onConnectServer(async (server) => {
       publicKey = defaultIdentity ? defaultIdentity.publicKeyArmored : undefined;
     }
 
-    const data = await connectionManager.connect(
-      key,
-      server.address,
-      server.nickname,
-      server.password || undefined,
-      publicKey
-    );
+    const data = await connectionManager.connect(key, server.address, server.nickname, server.password || undefined, publicKey);
 
     data._connKey = key;
     window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: data }));
@@ -1476,11 +1569,11 @@ function stopMicLoopback() {
     _micLoopbackAudio = null;
   }
   if (_micLoopbackCtx) {
-    _micLoopbackCtx.close().catch(() => { });
+    _micLoopbackCtx.close().catch(() => {});
     _micLoopbackCtx = null;
   }
   if (_micLoopbackStream) {
-    _micLoopbackStream.getTracks().forEach(t => t.stop());
+    _micLoopbackStream.getTracks().forEach((t) => t.stop());
     _micLoopbackStream = null;
   }
   btnTestMic.classList.remove('playing');
@@ -1536,7 +1629,7 @@ async function startCameraPreview() {
 
 function stopCameraPreview() {
   if (_cameraPreviewStream) {
-    _cameraPreviewStream.getTracks().forEach(t => t.stop());
+    _cameraPreviewStream.getTracks().forEach((t) => t.stop());
     _cameraPreviewStream = null;
   }
   cameraPreviewVideo.srcObject = null;
@@ -1554,13 +1647,15 @@ async function populateDeviceSelectors() {
     // Need permission first to see device labels
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      stream.getTracks().forEach(t => t.stop());
+      stream.getTracks().forEach((t) => t.stop());
     } catch {
       // Camera might not exist, try audio only
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(t => t.stop());
-      } catch { /* no devices */ }
+        stream.getTracks().forEach((t) => t.stop());
+      } catch {
+        /* no devices */
+      }
     }
 
     const { microphones, cameras, speakers } = await voiceService.getAudioDevices();
@@ -1570,7 +1665,9 @@ async function populateDeviceSelectors() {
       const opt = document.createElement('option');
       opt.value = d.deviceId;
       opt.textContent = d.label || `Microphonie ${d.deviceId.slice(0, 8)}`;
-      if (d.deviceId === voiceService.selectedMicId) opt.selected = true;
+      if (d.deviceId === voiceService.selectedMicId) {
+        opt.selected = true;
+      }
       selectMic.appendChild(opt);
     }
 
@@ -1582,7 +1679,9 @@ async function populateDeviceSelectors() {
       const opt = document.createElement('option');
       opt.value = d.deviceId;
       opt.textContent = d.label || `Camera ${d.deviceId.slice(0, 8)}`;
-      if (d.deviceId === voiceService.selectedCameraId) opt.selected = true;
+      if (d.deviceId === voiceService.selectedCameraId) {
+        opt.selected = true;
+      }
       selectCamera.appendChild(opt);
     }
 
@@ -1591,7 +1690,9 @@ async function populateDeviceSelectors() {
       const opt = document.createElement('option');
       opt.value = d.deviceId;
       opt.textContent = d.label || `Speaker ${d.deviceId.slice(0, 8)}`;
-      if (d.deviceId === voiceService.selectedSpeakerId) opt.selected = true;
+      if (d.deviceId === voiceService.selectedSpeakerId) {
+        opt.selected = true;
+      }
       selectSpeaker.appendChild(opt);
     }
 

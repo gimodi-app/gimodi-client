@@ -8,7 +8,9 @@ const cache = new Map();
  * @param {string} nickname
  */
 export function setNickname(userId, nickname) {
-  if (userId && nickname) cache.set(userId, nickname);
+  if (userId && nickname) {
+    cache.set(userId, nickname);
+  }
 }
 
 /**
@@ -32,7 +34,7 @@ export function getCachedNickname(userId) {
  */
 export async function resolveNicknames(userIds) {
   const unique = [...new Set(userIds.filter(Boolean))];
-  const missing = unique.filter(id => !cache.has(id));
+  const missing = unique.filter((id) => !cache.has(id));
 
   if (missing.length > 0) {
     try {
@@ -41,8 +43,9 @@ export async function resolveNicknames(userIds) {
         cache.set(userId, nickname);
       }
     } catch {
+      /* ignored */
     }
   }
 
-  return Object.fromEntries(unique.map(id => [id, cache.get(id) ?? null]));
+  return Object.fromEntries(unique.map((id) => [id, cache.get(id) ?? null]));
 }

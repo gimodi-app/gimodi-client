@@ -51,16 +51,20 @@ async function getOpenpgp() {
  */
 let aesKwPatched = false;
 function patchAesKw() {
-  if (aesKwPatched) return;
+  if (aesKwPatched) {
+    return;
+  }
   aesKwPatched = true;
 
   const nodeCrypto = require('crypto');
   const subtle = nodeCrypto.webcrypto?.subtle || globalThis.crypto?.subtle;
-  if (!subtle) return;
+  if (!subtle) {
+    return;
+  }
 
   const origImportKey = subtle.importKey.bind(subtle);
 
-  subtle.importKey = async function(format, keyData, algorithm, extractable, keyUsages) {
+  subtle.importKey = async function (format, keyData, algorithm, extractable, keyUsages) {
     const algoName = typeof algorithm === 'string' ? algorithm : algorithm?.name;
     if (algoName === 'AES-KW') {
       throw new DOMException('AES-KW not supported', 'NotSupportedError');
@@ -106,8 +110,10 @@ function deleteIdentity(fingerprint) {
     throw new Error('Cannot delete the last identity.');
   }
 
-  const idx = identities.findIndex(i => i.fingerprint === fingerprint);
-  if (idx === -1) throw new Error('Identity not found.');
+  const idx = identities.findIndex((i) => i.fingerprint === fingerprint);
+  if (idx === -1) {
+    throw new Error('Identity not found.');
+  }
 
   const wasDefault = identities[idx].isDefault;
   identities.splice(idx, 1);
@@ -126,8 +132,10 @@ function deleteIdentity(fingerprint) {
  */
 function renameIdentity(fingerprint, newName) {
   const identities = loadIdentities();
-  const identity = identities.find(i => i.fingerprint === fingerprint);
-  if (!identity) throw new Error('Identity not found.');
+  const identity = identities.find((i) => i.fingerprint === fingerprint);
+  if (!identity) {
+    throw new Error('Identity not found.');
+  }
   identity.name = newName;
   saveIdentities(identities);
   return sanitizeIdentity(identity);
@@ -144,14 +152,16 @@ function setDefaultIdentity(fingerprint) {
       id.isDefault = false;
     }
   }
-  if (!found) throw new Error('Identity not found.');
+  if (!found) {
+    throw new Error('Identity not found.');
+  }
   saveIdentities(identities);
 }
 
 function getDefaultIdentity() {
   const identities = loadIdentities();
-  const def = identities.find(i => i.isDefault);
-  return def ? sanitizeIdentity(def) : (identities[0] ? sanitizeIdentity(identities[0]) : null);
+  const def = identities.find((i) => i.isDefault);
+  return def ? sanitizeIdentity(def) : identities[0] ? sanitizeIdentity(identities[0]) : null;
 }
 
 async function ensureDefaultIdentity() {
@@ -160,7 +170,7 @@ async function ensureDefaultIdentity() {
   if (identities.length === 0) {
     return await createIdentity('Default');
   }
-  return sanitizeIdentity(identities.find(i => i.isDefault) || identities[0]);
+  return sanitizeIdentity(identities.find((i) => i.isDefault) || identities[0]);
 }
 
 /**
@@ -235,7 +245,7 @@ function loadAllSanitized() {
  */
 function getFullIdentity(fingerprint) {
   const identities = loadIdentities();
-  return identities.find(i => i.fingerprint === fingerprint) || null;
+  return identities.find((i) => i.fingerprint === fingerprint) || null;
 }
 
 /**
@@ -265,14 +275,18 @@ async function encryptMessage(recipientPublicKeys, plaintext) {
 async function decryptMessage(armoredMessage) {
   const pgp = await getOpenpgp();
   const identities = loadIdentities();
-  const defaultIdentity = identities.find(i => i.isDefault) || identities[0];
-  if (!defaultIdentity) throw new Error('No identity available for decryption.');
+  const defaultIdentity = identities.find((i) => i.isDefault) || identities[0];
+  if (!defaultIdentity) {
+    throw new Error('No identity available for decryption.');
+  }
 
   // We need the full private key, but loadIdentities() strips it.
   // Load raw from file.
   const rawIdentities = JSON.parse(require('fs').readFileSync(getIdentitiesPath(), 'utf-8'));
-  const raw = rawIdentities.find(i => i.fingerprint === defaultIdentity.fingerprint);
-  if (!raw || !raw.privateKeyArmored) throw new Error('Private key not found.');
+  const raw = rawIdentities.find((i) => i.fingerprint === defaultIdentity.fingerprint);
+  if (!raw || !raw.privateKeyArmored) {
+    throw new Error('Private key not found.');
+  }
 
   const privateKey = await pgp.readPrivateKey({ armoredKey: raw.privateKeyArmored });
   const message = await pgp.readMessage({ armoredMessage });
@@ -290,7 +304,6 @@ async function decryptMessage(armoredMessage) {
  * Returns null if not found.
  */
 function exportIdentity(fingerprint) {
-  const identities = loadIdentities(); // sanitized (no private key)
   // Load full (private key) from raw file
   let raw;
   try {
@@ -298,8 +311,10 @@ function exportIdentity(fingerprint) {
   } catch {
     raw = [];
   }
-  const full = raw.find(i => i.fingerprint === fingerprint);
-  if (!full) throw new Error('Identity not found.');
+  const full = raw.find((i) => i.fingerprint === fingerprint);
+  if (!full) {
+    throw new Error('Identity not found.');
+  }
   return {
     version: 1,
     name: full.name,
@@ -315,7 +330,9 @@ function exportIdentity(fingerprint) {
  * Returns sanitized identity. Throws if invalid or duplicate.
  */
 async function importIdentity(data) {
-  if (!data || typeof data !== 'object') throw new Error('Invalid identity file.');
+  if (!data || typeof data !== 'object') {
+    throw new Error('Invalid identity file.');
+  }
   const { name, fingerprint, publicKeyArmored, privateKeyArmored } = data;
   if (!name || !fingerprint || !publicKeyArmored || !privateKeyArmored) {
     throw new Error('Identity file is missing required fields.');
@@ -342,7 +359,7 @@ async function importIdentity(data) {
 
   // Check for duplicate
   const existing = loadIdentities(); // sanitized
-  if (existing.some(i => i.fingerprint === fingerprint)) {
+  if (existing.some((i) => i.fingerprint === fingerprint)) {
     throw new Error('This identity is already imported.');
   }
 

@@ -7,7 +7,9 @@
 let patchBay = null;
 
 function obtainVenmic() {
-  if (patchBay) return patchBay;
+  if (patchBay) {
+    return patchBay;
+  }
 
   try {
     const native = require('@vencord/venmic');
@@ -25,7 +27,9 @@ function isAvailable() {
 
 function list(properties) {
   const pb = obtainVenmic();
-  if (!pb) return [];
+  if (!pb) {
+    return [];
+  }
 
   try {
     return pb.list(properties || ['node.name', 'application.name', 'application.process.id', 'media.class', 'media.name']);
@@ -43,7 +47,9 @@ function list(properties) {
  */
 function start(include, exclude, audioServicePid) {
   const pb = obtainVenmic();
-  if (!pb) return false;
+  if (!pb) {
+    return false;
+  }
 
   try {
     const excludeList = [
@@ -73,7 +79,9 @@ function startSystem(exclude, audioServicePid) {
 
 function stop() {
   const pb = obtainVenmic();
-  if (!pb) return;
+  if (!pb) {
+    return;
+  }
 
   try {
     pb.unlink();

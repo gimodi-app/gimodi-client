@@ -9,15 +9,25 @@ import { customAlert, customConfirm, customPrompt } from '../services/dialogs.js
 
 function formatTimeAgo(timestamp) {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return 'Just now';
+  if (seconds < 60) {
+    return 'Just now';
+  }
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
+  if (days < 30) {
+    return `${days}d ago`;
+  }
   const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo ago`;
+  if (months < 12) {
+    return `${months}mo ago`;
+  }
   return `${Math.floor(months / 12)}y ago`;
 }
 
@@ -25,20 +35,34 @@ const channelTree = document.getElementById('channel-tree');
 
 // Root-level drop zone: dropping a channel on empty tree space moves it to top level
 channelTree.addEventListener('dragover', (e) => {
-  if (e.target !== channelTree) return;
-  if (!serverService.hasPermission('channel.update')) return;
-  if (e.dataTransfer.types.includes('application/x-gimodi-user')) return;
+  if (e.target !== channelTree) {
+    return;
+  }
+  if (!serverService.hasPermission('channel.update')) {
+    return;
+  }
+  if (e.dataTransfer.types.includes('application/x-gimodi-user')) {
+    return;
+  }
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
 });
 channelTree.addEventListener('drop', (e) => {
-  if (e.target !== channelTree) return;
-  if (!serverService.hasPermission('channel.update')) return;
-  if (e.dataTransfer.getData('application/x-gimodi-user')) return;
+  if (e.target !== channelTree) {
+    return;
+  }
+  if (!serverService.hasPermission('channel.update')) {
+    return;
+  }
+  if (e.dataTransfer.getData('application/x-gimodi-user')) {
+    return;
+  }
   e.preventDefault();
   const draggedId = e.dataTransfer.getData('text/plain');
-  if (!draggedId) return;
-  const sibCount = channels.filter(c => c.id !== draggedId && !c.parentId).length;
+  if (!draggedId) {
+    return;
+  }
+  const sibCount = channels.filter((c) => c.id !== draggedId && !c.parentId).length;
   moveChannel(draggedId, null, sibCount);
 });
 
@@ -53,7 +77,7 @@ const collapsedGroups = new Set();
 let createDropdownInitialized = false;
 const talkingClients = new Set();
 const webcamClients = new Set();
-const mutedClients = new Set();    // clientIds with mic muted
+const mutedClients = new Set(); // clientIds with mic muted
 const deafenedClients = new Set(); // clientIds with deafened
 const voiceGrantedClients = new Set();
 const voiceRequestClients = new Set();
@@ -73,7 +97,7 @@ function playSound(audio) {
   console.log('playSound', audio);
   audio.volume = feedbackVolume;
   audio.currentTime = 0;
-  audio.play().catch(() => { });
+  audio.play().catch(() => {});
 }
 
 export function setFeedbackVolume(vol) {
@@ -94,9 +118,13 @@ export function initServerView(data) {
   currentChannelId = null;
 
   voiceGrantedClients.clear();
-  for (const c of (data.voiceGrantedClients || [])) voiceGrantedClients.add(c);
+  for (const c of data.voiceGrantedClients || []) {
+    voiceGrantedClients.add(c);
+  }
   voiceRequestClients.clear();
-  for (const c of (data.voiceRequestClients || [])) voiceRequestClients.add(c);
+  for (const c of data.voiceRequestClients || []) {
+    voiceRequestClients.add(c);
+  }
 
   // Make client and channel lists globally accessible for chat mentions
   window.gimodiClients = clients;
@@ -108,8 +136,10 @@ export function initServerView(data) {
   _currentIconHash = data.iconHash || null;
   const sidebarIcon = document.querySelector('.sidebar-header-icon');
   if (_currentIconHash && sidebarIcon) {
-    getServerIcon(serverService.address, _currentIconHash).then(url => {
-      if (url) sidebarIcon.src = url;
+    getServerIcon(serverService.address, _currentIconHash).then((url) => {
+      if (url) {
+        sidebarIcon.src = url;
+      }
     });
   } else if (sidebarIcon) {
     sidebarIcon.src = '../../assets/icon.png';
@@ -118,12 +148,16 @@ export function initServerView(data) {
   // Listen for live icon changes
   serverService.addEventListener('server:icon-changed', (e) => {
     const icon = document.querySelector('.sidebar-header-icon');
-    if (!icon) return;
+    if (!icon) {
+      return;
+    }
     const { hash } = e.detail;
     _currentIconHash = hash || null;
     if (hash) {
-      getServerIcon(serverService.address, hash).then(url => {
-        if (url) icon.src = url;
+      getServerIcon(serverService.address, hash).then((url) => {
+        if (url) {
+          icon.src = url;
+        }
       });
     } else {
       icon.src = '../../assets/icon.png';
@@ -132,9 +166,15 @@ export function initServerView(data) {
 
   // Initialize mute/deafen states from client list and seed nickname cache
   for (const c of clients) {
-    if (c.muted) mutedClients.add(c.id);
-    if (c.deafened) deafenedClients.add(c.id);
-    if (c.userId && c.nickname) setNickname(c.userId, c.nickname);
+    if (c.muted) {
+      mutedClients.add(c.id);
+    }
+    if (c.deafened) {
+      deafenedClients.add(c.id);
+    }
+    if (c.userId && c.nickname) {
+      setNickname(c.userId, c.nickname);
+    }
   }
 
   renderChannelTree();
@@ -145,7 +185,7 @@ export function initServerView(data) {
   const canCreateTemp = serverService.hasPermission('channel.create_temporary');
   const canCreateGroup = serverService.hasPermission('channel.group_create');
   const canCreatePlaceholder = serverService.hasPermission('channel.placeholder_create');
-  btnCreateChannel.style.display = (canCreate || canCreateTemp || canCreateGroup || canCreatePlaceholder) ? '' : 'none';
+  btnCreateChannel.style.display = canCreate || canCreateTemp || canCreateGroup || canCreatePlaceholder ? '' : 'none';
   btnCreateChannel.addEventListener('click', onCreateChannelClick);
   if (!createDropdownInitialized) {
     initCreateDropdown();
@@ -288,29 +328,49 @@ export function saveState() {
 }
 
 export function restoreState(state) {
-  if (!state) return;
+  if (!state) {
+    return;
+  }
   channels = state.channels || [];
   clients = state.clients || [];
   window.gimodiChannels = channels;
   currentChannelId = state.currentChannelId || null;
   collapsedGroups.clear();
-  for (const g of (state.collapsedGroups || [])) collapsedGroups.add(g);
+  for (const g of state.collapsedGroups || []) {
+    collapsedGroups.add(g);
+  }
   savedPasswords.clear();
-  for (const [k, v] of (state.savedPasswords || [])) savedPasswords.set(k, v);
+  for (const [k, v] of state.savedPasswords || []) {
+    savedPasswords.set(k, v);
+  }
   talkingClients.clear();
-  for (const c of (state.talkingClients || [])) talkingClients.add(c);
+  for (const c of state.talkingClients || []) {
+    talkingClients.add(c);
+  }
   webcamClients.clear();
-  for (const c of (state.webcamClients || [])) webcamClients.add(c);
+  for (const c of state.webcamClients || []) {
+    webcamClients.add(c);
+  }
   mutedClients.clear();
-  for (const c of (state.mutedClients || [])) mutedClients.add(c);
+  for (const c of state.mutedClients || []) {
+    mutedClients.add(c);
+  }
   deafenedClients.clear();
-  for (const c of (state.deafenedClients || [])) deafenedClients.add(c);
+  for (const c of state.deafenedClients || []) {
+    deafenedClients.add(c);
+  }
   voiceGrantedClients.clear();
-  for (const c of (state.voiceGrantedClients || [])) voiceGrantedClients.add(c);
+  for (const c of state.voiceGrantedClients || []) {
+    voiceGrantedClients.add(c);
+  }
   voiceRequestClients.clear();
-  for (const c of (state.voiceRequestClients || [])) voiceRequestClients.add(c);
+  for (const c of state.voiceRequestClients || []) {
+    voiceRequestClients.add(c);
+  }
   streamingClients.clear();
-  for (const c of (state.streamingClients || [])) streamingClients.add(c);
+  for (const c of state.streamingClients || []) {
+    streamingClients.add(c);
+  }
 
   window.gimodiClients = clients;
   serverNameEl.textContent = state.serverName || '';
@@ -357,11 +417,15 @@ export function restoreState(state) {
   const sidebarIcon = document.querySelector('.sidebar-header-icon');
   if (sidebarIcon) {
     if (_currentIconHash && serverService.address) {
-      getServerIcon(serverService.address, _currentIconHash).then(url => {
-        if (url) sidebarIcon.src = url;
-      }).catch(() => {
-        sidebarIcon.src = '../../assets/icon.png';
-      });
+      getServerIcon(serverService.address, _currentIconHash)
+        .then((url) => {
+          if (url) {
+            sidebarIcon.src = url;
+          }
+        })
+        .catch(() => {
+          sidebarIcon.src = '../../assets/icon.png';
+        });
     } else {
       sidebarIcon.src = '../../assets/icon.png';
     }
@@ -371,17 +435,20 @@ export function restoreState(state) {
   const canCreateTemp = serverService.hasPermission('channel.create_temporary');
   const canCreateGroup = serverService.hasPermission('channel.group_create');
   const canCreatePlaceholder = serverService.hasPermission('channel.placeholder_create');
-  btnCreateChannel.style.display = (canCreate || canCreateTemp || canCreateGroup || canCreatePlaceholder) ? '' : 'none';
+  btnCreateChannel.style.display = canCreate || canCreateTemp || canCreateGroup || canCreatePlaceholder ? '' : 'none';
 
   renderChannelTree();
 
-  serverService.request('channel:list', {}).then(result => {
-    if (result && result.channels) {
-      channels = result.channels;
-      window.gimodiChannels = channels;
-      renderChannelTree();
-    }
-  }).catch(() => {});
+  serverService
+    .request('channel:list', {})
+    .then((result) => {
+      if (result && result.channels) {
+        channels = result.channels;
+        window.gimodiChannels = channels;
+        renderChannelTree();
+      }
+    })
+    .catch(() => {});
 }
 
 export function getCurrentChannelId() {
@@ -389,12 +456,12 @@ export function getCurrentChannelId() {
 }
 
 export function getFirstChannelId() {
-  const ch = channels.find(c => c.type !== 'group');
+  const ch = channels.find((c) => c.type !== 'group');
   return ch ? ch.id : null;
 }
 
 export function isCurrentChannelModerated() {
-  const ch = channels.find(c => c.id === currentChannelId);
+  const ch = channels.find((c) => c.id === currentChannelId);
   return !!ch?.moderated;
 }
 
@@ -403,7 +470,7 @@ export function hasVoiceGrant(clientId) {
 }
 
 function getChannelName(id) {
-  return channels.find(c => c.id === id)?.name || 'Unknown';
+  return channels.find((c) => c.id === id)?.name || 'Unknown';
 }
 
 function handleDisconnect() {
@@ -412,9 +479,11 @@ function handleDisconnect() {
     leaveVoiceChannel();
   } else {
     const targetKey = connectionManager.voiceKey || connectionManager.activeKey;
-    window.dispatchEvent(new CustomEvent('gimodi:disconnect-server', {
-      detail: { connKey: targetKey },
-    }));
+    window.dispatchEvent(
+      new CustomEvent('gimodi:disconnect-server', {
+        detail: { connKey: targetKey },
+      }),
+    );
   }
 }
 
@@ -422,11 +491,15 @@ function handleDisconnect() {
  * @returns {void}
  */
 function leaveVoiceChannel() {
-  if (screenShareService.isSharing) screenShareService.stopSharing();
+  if (screenShareService.isSharing) {
+    screenShareService.stopSharing();
+  }
   voiceService.cleanup();
   serverService.send('channel:leave', {});
-  const self = clients.find(c => c.id === serverService.clientId);
-  if (self) self.channelId = null;
+  const self = clients.find((c) => c.id === serverService.clientId);
+  if (self) {
+    self.channelId = null;
+  }
   currentChannelId = null;
   connectionManager.clearVoiceServer();
   setVoiceChannel(null);
@@ -443,7 +516,7 @@ async function onPoked(e) {
   }
 }
 
-function onServerDisconnected(e) {
+function onServerDisconnected(_e) {
   // Server-initiated disconnection (kick/ban/shutdown) is now handled by
   // connectionManager._onConnectionLost → app.js 'connection-lost' handler.
   // Nothing to do here - cleanup is triggered by gimodi:disconnected event.
@@ -546,11 +619,19 @@ function showCreateDropdown() {
   placeholderItem.style.display = canCreatePlaceholder ? '' : 'none';
 
   const optionCount = [canCreateAnyChannel, canCreateGroup, canCreatePlaceholder].filter(Boolean).length;
-  if (optionCount === 0) return;
+  if (optionCount === 0) {
+    return;
+  }
 
   if (optionCount === 1) {
-    if (canCreateAnyChannel) { showCreateChannelModal(); return; }
-    if (canCreateGroup) { document.getElementById('modal-create-group').classList.remove('hidden'); return; }
+    if (canCreateAnyChannel) {
+      showCreateChannelModal();
+      return;
+    }
+    if (canCreateGroup) {
+      document.getElementById('modal-create-group').classList.remove('hidden');
+      return;
+    }
     if (canCreatePlaceholder) {
       document.getElementById('new-placeholder-parent-id').value = '';
       document.getElementById('modal-create-placeholder').classList.remove('hidden');
@@ -580,13 +661,28 @@ function askChannelPassword() {
       modal.removeEventListener('click', onBackdrop);
     }
 
-    function onConfirm() { cleanup(); resolve(input.value); }
-    function onCancel() { cleanup(); resolve(null); }
-    function onKeydown(e) {
-      if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
-      if (e.key === 'Escape') { onCancel(); }
+    function onConfirm() {
+      cleanup();
+      resolve(input.value);
     }
-    function onBackdrop(e) { if (e.target === modal) onCancel(); }
+    function onCancel() {
+      cleanup();
+      resolve(null);
+    }
+    function onKeydown(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        onConfirm();
+      }
+      if (e.key === 'Escape') {
+        onCancel();
+      }
+    }
+    function onBackdrop(e) {
+      if (e.target === modal) {
+        onCancel();
+      }
+    }
 
     btnConfirm.addEventListener('click', onConfirm);
     btnCancel.addEventListener('click', onCancel);
@@ -609,11 +705,17 @@ function onChannelUnreadChanged() {
 }
 
 export async function switchChannel(channelId) {
-  if (channelId === currentChannelId) return;
+  if (channelId === currentChannelId) {
+    return;
+  }
 
-  const channel = channels.find(c => c.id === channelId);
-  if (!channel) return;
-  if (channel.type === 'group') return;
+  const channel = channels.find((c) => c.id === channelId);
+  if (!channel) {
+    return;
+  }
+  if (channel.type === 'group') {
+    return;
+  }
 
   let password;
   if (channel.hasPassword && !serverService.hasPermission('channel.bypass_password')) {
@@ -622,32 +724,42 @@ export async function switchChannel(channelId) {
       password = savedPasswords.get(channelId);
     } else {
       password = await askChannelPassword();
-      if (password === null) return;
+      if (password === null) {
+        return;
+      }
     }
   }
 
   try {
-    if (screenShareService.isSharing) screenShareService.stopSharing();
+    if (screenShareService.isSharing) {
+      screenShareService.stopSharing();
+    }
     voiceService.cleanup();
     const data = await serverService.request('channel:join', { channelId, password });
     currentChannelId = channelId;
     updateChannelTabLabel(channelId);
 
     if (data.moderated && data.voiceGranted) {
-      for (const id of data.voiceGranted) voiceGrantedClients.add(id);
+      for (const id of data.voiceGranted) {
+        voiceGrantedClients.add(id);
+      }
     }
     if (data.moderated && data.voiceRequests) {
-      for (const id of data.voiceRequests) voiceRequestClients.add(id);
+      for (const id of data.voiceRequests) {
+        voiceRequestClients.add(id);
+      }
     }
 
     // Save password on successful join
-    if (channel.hasPassword && password != null) {
+    if (channel.hasPassword && password !== null && password !== undefined) {
       savedPasswords.set(channelId, password);
     }
 
     // Update local client data
-    const self = clients.find(c => c.id === serverService.clientId);
-    if (self) self.channelId = channelId;
+    const self = clients.find((c) => c.id === serverService.clientId);
+    if (self) {
+      self.channelId = channelId;
+    }
 
     renderChannelTree();
     playSound(sndConnect);
@@ -671,26 +783,36 @@ export async function switchChannel(channelId) {
 
 function onForceJoined(e) {
   const { channelId, moderated, voiceGranted, readRestricted, writeRestricted } = e.detail;
-  if (channelId === currentChannelId) return;
+  if (channelId === currentChannelId) {
+    return;
+  }
 
-  if (screenShareService.isSharing) screenShareService.stopSharing();
+  if (screenShareService.isSharing) {
+    screenShareService.stopSharing();
+  }
   voiceService.cleanup();
 
   if (moderated && voiceGranted) {
-    for (const id of voiceGranted) voiceGrantedClients.add(id);
+    for (const id of voiceGranted) {
+      voiceGrantedClients.add(id);
+    }
   }
 
   currentChannelId = channelId;
   updateChannelTabLabel(channelId);
 
-  const self = clients.find(c => c.id === serverService.clientId);
-  if (self) self.channelId = channelId;
+  const self = clients.find((c) => c.id === serverService.clientId);
+  if (self) {
+    self.channelId = channelId;
+  }
 
   renderChannelTree();
   playSound(sndConnect);
 
-  const forcedChannel = channels.find(c => c.id === channelId);
-  if (forcedChannel) openChannelViewTab(channelId, forcedChannel.name, undefined, !!readRestricted, !!writeRestricted);
+  const forcedChannel = channels.find((c) => c.id === channelId);
+  if (forcedChannel) {
+    openChannelViewTab(channelId, forcedChannel.name, undefined, !!readRestricted, !!writeRestricted);
+  }
 
   window.dispatchEvent(new CustomEvent('gimodi:channel-changed', { detail: { channelId } }));
 }
@@ -705,10 +827,9 @@ function onClientJoined(e) {
 
 function onClientLeft(e) {
   const { clientId } = e.detail;
-  const client = clients.find(c => c.id === clientId);
   // Don't play sound here - onChannelUserLeft handles it to avoid double-play
   // (server sends both channel:user-left and server:client-left on disconnect)
-  clients = clients.filter(c => c.id !== clientId);
+  clients = clients.filter((c) => c.id !== clientId);
   window.gimodiClients = clients;
   webcamClients.delete(clientId);
   streamingClients.delete(clientId);
@@ -722,11 +843,13 @@ function onClientLeft(e) {
 
 function onAdminChanged(e) {
   const { clientId, badge, roleColor, rolePosition } = e.detail;
-  const client = clients.find(c => c.id === clientId);
+  const client = clients.find((c) => c.id === clientId);
   if (client) {
     client.badge = badge ?? null;
     client.roleColor = roleColor ?? null;
-    if (rolePosition !== undefined) client.rolePosition = rolePosition;
+    if (rolePosition !== undefined) {
+      client.rolePosition = rolePosition;
+    }
     updateChatBadges(client.userId, badge ?? null);
     updateChatNickColors(client.userId, roleColor ?? null);
   }
@@ -735,7 +858,9 @@ function onAdminChanged(e) {
 
 function onRoleColorChanged(e) {
   const { roleColor, userIds } = e.detail;
-  if (!userIds || !Array.isArray(userIds)) return;
+  if (!userIds || !Array.isArray(userIds)) {
+    return;
+  }
   for (const userId of userIds) {
     updateChatNickColors(userId, roleColor ?? null);
   }
@@ -746,26 +871,31 @@ function onPermissionsChanged(e) {
   serverService.permissions = new Set(permissions);
   window.gimodi.setAdminStatus(serverService.hasPermission('server.admin_menu'), true);
   // Update button visibility
-  btnCreateChannel.style.display = (serverService.hasPermission('channel.create') || serverService.hasPermission('channel.create_temporary') || serverService.hasPermission('channel.group_create')) ? '' : 'none';
+  btnCreateChannel.style.display =
+    serverService.hasPermission('channel.create') || serverService.hasPermission('channel.create_temporary') || serverService.hasPermission('channel.group_create') ? '' : 'none';
 }
 
 function onClientMoved(e) {
   const { clientId, toChannelId } = e.detail;
-  const client = clients.find(c => c.id === clientId);
-  if (client) client.channelId = toChannelId;
+  const client = clients.find((c) => c.id === clientId);
+  if (client) {
+    client.channelId = toChannelId;
+  }
   renderChannelTree();
 }
 
 function onChannelUserJoined(e) {
   const { clientId, userId, channelId, nickname } = e.detail;
-  const client = clients.find(c => c.id === clientId);
+  const client = clients.find((c) => c.id === clientId);
   if (client) {
     client.channelId = channelId;
   } else {
     clients.push({ id: clientId, userId: userId || null, nickname, channelId });
   }
   // Skip sound for own join - switchChannel already plays it
-  if (channelId === currentChannelId && clientId !== serverService.clientId) playSound(sndConnect);
+  if (channelId === currentChannelId && clientId !== serverService.clientId) {
+    playSound(sndConnect);
+  }
   renderChannelTree();
 }
 
@@ -773,13 +903,15 @@ function onChannelUserLeft(e) {
   const { clientId, channelId } = e.detail;
   // Don't remove from clients list - they moved, not disconnected
   // Skip sound for own leave - handleDisconnect/switchChannel already plays it
-  if (channelId === currentChannelId && clientId !== serverService.clientId) playSound(sndDisconnect);
+  if (channelId === currentChannelId && clientId !== serverService.clientId) {
+    playSound(sndDisconnect);
+  }
   renderChannelTree();
 }
 
 function onChannelCreated(e) {
   const { channel } = e.detail;
-  if (!channels.find(c => c.id === channel.id)) {
+  if (!channels.find((c) => c.id === channel.id)) {
     channels.push(channel);
   }
   window.gimodiChannels = channels;
@@ -788,14 +920,14 @@ function onChannelCreated(e) {
 
 function onChannelDeleted(e) {
   const { channelId } = e.detail;
-  channels = channels.filter(c => c.id !== channelId);
+  channels = channels.filter((c) => c.id !== channelId);
   window.gimodiChannels = channels;
   renderChannelTree();
 }
 
 function onChannelUpdated(e) {
   const { channel } = e.detail;
-  const idx = channels.findIndex(c => c.id === channel.id);
+  const idx = channels.findIndex((c) => c.id === channel.id);
   if (idx >= 0) {
     channels[idx] = { ...channels[idx], ...channel };
   } else {
@@ -803,7 +935,7 @@ function onChannelUpdated(e) {
     window.gimodiChannels = channels;
   }
   if (!channel.moderated) {
-    const channelClients = clients.filter(c => c.channelId === channel.id);
+    const channelClients = clients.filter((c) => c.channelId === channel.id);
     for (const c of channelClients) {
       voiceGrantedClients.delete(c.id);
       voiceRequestClients.delete(c.id);
@@ -870,23 +1002,43 @@ function onLocalScreenStoppedIndicator() {
 
 function onPeerMuteStateChanged(e) {
   const { clientId, muted, deafened } = e.detail;
-  if (muted) mutedClients.add(clientId); else mutedClients.delete(clientId);
-  if (deafened) deafenedClients.add(clientId); else deafenedClients.delete(clientId);
+  if (muted) {
+    mutedClients.add(clientId);
+  } else {
+    mutedClients.delete(clientId);
+  }
+  if (deafened) {
+    deafenedClients.add(clientId);
+  } else {
+    deafenedClients.delete(clientId);
+  }
   // Update icons in-place without full re-render
   updateMuteIcons(clientId);
 }
 
 function onLocalMuteChanged() {
   const id = serverService.clientId;
-  if (voiceService._manualMute || voiceService._deafened) mutedClients.add(id); else mutedClients.delete(id);
+  if (voiceService._manualMute || voiceService._deafened) {
+    mutedClients.add(id);
+  } else {
+    mutedClients.delete(id);
+  }
   updateMuteIcons(id);
 }
 
 function onLocalDeafenChanged() {
   // Update local mute/deafen tracking for the sidebar
   const id = serverService.clientId;
-  if (voiceService._manualMute || voiceService._deafened) mutedClients.add(id); else mutedClients.delete(id);
-  if (voiceService._deafened) deafenedClients.add(id); else deafenedClients.delete(id);
+  if (voiceService._manualMute || voiceService._deafened) {
+    mutedClients.add(id);
+  } else {
+    mutedClients.delete(id);
+  }
+  if (voiceService._deafened) {
+    deafenedClients.add(id);
+  } else {
+    deafenedClients.delete(id);
+  }
   updateMuteIcons(id);
 }
 
@@ -896,11 +1048,29 @@ function onLocalDeafenChanged() {
  */
 export function syncLocalVoiceIndicators() {
   const id = serverService.clientId;
-  if (!id) return;
-  if (voiceService._manualMute || voiceService._deafened) mutedClients.add(id); else mutedClients.delete(id);
-  if (voiceService._deafened) deafenedClients.add(id); else deafenedClients.delete(id);
-  if (voiceService.webcamProducer) webcamClients.add(id); else webcamClients.delete(id);
-  if (screenShareService.isSharing) streamingClients.add(id); else streamingClients.delete(id);
+  if (!id) {
+    return;
+  }
+  if (voiceService._manualMute || voiceService._deafened) {
+    mutedClients.add(id);
+  } else {
+    mutedClients.delete(id);
+  }
+  if (voiceService._deafened) {
+    deafenedClients.add(id);
+  } else {
+    deafenedClients.delete(id);
+  }
+  if (voiceService.webcamProducer) {
+    webcamClients.add(id);
+  } else {
+    webcamClients.delete(id);
+  }
+  if (screenShareService.isSharing) {
+    streamingClients.add(id);
+  } else {
+    streamingClients.delete(id);
+  }
   renderChannelTree();
 }
 
@@ -966,7 +1136,7 @@ function onTalkingChanged(e) {
     talkingClients.delete(clientId);
   }
   // Only show talking indicator for users in our current channel
-  const client = clients.find(c => c.id === clientId);
+  const client = clients.find((c) => c.id === clientId);
   const inCurrentChannel = client && client.channelId === currentChannelId;
   const indicators = document.querySelectorAll(`.voice-indicator[data-client-id="${clientId}"]`);
   for (const el of indicators) {
@@ -978,18 +1148,14 @@ function onTalkingChanged(e) {
 
 // Find the index of a reference channel among its siblings (excluding the dragged channel)
 function siblingIndex(refId, parentId, draggedId) {
-  const siblings = channels
-    .filter(c => c.id !== draggedId && (c.parentId || null) === parentId)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
-  const idx = siblings.findIndex(c => c.id === refId);
+  const siblings = channels.filter((c) => c.id !== draggedId && (c.parentId || null) === parentId).sort((a, b) => a.sortOrder - b.sortOrder);
+  const idx = siblings.findIndex((c) => c.id === refId);
   return idx === -1 ? siblings.length : idx;
 }
 
 function moveChannel(channelId, newParentId, insertIndex) {
   // Recalculate sort orders for siblings at the target level
-  const siblings = channels
-    .filter(c => c.id !== channelId && (c.parentId || null) === newParentId)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const siblings = channels.filter((c) => c.id !== channelId && (c.parentId || null) === newParentId).sort((a, b) => a.sortOrder - b.sortOrder);
 
   // Build new ordered list with the channel inserted at insertIndex
   const newOrder = [...siblings];
@@ -1015,8 +1181,8 @@ function renderChannelTree() {
   channelTree.innerHTML = '';
 
   // Build parent/child structure
-  const topLevel = channels.filter(c => !c.parentId).sort((a, b) => a.sortOrder - b.sortOrder);
-  const childrenOf = (parentId) => channels.filter(c => c.parentId === parentId).sort((a, b) => a.sortOrder - b.sortOrder);
+  const topLevel = channels.filter((c) => !c.parentId).sort((a, b) => a.sortOrder - b.sortOrder);
+  const childrenOf = (parentId) => channels.filter((c) => c.parentId === parentId).sort((a, b) => a.sortOrder - b.sortOrder);
 
   for (const ch of topLevel) {
     if (ch.type === 'group') {
@@ -1034,7 +1200,6 @@ function renderChannelTree() {
       }
     }
   }
-
 }
 
 function renderGroup(group, children) {
@@ -1131,7 +1296,9 @@ function renderGroup(group, children) {
 
       const isGroupDrag = e.dataTransfer.getData('application/x-gimodi-group');
       const draggedId = e.dataTransfer.getData('text/plain');
-      if (!draggedId || draggedId === group.id) return;
+      if (!draggedId || draggedId === group.id) {
+        return;
+      }
 
       const rect = el.getBoundingClientRect();
       const y = e.clientY - rect.top;
@@ -1172,7 +1339,9 @@ function renderGroup(group, children) {
     spacer.className = 'channel-group-drop-spacer';
     spacer.style.cssText = 'height:6px;position:relative';
     spacer.addEventListener('dragover', (e) => {
-      if (e.dataTransfer.types.includes('application/x-gimodi-user')) return;
+      if (e.dataTransfer.types.includes('application/x-gimodi-user')) {
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
@@ -1186,14 +1355,16 @@ function renderGroup(group, children) {
       e.stopPropagation();
       spacer.classList.remove('drop-above');
       const draggedId = e.dataTransfer.getData('text/plain');
-      if (!draggedId) return;
+      if (!draggedId) {
+        return;
+      }
       moveChannel(draggedId, null, siblingIndex(group.id, null, draggedId) + 1);
     });
     channelTree.appendChild(spacer);
   }
 }
 
-function renderPlaceholder(ch, isChild, groupId) {
+function renderPlaceholder(ch, isChild, _groupId) {
   const el = document.createElement('div');
   el.className = `channel-item placeholder${isChild ? ' child' : ''}`;
   el.dataset.channelId = ch.id;
@@ -1217,7 +1388,9 @@ function renderPlaceholder(ch, isChild, groupId) {
 
   if (serverService.hasPermission('channel.update')) {
     el.addEventListener('dragover', (e) => {
-      if (e.dataTransfer.types.includes('application/x-gimodi-user')) return;
+      if (e.dataTransfer.types.includes('application/x-gimodi-user')) {
+        return;
+      }
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
       const rect = el.getBoundingClientRect();
@@ -1232,7 +1405,9 @@ function renderPlaceholder(ch, isChild, groupId) {
       e.preventDefault();
       el.classList.remove('drop-above', 'drop-below');
       const draggedId = e.dataTransfer.getData('text/plain');
-      if (!draggedId || draggedId === ch.id) return;
+      if (!draggedId || draggedId === ch.id) {
+        return;
+      }
       const targetParent = ch.parentId || null;
       const ci = siblingIndex(ch.id, targetParent, draggedId);
       const rect = el.getBoundingClientRect();
@@ -1244,13 +1419,13 @@ function renderPlaceholder(ch, isChild, groupId) {
   channelTree.appendChild(el);
 }
 
-function renderChannel(ch, isChild, groupId) {
+function renderChannel(ch, isChild, _groupId) {
   const el = document.createElement('div');
   el.className = `channel-item${isChild ? ' child' : ''}${ch.id === currentChannelId ? ' active' : ''}${isChannelUnread(ch.id) ? ' unread' : ''}`;
   el.dataset.channelId = ch.id;
 
   // Build occupancy display
-  const userCount = clients.filter(c => c.channelId === ch.id).length;
+  const userCount = clients.filter((c) => c.channelId === ch.id).length;
   const occupancy = ch.maxUsers ? ` <span style="color:var(--text-muted);font-size:0.9em">(${userCount}/${ch.maxUsers})</span>` : '';
 
   el.innerHTML = `
@@ -1261,7 +1436,9 @@ function renderChannel(ch, isChild, groupId) {
   `;
   let clickTimer = null;
   el.addEventListener('click', () => {
-    if (clickTimer) return; // second click will be handled by dblclick
+    if (clickTimer) {
+      return;
+    } // second click will be handled by dblclick
     clickTimer = setTimeout(async () => {
       clickTimer = null;
       // Single click: open chat-only view
@@ -1274,7 +1451,9 @@ function renderChannel(ch, isChild, groupId) {
             password = savedPasswords.get(ch.id);
           } else {
             password = await askChannelPassword();
-            if (password === null) return;
+            if (password === null) {
+              return;
+            }
             savedPasswords.set(ch.id, password);
           }
         }
@@ -1283,7 +1462,10 @@ function renderChannel(ch, isChild, groupId) {
     }, 250);
   });
   el.addEventListener('dblclick', () => {
-    if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+    if (clickTimer) {
+      clearTimeout(clickTimer);
+      clickTimer = null;
+    }
     switchChannel(ch.id);
   });
   el.addEventListener('contextmenu', (e) => showChannelContextMenu(e, ch));
@@ -1329,13 +1511,15 @@ function renderChannel(ch, isChild, groupId) {
       // User drop - move user to this channel
       const userId = e.dataTransfer.getData('application/x-gimodi-user');
       if (userId) {
-        serverService.request('admin:move-user', { clientId: userId, channelId: ch.id }).catch(async err => await customAlert(err.message));
+        serverService.request('admin:move-user', { clientId: userId, channelId: ch.id }).catch(async (err) => await customAlert(err.message));
         return;
       }
 
       // Channel drop - reorder channels
       const draggedId = e.dataTransfer.getData('text/plain');
-      if (!draggedId || draggedId === ch.id) return;
+      if (!draggedId || draggedId === ch.id) {
+        return;
+      }
 
       // Don't allow nesting groups
       const isGroupDrag = e.dataTransfer.getData('application/x-gimodi-group');
@@ -1357,7 +1541,7 @@ function renderChannel(ch, isChild, groupId) {
         moveChannel(draggedId, targetParent, ci + 1);
       } else {
         // Only allow dropping into groups, not into regular channels
-        const targetCh = channels.find(c => c.id === ch.id);
+        const targetCh = channels.find((c) => c.id === ch.id);
         if (targetCh && targetCh.type === 'group') {
           moveChannel(draggedId, ch.id, 0);
         } else {
@@ -1370,8 +1554,7 @@ function renderChannel(ch, isChild, groupId) {
   channelTree.appendChild(el);
 
   // Show users in this channel
-  const usersInChannel = clients.filter(c => c.channelId === ch.id)
-    .sort((a, b) => (a.rolePosition ?? Infinity) - (b.rolePosition ?? Infinity) || a.nickname.localeCompare(b.nickname));
+  const usersInChannel = clients.filter((c) => c.channelId === ch.id).sort((a, b) => (a.rolePosition ?? Infinity) - (b.rolePosition ?? Infinity) || a.nickname.localeCompare(b.nickname));
   if (usersInChannel.length > 0) {
     const usersEl = document.createElement('div');
     usersEl.className = 'channel-users';
@@ -1469,13 +1652,15 @@ function renderChannel(ch, isChild, groupId) {
       if (u.id !== serverService.clientId) {
         userEl.style.cursor = 'pointer';
         userEl.addEventListener('dblclick', () => {
-          window.dispatchEvent(new CustomEvent('gimodi:open-dm', {
-            detail: {
-              userId: u.id,
-              persistentUserId: u.userId || null,
-              nickname: u.nickname,
-            },
-          }));
+          window.dispatchEvent(
+            new CustomEvent('gimodi:open-dm', {
+              detail: {
+                userId: u.id,
+                persistentUserId: u.userId || null,
+                nickname: u.nickname,
+              },
+            }),
+          );
         });
       }
 
@@ -1484,7 +1669,6 @@ function renderChannel(ch, isChild, groupId) {
     channelTree.appendChild(usersEl);
   }
 }
-
 
 // --- Context menu & Connection Details ---
 
@@ -1525,7 +1709,9 @@ function showChannelContextMenu(e, ch) {
         password = savedPasswords.get(ch.id);
       } else {
         password = await askChannelPassword();
-        if (password === null) return;
+        if (password === null) {
+          return;
+        }
         savedPasswords.set(ch.id, password);
       }
     }
@@ -1602,7 +1788,9 @@ function showChannelContextMenu(e, ch) {
 
 function showMoveChannelModal(ch) {
   const existing = document.querySelector('.modal-move-channel');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-move-channel';
@@ -1611,16 +1799,16 @@ function showMoveChannelModal(ch) {
   const isDescendant = (parentId, targetId) => {
     let current = parentId;
     while (current) {
-      if (current === targetId) return true;
-      const parent = channels.find(c => c.id === current);
+      if (current === targetId) {
+        return true;
+      }
+      const parent = channels.find((c) => c.id === current);
       current = parent ? parent.parentId : null;
     }
     return false;
   };
 
-  const validParents = channels.filter(c =>
-    c.id !== ch.id && c.type === 'group' && !isDescendant(c.parentId, ch.id) && c.parentId !== ch.id
-  );
+  const validParents = channels.filter((c) => c.id !== ch.id && c.type === 'group' && !isDescendant(c.parentId, ch.id) && c.parentId !== ch.id);
 
   const options = [`<option value="">-- Top Level --</option>`];
   for (const p of validParents) {
@@ -1644,53 +1832,90 @@ function showMoveChannelModal(ch) {
 
   document.body.appendChild(modal);
 
-  const closeModal = () => { modal.remove(); document.removeEventListener('keydown', onEscape); };
+  const closeModal = () => {
+    modal.remove();
+    document.removeEventListener('keydown', onEscape);
+  };
 
   modal.querySelector('.modal-move-btn').addEventListener('click', () => {
     const newParentId = modal.querySelector('.move-channel-parent').value || null;
-    const siblings = channels
-      .filter(c => c.id !== ch.id && (c.parentId || null) === newParentId)
-      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const siblings = channels.filter((c) => c.id !== ch.id && (c.parentId || null) === newParentId).sort((a, b) => a.sortOrder - b.sortOrder);
     const sortOrder = siblings.length > 0 ? siblings[siblings.length - 1].sortOrder + 1 : 0;
     serverService.send('channel:update', { channelId: ch.id, parentId: newParentId, sortOrder });
     closeModal();
   });
 
   modal.querySelector('.modal-cancel-btn').addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-  const onEscape = (e) => { if (e.key === 'Escape') closeModal(); };
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
+  const onEscape = (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+  };
   document.addEventListener('keydown', onEscape);
 }
 
 function formatFileSize(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
 function getFileBrowserHttpBaseUrl() {
   const addr = serverService.address;
-  if (!addr) return '';
-  if (addr.startsWith('ws://')) return addr.replace(/^ws:\/\//, 'http://');
-  if (addr.startsWith('wss://')) return addr.replace(/^wss:\/\//, 'https://');
+  if (!addr) {
+    return '';
+  }
+  if (addr.startsWith('ws://')) {
+    return addr.replace(/^ws:\/\//, 'http://');
+  }
+  if (addr.startsWith('wss://')) {
+    return addr.replace(/^wss:\/\//, 'https://');
+  }
   return `https://${addr}`;
 }
 
 function getFileIcon(mimeType) {
-  if (!mimeType) return 'bi-file-earmark';
-  if (mimeType.startsWith('image/')) return 'bi-file-earmark-image';
-  if (mimeType.startsWith('video/')) return 'bi-file-earmark-play';
-  if (mimeType.startsWith('audio/')) return 'bi-file-earmark-music';
-  if (mimeType === 'application/pdf') return 'bi-file-earmark-pdf';
-  if (mimeType === 'application/zip') return 'bi-file-earmark-zip';
-  if (mimeType.startsWith('text/')) return 'bi-file-earmark-text';
+  if (!mimeType) {
+    return 'bi-file-earmark';
+  }
+  if (mimeType.startsWith('image/')) {
+    return 'bi-file-earmark-image';
+  }
+  if (mimeType.startsWith('video/')) {
+    return 'bi-file-earmark-play';
+  }
+  if (mimeType.startsWith('audio/')) {
+    return 'bi-file-earmark-music';
+  }
+  if (mimeType === 'application/pdf') {
+    return 'bi-file-earmark-pdf';
+  }
+  if (mimeType === 'application/zip') {
+    return 'bi-file-earmark-zip';
+  }
+  if (mimeType.startsWith('text/')) {
+    return 'bi-file-earmark-text';
+  }
   return 'bi-file-earmark';
 }
 
 async function showFileBrowserModal(ch) {
   const existing = document.querySelector('.modal-file-browser');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const canDelete = serverService.hasPermission('file.delete');
   const baseUrl = getFileBrowserHttpBaseUrl();
@@ -1714,12 +1939,16 @@ async function showFileBrowserModal(ch) {
         <option value="name-desc">Name Z–A</option>
       </select>
     </div>
-    ${canDelete ? `<div class="file-browser-selection-bar" style="display: none; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.8rem;">
+    ${
+      canDelete
+        ? `<div class="file-browser-selection-bar" style="display: none; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.8rem;">
       <button class="btn-secondary file-browser-bulk-toggle" style="padding: 4px 10px; font-size: 0.78rem;"><i class="bi bi-check2-square"></i> Bulk select</button>
       <label class="file-browser-bulk-controls" style="display: none; align-items: center; gap: 4px; cursor: pointer;"><input type="checkbox" class="file-browser-select-all"> Select all</label>
       <span class="file-browser-selection-count" style="color: var(--text-muted, #888);"></span>
       <button class="btn-secondary file-browser-delete-selected danger" style="display: none; margin-left: auto; padding: 4px 10px; font-size: 0.78rem; color: var(--danger-color, #e74c3c);"><i class="bi bi-trash"></i> Delete selected</button>
-    </div>` : ''}
+    </div>`
+        : ''
+    }
     <div class="file-browser-list" style="flex: 1; overflow-y: auto; min-height: 200px;"></div>
     <div class="file-browser-load-more" style="text-align: center; padding: 8px; display: none;">
       <button class="btn-secondary file-browser-load-more-btn" style="font-size: 0.8rem;">Load more</button>
@@ -1757,7 +1986,9 @@ async function showFileBrowserModal(ch) {
   }
 
   function updateSelectionUI() {
-    if (!selectionBar) return;
+    if (!selectionBar) {
+      return;
+    }
     selectionBar.style.display = allFiles.length > 0 ? 'flex' : 'none';
     bulkControls.style.display = bulkMode ? 'flex' : 'none';
     deleteSelectedBtn.style.display = bulkMode ? '' : 'none';
@@ -1767,8 +1998,8 @@ async function showFileBrowserModal(ch) {
     deleteSelectedBtn.style.opacity = count === 0 ? '0.5' : '1';
     // Update select-all checkbox state
     const visibleCheckboxes = listEl.querySelectorAll('.file-row-checkbox');
-    const allChecked = visibleCheckboxes.length > 0 && [...visibleCheckboxes].every(cb => cb.checked);
-    const someChecked = [...visibleCheckboxes].some(cb => cb.checked);
+    const allChecked = visibleCheckboxes.length > 0 && [...visibleCheckboxes].every((cb) => cb.checked);
+    const someChecked = [...visibleCheckboxes].some((cb) => cb.checked);
     selectAllCheckbox.checked = allChecked;
     selectAllCheckbox.indeterminate = someChecked && !allChecked;
   }
@@ -1777,20 +2008,30 @@ async function showFileBrowserModal(ch) {
     const mode = sortSelect.value;
     const sorted = [...files];
     switch (mode) {
-      case 'date-desc': sorted.sort((a, b) => b.createdAt - a.createdAt); break;
-      case 'date-asc':  sorted.sort((a, b) => a.createdAt - b.createdAt); break;
-      case 'size-desc': sorted.sort((a, b) => b.size - a.size); break;
-      case 'size-asc':  sorted.sort((a, b) => a.size - b.size); break;
-      case 'name-asc':  sorted.sort((a, b) => a.filename.localeCompare(b.filename)); break;
-      case 'name-desc': sorted.sort((a, b) => b.filename.localeCompare(a.filename)); break;
+      case 'date-desc':
+        sorted.sort((a, b) => b.createdAt - a.createdAt);
+        break;
+      case 'date-asc':
+        sorted.sort((a, b) => a.createdAt - b.createdAt);
+        break;
+      case 'size-desc':
+        sorted.sort((a, b) => b.size - a.size);
+        break;
+      case 'size-asc':
+        sorted.sort((a, b) => a.size - b.size);
+        break;
+      case 'name-asc':
+        sorted.sort((a, b) => a.filename.localeCompare(b.filename));
+        break;
+      case 'name-desc':
+        sorted.sort((a, b) => b.filename.localeCompare(a.filename));
+        break;
     }
     return sorted;
   }
 
   function renderFiles(filter) {
-    let filtered = filter
-      ? allFiles.filter(f => f.filename.toLowerCase().includes(filter.toLowerCase()))
-      : allFiles;
+    let filtered = filter ? allFiles.filter((f) => f.filename.toLowerCase().includes(filter.toLowerCase())) : allFiles;
     filtered = sortFiles(filtered);
 
     if (filtered.length === 0) {
@@ -1824,8 +2065,11 @@ async function showFileBrowserModal(ch) {
       // Checkbox toggle (only present in bulk mode)
       if (canDelete && bulkMode) {
         row.querySelector('.file-row-checkbox').addEventListener('change', (e) => {
-          if (e.target.checked) selectedIds.add(file.id);
-          else selectedIds.delete(file.id);
+          if (e.target.checked) {
+            selectedIds.add(file.id);
+          } else {
+            selectedIds.delete(file.id);
+          }
           updateSelectionUI();
         });
       }
@@ -1833,10 +2077,12 @@ async function showFileBrowserModal(ch) {
       // Single file delete
       if (canDelete) {
         row.querySelector('.file-delete-btn').addEventListener('click', async () => {
-          if (!await customConfirm(`Delete "${file.filename}"?`)) return;
+          if (!(await customConfirm(`Delete "${file.filename}"?`))) {
+            return;
+          }
           try {
             await serverService.request('file:delete', { fileId: file.id });
-            allFiles = allFiles.filter(f => f.id !== file.id);
+            allFiles = allFiles.filter((f) => f.id !== file.id);
             selectedIds.delete(file.id);
             updateStats();
             renderFiles(searchInput.value);
@@ -1901,22 +2147,29 @@ async function showFileBrowserModal(ch) {
       const checkboxes = listEl.querySelectorAll('.file-row-checkbox');
       for (const cb of checkboxes) {
         cb.checked = selectAllCheckbox.checked;
-        if (selectAllCheckbox.checked) selectedIds.add(cb.dataset.fileId);
-        else selectedIds.delete(cb.dataset.fileId);
+        if (selectAllCheckbox.checked) {
+          selectedIds.add(cb.dataset.fileId);
+        } else {
+          selectedIds.delete(cb.dataset.fileId);
+        }
       }
       updateSelectionUI();
     });
 
     deleteSelectedBtn.addEventListener('click', async () => {
       const count = selectedIds.size;
-      if (count === 0) return;
-      if (!await customConfirm(`Delete ${count} file${count !== 1 ? 's' : ''}?`)) return;
+      if (count === 0) {
+        return;
+      }
+      if (!(await customConfirm(`Delete ${count} file${count !== 1 ? 's' : ''}?`))) {
+        return;
+      }
       const ids = [...selectedIds];
       let failed = 0;
       for (const id of ids) {
         try {
           await serverService.request('file:delete', { fileId: id });
-          allFiles = allFiles.filter(f => f.id !== id);
+          allFiles = allFiles.filter((f) => f.id !== id);
           selectedIds.delete(id);
         } catch {
           failed++;
@@ -1924,7 +2177,9 @@ async function showFileBrowserModal(ch) {
       }
       updateStats();
       renderFiles(searchInput.value);
-      if (failed > 0) await customAlert(`${failed} file${failed !== 1 ? 's' : ''} could not be deleted.`);
+      if (failed > 0) {
+        await customAlert(`${failed} file${failed !== 1 ? 's' : ''} could not be deleted.`);
+      }
     });
   }
 
@@ -1934,9 +2189,17 @@ async function showFileBrowserModal(ch) {
   };
 
   modal.querySelector('.modal-cancel-btn').addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
 
-  const onEscape = (e) => { if (e.key === 'Escape') closeModal(); };
+  const onEscape = (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+  };
   document.addEventListener('keydown', onEscape);
 
   // Initial load
@@ -1946,14 +2209,20 @@ async function showFileBrowserModal(ch) {
 
 async function showEditChannelModal(ch) {
   const existing = document.querySelector('.modal-edit-channel');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   // Try to load roles for the access control section
   let roles = null;
   try {
     const result = await serverService.request('role:list', {});
-    if (result && result.roles) roles = result.roles;
-  } catch { /* no permission or error - skip roles section */ }
+    if (result && result.roles) {
+      roles = result.roles;
+    }
+  } catch {
+    /* no permission or error - skip roles section */
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-edit-channel';
@@ -1965,13 +2234,16 @@ async function showEditChannelModal(ch) {
     const currentWrite = ch.writeRoles || [];
     const currentRead = ch.readRoles || [];
     const currentVisibility = ch.visibilityRoles || [];
-    const makeChips = (cls, current) => roles.map(r => {
-      const active = current.includes(r.id) ? ' active' : '';
-      return `<button type="button" class="role-chip ${cls}${active}" data-role-id="${r.id}">
+    const makeChips = (cls, current) =>
+      roles
+        .map((r) => {
+          const active = current.includes(r.id) ? ' active' : '';
+          return `<button type="button" class="role-chip ${cls}${active}" data-role-id="${r.id}">
         <i class="bi ${active ? 'bi-check-circle-fill' : 'bi-circle'}"></i>
         ${escapeHtml(r.name)}
       </button>`;
-    }).join('');
+        })
+        .join('');
     rolesHtml = `
       <div class="form-section-header">Access Control</div>
       <div class="acl-card">
@@ -2008,11 +2280,13 @@ async function showEditChannelModal(ch) {
       </div>`;
   }
 
-  const removePwHtml = ch.hasPassword ? `
+  const removePwHtml = ch.hasPassword
+    ? `
     <label class="checkbox-label" for="edit-ch-rmpw-${uid}">
       <input type="checkbox" class="edit-channel-remove-pw" id="edit-ch-rmpw-${uid}">
       Remove existing password
-    </label>` : '';
+    </label>`
+    : '';
 
   modal.innerHTML = `
     <div class="modal-content">
@@ -2094,7 +2368,7 @@ async function showEditChannelModal(ch) {
   };
 
   function getFormState() {
-    const activeChips = (cls) => [...modal.querySelectorAll(`.role-chip.${cls}.active`)].map(c => c.dataset.roleId).sort();
+    const activeChips = (cls) => [...modal.querySelectorAll(`.role-chip.${cls}.active`)].map((c) => c.dataset.roleId).sort();
     return {
       name: nameInput.value.trim(),
       maxUsers: modal.querySelector('.edit-channel-max-users').value,
@@ -2107,16 +2381,22 @@ async function showEditChannelModal(ch) {
   }
 
   function isDirty() {
-    if (removePwCheckbox && removePwCheckbox.checked) return true;
-    if (passwordInput.value !== '') return true;
+    if (removePwCheckbox && removePwCheckbox.checked) {
+      return true;
+    }
+    if (passwordInput.value !== '') {
+      return true;
+    }
     const cur = getFormState();
-    return cur.name !== initial.name
-      || cur.maxUsers !== initial.maxUsers
-      || cur.moderated !== initial.moderated
-      || cur.allowedRoles !== initial.allowedRoles
-      || cur.readRoles !== initial.readRoles
-      || cur.writeRoles !== initial.writeRoles
-      || cur.visibilityRoles !== initial.visibilityRoles;
+    return (
+      cur.name !== initial.name ||
+      cur.maxUsers !== initial.maxUsers ||
+      cur.moderated !== initial.moderated ||
+      cur.allowedRoles !== initial.allowedRoles ||
+      cur.readRoles !== initial.readRoles ||
+      cur.writeRoles !== initial.writeRoles ||
+      cur.visibilityRoles !== initial.visibilityRoles
+    );
   }
 
   function validateName() {
@@ -2142,21 +2422,21 @@ async function showEditChannelModal(ch) {
     saveBtn.disabled = !isDirty();
   }
 
-  modal.querySelectorAll('input').forEach(input => {
+  modal.querySelectorAll('input').forEach((input) => {
     input.addEventListener('input', updateSaveBtn);
     input.addEventListener('change', updateSaveBtn);
   });
 
-  modal.querySelectorAll('.acl-tab').forEach(tab => {
+  modal.querySelectorAll('.acl-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
-      modal.querySelectorAll('.acl-tab').forEach(t => t.classList.remove('active'));
-      modal.querySelectorAll('.acl-tab-panel').forEach(p => p.classList.remove('active'));
+      modal.querySelectorAll('.acl-tab').forEach((t) => t.classList.remove('active'));
+      modal.querySelectorAll('.acl-tab-panel').forEach((p) => p.classList.remove('active'));
       tab.classList.add('active');
       modal.querySelector(`.acl-tab-panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
     });
   });
 
-  modal.querySelectorAll('.role-chip').forEach(chip => {
+  modal.querySelectorAll('.role-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
       chip.classList.toggle('active');
       const icon = chip.querySelector('i');
@@ -2167,14 +2447,18 @@ async function showEditChannelModal(ch) {
 
   nameInput.addEventListener('input', () => {
     updateCounter();
-    if (nameInput.classList.contains('is-invalid')) validateName();
+    if (nameInput.classList.contains('is-invalid')) {
+      validateName();
+    }
     updateSaveBtn();
   });
 
   if (removePwCheckbox) {
     removePwCheckbox.addEventListener('change', () => {
       passwordInput.disabled = removePwCheckbox.checked;
-      if (removePwCheckbox.checked) passwordInput.value = '';
+      if (removePwCheckbox.checked) {
+        passwordInput.value = '';
+      }
       updateSaveBtn();
     });
   }
@@ -2189,20 +2473,24 @@ async function showEditChannelModal(ch) {
   };
 
   const save = () => {
-    if (!validateName()) return;
+    if (!validateName()) {
+      return;
+    }
     const payload = { channelId: ch.id, name: nameInput.value.trim() };
     const removePwCb = modal.querySelector('.edit-channel-remove-pw');
     if (removePwCb && removePwCb.checked) {
       payload.password = null;
     } else {
       const pw = passwordInput.value;
-      if (pw !== '') payload.password = pw;
+      if (pw !== '') {
+        payload.password = pw;
+      }
     }
     const maxUsersInput = modal.querySelector('.edit-channel-max-users');
     const maxUsers = parseInt(maxUsersInput.value);
-    payload.maxUsers = (maxUsers > 0) ? maxUsers : null;
+    payload.maxUsers = maxUsers > 0 ? maxUsers : null;
     payload.moderated = modal.querySelector('.edit-channel-moderated').checked;
-    const activeChips = (cls) => [...modal.querySelectorAll(`.role-chip.${cls}.active`)].map(c => c.dataset.roleId);
+    const activeChips = (cls) => [...modal.querySelectorAll(`.role-chip.${cls}.active`)].map((c) => c.dataset.roleId);
     const joinChips = modal.querySelectorAll('.role-chip.edit-ch-role');
     if (joinChips.length > 0) {
       payload.allowedRoles = activeChips('edit-ch-role');
@@ -2227,18 +2515,28 @@ async function showEditChannelModal(ch) {
 
   modal.querySelector('.modal-save-btn').addEventListener('click', save);
   modal.querySelector('.modal-cancel-btn').addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
 
   const onEscape = (e) => {
-    if (e.key === 'Escape') closeModal();
-    if (e.key === 'Enter' && e.target === nameInput) save();
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+    if (e.key === 'Enter' && e.target === nameInput) {
+      save();
+    }
   };
   document.addEventListener('keydown', onEscape);
 }
 
 function showDeleteChannelConfirm(ch) {
   const existing = document.querySelector('.modal-delete-channel');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-delete-channel';
@@ -2268,17 +2566,25 @@ function showDeleteChannelConfirm(ch) {
 
   modal.querySelector('.modal-yes-btn').addEventListener('click', confirmDelete);
   modal.querySelector('.modal-no-btn').addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
 
   const onEscape = (e) => {
-    if (e.key === 'Escape') closeModal();
+    if (e.key === 'Escape') {
+      closeModal();
+    }
   };
   document.addEventListener('keydown', onEscape);
 }
 
 function showBanModal(user, options = {}) {
   const existing = document.querySelector('.modal-ban-user');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-ban-user';
@@ -2335,11 +2641,19 @@ function showBanModal(user, options = {}) {
 
   modal.querySelector('.modal-ban-btn').addEventListener('click', confirmBan);
   modal.querySelector('.modal-cancel-btn').addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
 
   const onEscape = (e) => {
-    if (e.key === 'Escape') closeModal();
-    if (e.key === 'Enter' && (e.target === reasonInput || e.target === durationSelect)) confirmBan();
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+    if (e.key === 'Enter' && (e.target === reasonInput || e.target === durationSelect)) {
+      confirmBan();
+    }
   };
   document.addEventListener('keydown', onEscape);
 }
@@ -2349,7 +2663,14 @@ function showGroupContextMenu(e, group) {
   e.stopPropagation();
   dismissContextMenu();
 
-  if (!serverService.hasPermission('channel.update') && !serverService.hasPermission('channel.delete') && !serverService.hasPermission('channel.create') && !serverService.hasPermission('channel.placeholder_create')) return;
+  if (
+    !serverService.hasPermission('channel.update') &&
+    !serverService.hasPermission('channel.delete') &&
+    !serverService.hasPermission('channel.create') &&
+    !serverService.hasPermission('channel.placeholder_create')
+  ) {
+    return;
+  }
 
   const menu = document.createElement('div');
   menu.className = 'context-menu';
@@ -2423,13 +2744,19 @@ function showGroupContextMenu(e, group) {
 
 async function showEditGroupModal(group) {
   const existing = document.querySelector('.modal-edit-group');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   let roles = null;
   try {
     const result = await serverService.request('role:list', {});
-    if (result && result.roles) roles = result.roles;
-  } catch { /* no permission or error - skip roles section */ }
+    if (result && result.roles) {
+      roles = result.roles;
+    }
+  } catch {
+    /* no permission or error - skip roles section */
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-edit-group';
@@ -2440,13 +2767,16 @@ async function showEditGroupModal(group) {
     const currentWrite = group.writeRoles || [];
     const currentRead = group.readRoles || [];
     const currentVisibility = group.visibilityRoles || [];
-    const makeChips = (cls, current) => roles.map(r => {
-      const active = current.includes(r.id) ? ' active' : '';
-      return `<button type="button" class="role-chip ${cls}${active}" data-role-id="${r.id}">
+    const makeChips = (cls, current) =>
+      roles
+        .map((r) => {
+          const active = current.includes(r.id) ? ' active' : '';
+          return `<button type="button" class="role-chip ${cls}${active}" data-role-id="${r.id}">
         <i class="bi ${active ? 'bi-check-circle-fill' : 'bi-circle'}"></i>
         ${escapeHtml(r.name)}
       </button>`;
-    }).join('');
+        })
+        .join('');
     rolesHtml = `
       <div class="form-section-header">Access Control</div>
       <div class="acl-hint" style="margin-bottom:8px;">Group-level restrictions override individual channel settings.</div>
@@ -2513,7 +2843,7 @@ async function showEditGroupModal(group) {
   };
 
   function getFormState() {
-    const activeChips = (cls) => [...modal.querySelectorAll(`.role-chip.${cls}.active`)].map(c => c.dataset.roleId).sort();
+    const activeChips = (cls) => [...modal.querySelectorAll(`.role-chip.${cls}.active`)].map((c) => c.dataset.roleId).sort();
     return {
       name: nameInput.value.trim(),
       allowedRoles: JSON.stringify(activeChips('edit-grp-role')),
@@ -2525,31 +2855,33 @@ async function showEditGroupModal(group) {
 
   function isDirty() {
     const cur = getFormState();
-    return cur.name !== initial.name
-      || cur.allowedRoles !== initial.allowedRoles
-      || cur.readRoles !== initial.readRoles
-      || cur.writeRoles !== initial.writeRoles
-      || cur.visibilityRoles !== initial.visibilityRoles;
+    return (
+      cur.name !== initial.name ||
+      cur.allowedRoles !== initial.allowedRoles ||
+      cur.readRoles !== initial.readRoles ||
+      cur.writeRoles !== initial.writeRoles ||
+      cur.visibilityRoles !== initial.visibilityRoles
+    );
   }
 
   function updateSaveBtn() {
     saveBtn.disabled = !isDirty();
   }
 
-  modal.querySelectorAll('input').forEach(input => {
+  modal.querySelectorAll('input').forEach((input) => {
     input.addEventListener('input', updateSaveBtn);
   });
 
-  modal.querySelectorAll('.acl-tab').forEach(tab => {
+  modal.querySelectorAll('.acl-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
-      modal.querySelectorAll('.acl-tab').forEach(t => t.classList.remove('active'));
-      modal.querySelectorAll('.acl-tab-panel').forEach(p => p.classList.remove('active'));
+      modal.querySelectorAll('.acl-tab').forEach((t) => t.classList.remove('active'));
+      modal.querySelectorAll('.acl-tab-panel').forEach((p) => p.classList.remove('active'));
       tab.classList.add('active');
       modal.querySelector(`.acl-tab-panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
     });
   });
 
-  modal.querySelectorAll('.role-chip').forEach(chip => {
+  modal.querySelectorAll('.role-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
       chip.classList.toggle('active');
       const icon = chip.querySelector('i');
@@ -2568,9 +2900,11 @@ async function showEditGroupModal(group) {
 
   const save = () => {
     const name = nameInput.value.trim();
-    if (!name) return;
+    if (!name) {
+      return;
+    }
     const payload = { channelId: group.id, name };
-    const activeChips = (cls) => [...modal.querySelectorAll(`.role-chip.${cls}.active`)].map(c => c.dataset.roleId);
+    const activeChips = (cls) => [...modal.querySelectorAll(`.role-chip.${cls}.active`)].map((c) => c.dataset.roleId);
     if (modal.querySelectorAll('.role-chip.edit-grp-role').length > 0) {
       payload.allowedRoles = activeChips('edit-grp-role');
     }
@@ -2591,11 +2925,19 @@ async function showEditGroupModal(group) {
 
   modal.querySelector('.modal-save-btn').addEventListener('click', save);
   modal.querySelector('.modal-cancel-btn').addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
 
   const onEscape = (e) => {
-    if (e.key === 'Escape') closeModal();
-    if (e.key === 'Enter' && e.target === nameInput) save();
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+    if (e.key === 'Enter' && e.target === nameInput) {
+      save();
+    }
   };
   document.addEventListener('keydown', onEscape);
 }
@@ -2607,7 +2949,9 @@ function showPlaceholderContextMenu(e, ch) {
 
   const canUpdate = serverService.hasPermission('channel.update');
   const canDelete = serverService.hasPermission('channel.delete');
-  if (!canUpdate && !canDelete) return;
+  if (!canUpdate && !canDelete) {
+    return;
+  }
 
   const menu = document.createElement('div');
   menu.className = 'context-menu';
@@ -2657,7 +3001,9 @@ function showPlaceholderContextMenu(e, ch) {
 
 function showEditPlaceholderModal(ch) {
   const existing = document.querySelector('.modal-edit-placeholder');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-edit-placeholder';
@@ -2696,25 +3042,37 @@ function showEditPlaceholderModal(ch) {
 
   const save = () => {
     const name = nameInput.value.trim();
-    if (!name || name === ch.name) return;
+    if (!name || name === ch.name) {
+      return;
+    }
     serverService.send('channel:update', { channelId: ch.id, name });
     closeModal();
   };
 
   saveBtn.addEventListener('click', save);
   modal.querySelector('.modal-cancel-btn').addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
 
   const onEscape = (e) => {
-    if (e.key === 'Escape') closeModal();
-    if (e.key === 'Enter' && e.target === nameInput) save();
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+    if (e.key === 'Enter' && e.target === nameInput) {
+      save();
+    }
   };
   document.addEventListener('keydown', onEscape);
 }
 
 function dismissContextMenu() {
   const existing = document.querySelector('.context-menu:not(#create-dropdown)');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 }
 
 /**
@@ -2778,10 +3136,14 @@ export function showUserContextMenu(e, user, options = {}) {
     if (!options.fromChat && serverService.hasPermission('user.poke')) {
       addItem('Poke', async () => {
         const message = await customPrompt(`Poke message for ${user.nickname} (optional):`);
-        if (message === null) return;
+        if (message === null) {
+          return;
+        }
         try {
           await serverService.request('admin:poke', { clientId: user.id, message });
-        } catch (err) { await customAlert(err.message); }
+        } catch (err) {
+          await customAlert(err.message);
+        }
       });
     }
   }
@@ -2824,11 +3186,13 @@ export function showUserContextMenu(e, user, options = {}) {
   }
 
   if (!options.fromChat) {
-    if (!menu.querySelector('.context-menu-separator')) addSeparator();
+    if (!menu.querySelector('.context-menu-separator')) {
+      addSeparator();
+    }
     addItem('Connection Details', () => showConnectionDetails(user));
   }
 
-  const currentChannel = channels.find(c => c.id === currentChannelId);
+  const currentChannel = channels.find((c) => c.id === currentChannelId);
   if (currentChannel?.moderated) {
     const hasVoicePerms = serverService.hasPermission('voice.grant') || serverService.hasPermission('voice.revoke');
 
@@ -2838,13 +3202,19 @@ export function showUserContextMenu(e, user, options = {}) {
 
       if (voiceGrantedClients.has(user.id)) {
         addItem('Revoke Voice', async () => {
-          try { await serverService.request('admin:revoke-voice', { clientId: user.id }); }
-          catch (err) { await customAlert(err.message); }
+          try {
+            await serverService.request('admin:revoke-voice', { clientId: user.id });
+          } catch (err) {
+            await customAlert(err.message);
+          }
         });
       } else {
         addItem(voiceRequestClients.has(user.id) ? 'Grant Voice (requested)' : 'Grant Voice', async () => {
-          try { await serverService.request('admin:grant-voice', { clientId: user.id }); }
-          catch (err) { await customAlert(err.message); }
+          try {
+            await serverService.request('admin:grant-voice', { clientId: user.id });
+          } catch (err) {
+            await customAlert(err.message);
+          }
         });
       }
     }
@@ -2859,7 +3229,9 @@ export function showUserContextMenu(e, user, options = {}) {
             await serverService.request('voice:cancel-request');
             voiceRequestClients.delete(user.id);
             renderChannelTree();
-          } catch (err) { await customAlert(err.message); }
+          } catch (err) {
+            await customAlert(err.message);
+          }
         });
       } else {
         addItem('Request Voice', async () => {
@@ -2867,27 +3239,32 @@ export function showUserContextMenu(e, user, options = {}) {
             await serverService.request('voice:request');
             voiceRequestClients.add(user.id);
             renderChannelTree();
-          } catch (err) { await customAlert(err.message); }
+          } catch (err) {
+            await customAlert(err.message);
+          }
         });
       }
     }
   }
 
-  const hasAdminActions = isOther && (
-    serverService.hasPermission('user.kick') ||
-    serverService.hasPermission('user.ban') ||
-    serverService.hasPermission('user.assign_role')
-  );
+  const hasAdminActions = isOther && (serverService.hasPermission('user.kick') || serverService.hasPermission('user.ban') || serverService.hasPermission('user.assign_role'));
 
   if (hasAdminActions) {
     addSeparator();
     addLabel('Administration');
 
     if (!options.fromChat && serverService.hasPermission('user.kick')) {
-      addItem('Kick', async () => {
-        try { await serverService.request('admin:kick', { clientId: user.id }); }
-        catch (err) { await customAlert(err.message); }
-      }, { danger: true });
+      addItem(
+        'Kick',
+        async () => {
+          try {
+            await serverService.request('admin:kick', { clientId: user.id });
+          } catch (err) {
+            await customAlert(err.message);
+          }
+        },
+        { danger: true },
+      );
     }
 
     if (serverService.hasPermission('user.ban')) {
@@ -2937,7 +3314,7 @@ async function showSetRoleMenu(user, x, y, options = {}) {
     return;
   }
 
-  document.querySelectorAll('.context-menu').forEach(m => m.remove());
+  document.querySelectorAll('.context-menu').forEach((m) => m.remove());
 
   const submenu = document.createElement('div');
   submenu.className = 'context-menu';
@@ -2993,7 +3370,9 @@ async function showSetRoleMenu(user, x, y, options = {}) {
   const noneRow = document.createElement('div');
   noneRow.className = 'context-menu-item' + (!currentRole ? ' disabled' : '');
   noneRow.style.cssText = 'display:flex;align-items:center;gap:8px';
-  if (!currentRole) noneRow.style.opacity = '0.5';
+  if (!currentRole) {
+    noneRow.style.opacity = '0.5';
+  }
   const noneDot = document.createElement('span');
   noneDot.style.cssText = 'width:14px;text-align:center;font-size:12px';
   noneDot.textContent = currentRole ? '○' : '●';
@@ -3009,7 +3388,9 @@ async function showSetRoleMenu(user, x, y, options = {}) {
         } else {
           await serverService.request('admin:remove-role', { clientId: user.id, roleId: currentRole.id });
         }
-      } catch (err) { await customAlert(err.message); }
+      } catch (err) {
+        await customAlert(err.message);
+      }
     });
   }
   submenu.appendChild(noneRow);
@@ -3045,7 +3426,9 @@ async function showConnectionDetails(user) {
 function showDetailsModal(info) {
   // Remove any existing details modal
   const existing = document.querySelector('.modal-connection-details');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-connection-details';
@@ -3072,7 +3455,9 @@ function showDetailsModal(info) {
 
   modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
   modal.addEventListener('click', (e) => {
-    if (e.target === modal) closeModal();
+    if (e.target === modal) {
+      closeModal();
+    }
   });
 
   const onEscape = (e) => {
@@ -3085,7 +3470,10 @@ function showDetailsModal(info) {
 }
 
 function onMenuAction(action) {
-  if (action === 'redeem-token') { showRedeemTokenModal(); return; }
+  if (action === 'redeem-token') {
+    showRedeemTokenModal();
+    return;
+  }
   // Route admin menu actions to the unified dialog with the right tab
   const tabMap = {
     'list-users': 'users',
@@ -3107,7 +3495,9 @@ function onMenuAction(action) {
 function initUsersTableResize(table) {
   for (const th of table.querySelectorAll('th[data-col]')) {
     const handle = th.querySelector('.col-resize-handle');
-    if (!handle) continue;
+    if (!handle) {
+      continue;
+    }
 
     handle.addEventListener('mousedown', (e) => {
       e.preventDefault();
@@ -3147,11 +3537,13 @@ async function renderUsersPanel(container) {
 
   // Sort: online first, then alphabetical
   users.sort((a, b) => {
-    if (a.online !== b.online) return a.online ? -1 : 1;
+    if (a.online !== b.online) {
+      return a.online ? -1 : 1;
+    }
     return a.nickname.localeCompare(b.nickname);
   });
 
-  const onlineCount = users.filter(u => u.online).length;
+  const onlineCount = users.filter((u) => u.online).length;
   const selectedUserIds = new Set();
 
   container.style.position = 'relative';
@@ -3242,8 +3634,11 @@ async function renderUsersPanel(container) {
     const checked = selectAllCb.checked;
     for (const cb of tbody.querySelectorAll('.user-row-cb')) {
       cb.checked = checked;
-      if (checked) selectedUserIds.add(cb.dataset.userId);
-      else selectedUserIds.delete(cb.dataset.userId);
+      if (checked) {
+        selectedUserIds.add(cb.dataset.userId);
+      } else {
+        selectedUserIds.delete(cb.dataset.userId);
+      }
     }
     updateSelectionUI();
   });
@@ -3252,8 +3647,12 @@ async function renderUsersPanel(container) {
 
   bulkDeleteBtn.addEventListener('click', async () => {
     const count = selectedUserIds.size;
-    if (count === 0) return;
-    if (!await customConfirm(`Are you sure you want to permanently delete ${count} user${count > 1 ? 's' : ''}?\n\nThis will remove their identities, roles, and all DM history.`)) return;
+    if (count === 0) {
+      return;
+    }
+    if (!(await customConfirm(`Are you sure you want to permanently delete ${count} user${count > 1 ? 's' : ''}?\n\nThis will remove their identities, roles, and all DM history.`))) {
+      return;
+    }
 
     bulkDeleteBtn.disabled = true;
     bulkDeleteBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
@@ -3281,11 +3680,16 @@ async function renderUsersPanel(container) {
     tr.style.cssText = '';
     tr.dataset.userId = user.userId.toLowerCase();
     tr.dataset.nickname = (user.registeredNicknames || [user.nickname]).join(' ').toLowerCase();
-    tr.dataset.roles = user.roles.map(r => r.name).join(', ').toLowerCase();
+    tr.dataset.roles = user.roles
+      .map((r) => r.name)
+      .join(', ')
+      .toLowerCase();
     tr.addEventListener('contextmenu', (e) => showAdminUserContextMenu(e, user, container));
     tr.style.cursor = 'pointer';
     tr.addEventListener('click', (e) => {
-      if (e.target.closest('input')) return;
+      if (e.target.closest('input')) {
+        return;
+      }
       showUserDetailModal(user);
     });
 
@@ -3297,8 +3701,11 @@ async function renderUsersPanel(container) {
     cb.dataset.userId = user.userId;
     cb.addEventListener('click', (e) => e.stopPropagation());
     cb.addEventListener('change', () => {
-      if (cb.checked) selectedUserIds.add(user.userId);
-      else selectedUserIds.delete(user.userId);
+      if (cb.checked) {
+        selectedUserIds.add(user.userId);
+      } else {
+        selectedUserIds.delete(user.userId);
+      }
       updateSelectionUI();
     });
     cbTd.appendChild(cb);
@@ -3307,21 +3714,20 @@ async function renderUsersPanel(container) {
     // Status dot
     const statusTd = document.createElement('td');
     statusTd.style.cssText = 'padding:6px 8px;text-align:center';
-    statusTd.innerHTML = user.online
-      ? '<span style="color:#4caf50;font-size:10px" title="Online">●</span>'
-      : '<span style="color:#888;font-size:10px" title="Offline">●</span>';
+    statusTd.innerHTML = user.online ? '<span style="color:#4caf50;font-size:10px" title="Online">●</span>' : '<span style="color:#888;font-size:10px" title="Offline">●</span>';
     tr.appendChild(statusTd);
 
     const nickTd = document.createElement('td');
     nickTd.style.cssText = 'padding:6px 8px';
-    const nicks = user.registeredNicknames && user.registeredNicknames.length > 0
-      ? user.registeredNicknames
-      : [user.nickname];
+    const nicks = user.registeredNicknames && user.registeredNicknames.length > 0 ? user.registeredNicknames : [user.nickname];
     nickTd.textContent = nicks[0];
     if (nicks.length > 1) {
       const extra = document.createElement('span');
       extra.style.cssText = 'margin-left:6px;font-size:11px;color:var(--text-muted)';
-      extra.textContent = nicks.slice(1).map(n => n).join(', ');
+      extra.textContent = nicks
+        .slice(1)
+        .map((n) => n)
+        .join(', ');
       nickTd.appendChild(extra);
     }
     tr.appendChild(nickTd);
@@ -3329,7 +3735,7 @@ async function renderUsersPanel(container) {
     // Role
     const roleTd = document.createElement('td');
     roleTd.style.cssText = 'padding:6px 8px;font-size:12px;color:var(--text-secondary)';
-    roleTd.textContent = user.roles.length > 0 ? user.roles.map(r => r.name).join(', ') : '-';
+    roleTd.textContent = user.roles.length > 0 ? user.roles.map((r) => r.name).join(', ') : '-';
     tr.appendChild(roleTd);
 
     // Last Seen
@@ -3363,16 +3769,14 @@ async function renderUsersPanel(container) {
  */
 function showUserDetailModal(user) {
   const existing = document.querySelector('.modal-user-detail');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
-  const nicks = user.registeredNicknames && user.registeredNicknames.length > 0
-    ? user.registeredNicknames.join(', ')
-    : user.nickname;
-  const roles = user.roles.length > 0 ? user.roles.map(r => r.name).join(', ') : '-';
+  const nicks = user.registeredNicknames && user.registeredNicknames.length > 0 ? user.registeredNicknames.join(', ') : user.nickname;
+  const roles = user.roles.length > 0 ? user.roles.map((r) => r.name).join(', ') : '-';
   const status = user.online ? 'Online' : 'Offline';
-  const lastSeen = user.online
-    ? 'Now'
-    : user.lastSeenAt ? new Date(user.lastSeenAt).toLocaleString() : '-';
+  const lastSeen = user.online ? 'Now' : user.lastSeenAt ? new Date(user.lastSeenAt).toLocaleString() : '-';
   const created = user.createdAt ? new Date(user.createdAt).toLocaleString() : '-';
 
   const rows = [
@@ -3391,12 +3795,16 @@ function showUserDetailModal(user) {
     <div class="modal-content" style="max-width:450px">
       <h3 style="margin:0 0 16px">User Details - ${escapeHtml(user.nickname)}</h3>
       <table style="width:100%;border-collapse:collapse;font-size:13px">
-        ${rows.map(([label, value]) => `
+        ${rows
+          .map(
+            ([label, value]) => `
           <tr>
             <td style="padding:5px 10px 5px 0;color:var(--text-muted);white-space:nowrap;vertical-align:top;font-weight:600">${escapeHtml(label)}</td>
             <td style="padding:5px 0;word-break:break-all;user-select:text">${escapeHtml(value)}</td>
           </tr>
-        `).join('')}
+        `,
+          )
+          .join('')}
       </table>
       <div class="modal-buttons" style="margin-top:16px">
         <button class="btn-secondary modal-close-btn">Close</button>
@@ -3406,7 +3814,11 @@ function showUserDetailModal(user) {
   document.body.appendChild(modal);
 
   modal.querySelector('.modal-close-btn').addEventListener('click', () => modal.remove());
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.remove();
+    }
+  });
 }
 
 function showAdminUserContextMenu(e, user, panelContainer) {
@@ -3463,16 +3875,19 @@ function showAdminUserContextMenu(e, user, panelContainer) {
     if (serverService.hasPermission('user.poke')) {
       addItem('Poke', async () => {
         const message = await customPrompt(`Poke message for ${user.nickname} (optional):`);
-        if (message === null) return;
+        if (message === null) {
+          return;
+        }
         try {
           await serverService.request('admin:poke', { clientId: user.clientId, message });
-        } catch (err) { await customAlert(err.message); }
+        } catch (err) {
+          await customAlert(err.message);
+        }
       });
     }
   }
 
-  const hasManagement = serverService.hasPermission('user.assign_role') ||
-    (serverService.hasPermission('user.ban') && user.registeredNicknames?.length > 0);
+  const hasManagement = serverService.hasPermission('user.assign_role') || (serverService.hasPermission('user.ban') && user.registeredNicknames?.length > 0);
 
   if (hasManagement) {
     addSeparator();
@@ -3487,32 +3902,45 @@ function showAdminUserContextMenu(e, user, panelContainer) {
     }
   }
 
-  const hasDangerActions = (user.online && user.clientId && serverService.hasPermission('user.kick')) ||
-    serverService.hasPermission('user.ban');
+  const hasDangerActions = (user.online && user.clientId && serverService.hasPermission('user.kick')) || serverService.hasPermission('user.ban');
 
   if (hasDangerActions) {
     addSeparator();
     addLabel('Danger Zone');
 
     if (user.online && user.clientId && serverService.hasPermission('user.kick')) {
-      addItem('Kick', async () => {
-        try {
-          await serverService.request('admin:kick', { clientId: user.clientId });
-          renderUsersPanel(panelContainer);
-        } catch (err) { await customAlert(err.message); }
-      }, { danger: true });
+      addItem(
+        'Kick',
+        async () => {
+          try {
+            await serverService.request('admin:kick', { clientId: user.clientId });
+            renderUsersPanel(panelContainer);
+          } catch (err) {
+            await customAlert(err.message);
+          }
+        },
+        { danger: true },
+      );
     }
 
     if (serverService.hasPermission('user.ban')) {
       addItem('Ban User', () => showBanByUserIdModal(user, panelContainer), { danger: true });
 
-      addItem('Delete User', async () => {
-        if (!await customConfirm(`Are you sure you want to permanently delete user "${user.nickname}"?\n\nThis will remove their identity, roles, all registered nicknames, and all DM history.`)) return;
-        try {
-          await serverService.request('admin:delete-user', { userId: user.userId });
-          renderUsersPanel(panelContainer);
-        } catch (err) { await customAlert(err.message); }
-      }, { danger: true });
+      addItem(
+        'Delete User',
+        async () => {
+          if (!(await customConfirm(`Are you sure you want to permanently delete user "${user.nickname}"?\n\nThis will remove their identity, roles, all registered nicknames, and all DM history.`))) {
+            return;
+          }
+          try {
+            await serverService.request('admin:delete-user', { userId: user.userId });
+            renderUsersPanel(panelContainer);
+          } catch (err) {
+            await customAlert(err.message);
+          }
+        },
+        { danger: true },
+      );
     }
   }
 
@@ -3541,7 +3969,9 @@ function showAdminUserContextMenu(e, user, panelContainer) {
  */
 async function showManageNicknamesModal(user, panelContainer) {
   const existing = document.querySelector('.modal-manage-nicknames');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-manage-nicknames';
@@ -3574,13 +4004,17 @@ async function showManageNicknamesModal(user, panelContainer) {
         delBtn.innerHTML = '<i class="bi bi-trash"></i>';
         delBtn.title = 'Delete this nickname';
         delBtn.addEventListener('click', async () => {
-          if (!await customConfirm(`Delete nickname "${nick}" from this user?\n\nThis will free the nickname for others to use.`)) return;
+          if (!(await customConfirm(`Delete nickname "${nick}" from this user?\n\nThis will free the nickname for others to use.`))) {
+            return;
+          }
           try {
             await serverService.request('admin:delete-nickname', { userId: user.userId, nickname: nick });
-            user.registeredNicknames = user.registeredNicknames.filter(n => n.toLowerCase() !== nick.toLowerCase());
+            user.registeredNicknames = user.registeredNicknames.filter((n) => n.toLowerCase() !== nick.toLowerCase());
             renderList();
             renderUsersPanel(panelContainer);
-          } catch (err) { await customAlert(err.message); }
+          } catch (err) {
+            await customAlert(err.message);
+          }
         });
         row.appendChild(delBtn);
       }
@@ -3615,11 +4049,15 @@ async function showManageNicknamesModal(user, panelContainer) {
    */
   const addNickname = async () => {
     const nick = addInput.value.trim();
-    if (!nick) return;
+    if (!nick) {
+      return;
+    }
     addError.style.display = 'none';
     try {
       await serverService.request('admin:add-nickname', { userId: user.userId, nickname: nick });
-      if (!user.registeredNicknames) user.registeredNicknames = [];
+      if (!user.registeredNicknames) {
+        user.registeredNicknames = [];
+      }
       user.registeredNicknames.push(nick);
       addInput.value = '';
       renderList();
@@ -3631,10 +4069,18 @@ async function showManageNicknamesModal(user, panelContainer) {
   };
 
   addBtn.addEventListener('click', addNickname);
-  addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addNickname(); });
+  addInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      addNickname();
+    }
+  });
 
   modal.querySelector('.modal-close-btn').addEventListener('click', () => modal.remove());
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.remove();
+    }
+  });
 }
 
 async function showSetRoleMenuByUserId(user, x, y, panelContainer) {
@@ -3646,7 +4092,7 @@ async function showSetRoleMenuByUserId(user, x, y, panelContainer) {
     return;
   }
 
-  document.querySelectorAll('.context-menu').forEach(m => m.remove());
+  document.querySelectorAll('.context-menu').forEach((m) => m.remove());
 
   const submenu = document.createElement('div');
   submenu.className = 'context-menu';
@@ -3676,7 +4122,9 @@ async function showSetRoleMenuByUserId(user, x, y, panelContainer) {
           await serverService.request('admin:assign-role-by-userid', { userId: user.userId, roleId });
         }
         renderUsersPanel(panelContainer);
-      } catch (err) { await customAlert(err.message); }
+      } catch (err) {
+        await customAlert(err.message);
+      }
     });
     submenu.appendChild(row);
   };
@@ -3685,7 +4133,9 @@ async function showSetRoleMenuByUserId(user, x, y, panelContainer) {
   const noneRow = document.createElement('div');
   noneRow.className = 'context-menu-item' + (!currentRole ? ' disabled' : '');
   noneRow.style.cssText = 'display:flex;align-items:center;gap:8px';
-  if (!currentRole) noneRow.style.opacity = '0.5';
+  if (!currentRole) {
+    noneRow.style.opacity = '0.5';
+  }
   const noneDot = document.createElement('span');
   noneDot.style.cssText = 'width:14px;text-align:center;font-size:12px';
   noneDot.textContent = currentRole ? '○' : '●';
@@ -3698,7 +4148,9 @@ async function showSetRoleMenuByUserId(user, x, y, panelContainer) {
       try {
         await serverService.request('admin:remove-role-by-userid', { userId: user.userId, roleId: currentRole.id });
         renderUsersPanel(panelContainer);
-      } catch (err) { await customAlert(err.message); }
+      } catch (err) {
+        await customAlert(err.message);
+      }
     });
   }
   submenu.appendChild(noneRow);
@@ -3724,7 +4176,9 @@ async function showSetRoleMenuByUserId(user, x, y, panelContainer) {
 
 function showBanByUserIdModal(user, panelContainer) {
   const existing = document.querySelector('.modal-ban-user');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-ban-user';
@@ -3778,18 +4232,29 @@ function showBanByUserIdModal(user, panelContainer) {
 
   modal.querySelector('.modal-ban-btn').addEventListener('click', confirmBan);
   modal.querySelector('.modal-cancel-btn').addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
 
   const onEscape = (e) => {
-    if (e.key === 'Escape') closeModal();
-    if (e.key === 'Enter' && (e.target === reasonInput || e.target === durationSelect)) confirmBan();
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+    if (e.key === 'Enter' && (e.target === reasonInput || e.target === durationSelect)) {
+      confirmBan();
+    }
   };
   document.addEventListener('keydown', onEscape);
 }
 
+// eslint-disable-next-line no-unused-vars
 function showListUsersModal() {
   const existing = document.querySelector('.modal-list-users');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-list-users';
@@ -3807,9 +4272,16 @@ function showListUsersModal() {
 
   const closeModal = () => modal.remove();
   modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
   const onEscape = (e) => {
-    if (e.key === 'Escape') { closeModal(); document.removeEventListener('keydown', onEscape); }
+    if (e.key === 'Escape') {
+      closeModal();
+      document.removeEventListener('keydown', onEscape);
+    }
   };
   document.addEventListener('keydown', onEscape);
 }
@@ -3856,7 +4328,9 @@ async function renderTokensPanel(container) {
       copyBtn.addEventListener('click', () => {
         navigator.clipboard.writeText(t.token).then(() => {
           copyBtn.textContent = 'Copied!';
-          setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+          setTimeout(() => {
+            copyBtn.textContent = 'Copy';
+          }, 1500);
         });
       });
       const roleBadge = document.createElement('span');
@@ -3909,10 +4383,14 @@ async function renderTokensPanel(container) {
       const opt = document.createElement('option');
       opt.value = r.id;
       opt.textContent = r.name;
-      if (r.id === 'admin') opt.selected = true;
+      if (r.id === 'admin') {
+        opt.selected = true;
+      }
       roleSelect.appendChild(opt);
     }
-  } catch { /* keep default admin option */ }
+  } catch {
+    /* keep default admin option */
+  }
 
   // Load tokens
   try {
@@ -3937,9 +4415,12 @@ async function renderTokensPanel(container) {
   });
 }
 
+// eslint-disable-next-line no-unused-vars
 async function showManageTokensModal() {
   const existing = document.querySelector('.modal-manage-tokens');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-manage-tokens';
@@ -3956,10 +4437,21 @@ async function showManageTokensModal() {
 
   await renderTokensPanel(modal.querySelector('.tokens-panel-container'));
 
-  const closeModal = () => { modal.remove(); document.removeEventListener('keydown', onEscape); };
+  const closeModal = () => {
+    modal.remove();
+    document.removeEventListener('keydown', onEscape);
+  };
   modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-  const onEscape = (e) => { if (e.key === 'Escape') closeModal(); };
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
+  const onEscape = (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+  };
   document.addEventListener('keydown', onEscape);
 }
 
@@ -4031,9 +4523,12 @@ async function renderBansPanel(container) {
   }
 }
 
+// eslint-disable-next-line no-unused-vars
 async function showManageBansModal() {
   const existing = document.querySelector('.modal-manage-bans');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-manage-bans';
@@ -4050,16 +4545,29 @@ async function showManageBansModal() {
 
   await renderBansPanel(modal.querySelector('.bans-panel-container'));
 
-  const closeModal = () => { modal.remove(); document.removeEventListener('keydown', onEscape); };
+  const closeModal = () => {
+    modal.remove();
+    document.removeEventListener('keydown', onEscape);
+  };
   modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-  const onEscape = (e) => { if (e.key === 'Escape') closeModal(); };
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
+  const onEscape = (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+  };
   document.addEventListener('keydown', onEscape);
 }
 
 export function showRedeemTokenModal() {
   const existing = document.querySelector('.modal-redeem-token');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-redeem-token';
@@ -4092,7 +4600,9 @@ export function showRedeemTokenModal() {
 
   const redeem = async () => {
     const token = input.value.trim();
-    if (!token) return;
+    if (!token) {
+      return;
+    }
     statusEl.textContent = 'Redeeming...';
     statusEl.style.color = 'var(--text-secondary)';
     try {
@@ -4110,15 +4620,22 @@ export function showRedeemTokenModal() {
 
   modal.querySelector('.modal-redeem-btn').addEventListener('click', redeem);
   modal.querySelector('.modal-cancel-btn').addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
 
   const onEscape = (e) => {
-    if (e.key === 'Escape') closeModal();
-    if (e.key === 'Enter' && e.target === input) redeem();
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+    if (e.key === 'Enter' && e.target === input) {
+      redeem();
+    }
   };
   document.addEventListener('keydown', onEscape);
 }
-
 
 async function renderRolesPanel(container) {
   container.style.cssText = 'display:flex;flex-direction:column;height:100%;';
@@ -4176,7 +4693,6 @@ async function renderRolesPanel(container) {
 }
 
 async function _initRolesLogic(root) {
-
   const rolesList = root.querySelector('.roles-list');
   const rolesDetailEmpty = root.querySelector('.roles-detail-empty');
   const rolesDetailContent = root.querySelector('.roles-detail-content');
@@ -4186,17 +4702,31 @@ async function _initRolesLogic(root) {
   const colorSwatch = root.querySelector('.roles-color-swatch');
 
   colorSwatch.addEventListener('click', () => colorInput.click());
-  colorInput.addEventListener('input', () => { colorSwatch.style.background = colorInput.value; });
-  colorSwatch.addEventListener('mouseenter', () => { colorSwatch.style.borderColor = 'var(--text-muted)'; });
-  colorSwatch.addEventListener('mouseleave', () => { colorSwatch.style.borderColor = 'var(--border)'; });
+  colorInput.addEventListener('input', () => {
+    colorSwatch.style.background = colorInput.value;
+  });
+  colorSwatch.addEventListener('mouseenter', () => {
+    colorSwatch.style.borderColor = 'var(--text-muted)';
+  });
+  colorSwatch.addEventListener('mouseleave', () => {
+    colorSwatch.style.borderColor = 'var(--border)';
+  });
 
   const rolesSidebar = root.querySelector('.roles-sidebar');
   const resizeHandle = root.querySelector('.roles-resize-handle');
   const savedWidth = (await window.gimodi.settings.load())?.rolesSidebarWidth;
-  if (savedWidth) rolesSidebar.style.width = savedWidth + 'px';
+  if (savedWidth) {
+    rolesSidebar.style.width = savedWidth + 'px';
+  }
 
-  resizeHandle.addEventListener('mouseenter', () => { resizeHandle.style.background = 'var(--border)'; });
-  resizeHandle.addEventListener('mouseleave', () => { if (!resizeHandle._dragging) resizeHandle.style.background = 'transparent'; });
+  resizeHandle.addEventListener('mouseenter', () => {
+    resizeHandle.style.background = 'var(--border)';
+  });
+  resizeHandle.addEventListener('mouseleave', () => {
+    if (!resizeHandle._dragging) {
+      resizeHandle.style.background = 'transparent';
+    }
+  });
   resizeHandle.addEventListener('mousedown', (e) => {
     e.preventDefault();
     resizeHandle._dragging = true;
@@ -4212,7 +4742,7 @@ async function _initRolesLogic(root) {
       resizeHandle.style.background = 'transparent';
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      const settings = await window.gimodi.settings.load() || {};
+      const settings = (await window.gimodi.settings.load()) || {};
       settings.rolesSidebarWidth = rolesSidebar.offsetWidth;
       window.gimodi.settings.save(settings);
     };
@@ -4226,10 +4756,18 @@ async function _initRolesLogic(root) {
 
   const permsResizeHandle = root.querySelector('.roles-perms-resize-handle');
   const savedPermsWidth = (await window.gimodi.settings.load())?.rolesPermsWidth;
-  if (savedPermsWidth) permsContainer.style.width = savedPermsWidth + 'px';
+  if (savedPermsWidth) {
+    permsContainer.style.width = savedPermsWidth + 'px';
+  }
 
-  permsResizeHandle.addEventListener('mouseenter', () => { permsResizeHandle.style.background = 'var(--accent)'; });
-  permsResizeHandle.addEventListener('mouseleave', () => { if (!permsResizeHandle._dragging) permsResizeHandle.style.background = 'var(--border)'; });
+  permsResizeHandle.addEventListener('mouseenter', () => {
+    permsResizeHandle.style.background = 'var(--accent)';
+  });
+  permsResizeHandle.addEventListener('mouseleave', () => {
+    if (!permsResizeHandle._dragging) {
+      permsResizeHandle.style.background = 'var(--border)';
+    }
+  });
   permsResizeHandle.addEventListener('mousedown', (ev) => {
     ev.preventDefault();
     permsResizeHandle._dragging = true;
@@ -4247,7 +4785,7 @@ async function _initRolesLogic(root) {
       permsResizeHandle.style.background = 'var(--border)';
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      const settings = await window.gimodi.settings.load() || {};
+      const settings = (await window.gimodi.settings.load()) || {};
       settings.rolesPermsWidth = permsContainer.offsetWidth;
       window.gimodi.settings.save(settings);
     };
@@ -4257,15 +4795,10 @@ async function _initRolesLogic(root) {
 
   let roles = [];
   let availablePermissions = []; // loaded from server
-  let permissionGroups = [];     // grouped permissions from server
+  let permissionGroups = []; // grouped permissions from server
   let selectedRoleId = null;
   let pendingPerms = new Set();
-  let pendingName = '';
-  let pendingBadge = '';
-  let pendingColor = '';
-
   let draggedRoleId = null;
-  let dragOverRoleId = null;
 
   const renderRolesList = () => {
     rolesList.innerHTML = '';
@@ -4289,9 +4822,8 @@ async function _initRolesLogic(root) {
         });
         item.addEventListener('dragend', () => {
           draggedRoleId = null;
-          dragOverRoleId = null;
           item.style.opacity = '';
-          rolesList.querySelectorAll('.roles-list-item').forEach(el => {
+          rolesList.querySelectorAll('.roles-list-item').forEach((el) => {
             el.style.borderTop = '';
             el.style.borderBottom = '';
           });
@@ -4300,11 +4832,14 @@ async function _initRolesLogic(root) {
 
       item.addEventListener('dragover', (e) => {
         e.preventDefault();
-        if (!draggedRoleId || draggedRoleId === role.id) return;
-        if (role.id === 'admin') return;
+        if (!draggedRoleId || draggedRoleId === role.id) {
+          return;
+        }
+        if (role.id === 'admin') {
+          return;
+        }
         e.dataTransfer.dropEffect = 'move';
-        dragOverRoleId = role.id;
-        rolesList.querySelectorAll('.roles-list-item').forEach(el => {
+        rolesList.querySelectorAll('.roles-list-item').forEach((el) => {
           el.style.borderTop = '';
           el.style.borderBottom = '';
         });
@@ -4326,27 +4861,41 @@ async function _initRolesLogic(root) {
         e.preventDefault();
         item.style.borderTop = '';
         item.style.borderBottom = '';
-        if (!draggedRoleId || draggedRoleId === role.id) return;
-        if (role.id === 'admin') return;
+        if (!draggedRoleId || draggedRoleId === role.id) {
+          return;
+        }
+        if (role.id === 'admin') {
+          return;
+        }
 
-        const fromIdx = roles.findIndex(r => r.id === draggedRoleId);
-        if (fromIdx < 0) return;
+        const fromIdx = roles.findIndex((r) => r.id === draggedRoleId);
+        if (fromIdx < 0) {
+          return;
+        }
         const [moved] = roles.splice(fromIdx, 1);
-        let toIdx = roles.findIndex(r => r.id === role.id);
+        let toIdx = roles.findIndex((r) => r.id === role.id);
         const rect = item.getBoundingClientRect();
         const mid = rect.top + rect.height / 2;
-        if (e.clientY >= mid) toIdx++;
+        if (e.clientY >= mid) {
+          toIdx++;
+        }
         // Ensure nothing goes above admin (index 0)
-        if (toIdx < 1) toIdx = 1;
+        if (toIdx < 1) {
+          toIdx = 1;
+        }
         roles.splice(toIdx, 0, moved);
 
         // Update positions
-        for (let i = 0; i < roles.length; i++) roles[i].position = i;
+        for (let i = 0; i < roles.length; i++) {
+          roles[i].position = i;
+        }
         renderRolesList();
 
         try {
-          await serverService.request('role:reorder', { order: roles.map(r => r.id) });
-        } catch (err) { await customAlert(err.message); }
+          await serverService.request('role:reorder', { order: roles.map((r) => r.id) });
+        } catch (err) {
+          await customAlert(err.message);
+        }
       });
 
       if (role.color) {
@@ -4386,7 +4935,7 @@ async function _initRolesLogic(root) {
     selectedRoleId = roleId;
     renderRolesList();
 
-    const role = roles.find(r => r.id === roleId);
+    const role = roles.find((r) => r.id === roleId);
     if (!role) {
       rolesDetailEmpty.style.display = 'flex';
       rolesDetailContent.style.display = 'none';
@@ -4403,9 +4952,6 @@ async function _initRolesLogic(root) {
     colorInput.value = role.color || '#FFD700';
     colorSwatch.style.background = colorInput.value;
     pendingPerms = new Set(role.permissions || []);
-    pendingName = role.name;
-    pendingBadge = role.badge || '';
-    pendingColor = role.color || '';
 
     renderPerms(role.id === 'admin');
 
@@ -4421,7 +4967,9 @@ async function _initRolesLogic(root) {
     membersContainer.innerHTML = '<span style="font-size:12px;color:var(--text-muted)">Loading...</span>';
     try {
       const result = await serverService.request('role:get-members', { roleId });
-      if (selectedRoleId !== roleId) return;
+      if (selectedRoleId !== roleId) {
+        return;
+      }
       renderMembers(result.members, roleId);
     } catch {
       membersContainer.innerHTML = '<span style="font-size:12px;color:var(--text-muted)">Failed to load members</span>';
@@ -4435,7 +4983,9 @@ async function _initRolesLogic(root) {
       return;
     }
     const nameCounts = {};
-    for (const m of members) nameCounts[m.name] = (nameCounts[m.name] || 0) + 1;
+    for (const m of members) {
+      nameCounts[m.name] = (nameCounts[m.name] || 0) + 1;
+    }
     for (const member of members) {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 0;font-size:13px';
@@ -4448,7 +4998,9 @@ async function _initRolesLogic(root) {
         name.title = `Fingerprint: ${member.fingerprint}`;
       } else {
         name.textContent = member.name;
-        if (fpShort) name.title = `Fingerprint: ${member.fingerprint}`;
+        if (fpShort) {
+          name.title = `Fingerprint: ${member.fingerprint}`;
+        }
       }
 
       const removeBtn = document.createElement('button');
@@ -4457,16 +5009,22 @@ async function _initRolesLogic(root) {
       removeBtn.textContent = 'Remove';
       removeBtn.addEventListener('click', async () => {
         // Find connected client by userId to call admin:remove-role
-        const connectedClient = clients.find(c => c.userId === member.user_id);
+        const connectedClient = clients.find((c) => c.userId === member.user_id);
         if (connectedClient) {
           try {
             await serverService.request('admin:remove-role', { clientId: connectedClient.id, roleId });
-          } catch (err) { await customAlert(err.message); return; }
+          } catch (err) {
+            await customAlert(err.message);
+            return;
+          }
         } else {
           // User is offline - remove directly via new endpoint
           try {
             await serverService.request('role:remove-member', { userId: member.user_id, roleId });
-          } catch (err) { await customAlert(err.message); return; }
+          } catch (err) {
+            await customAlert(err.message);
+            return;
+          }
         }
         loadMembers(roleId);
       });
@@ -4504,29 +5062,29 @@ async function _initRolesLogic(root) {
       permsContainer.appendChild(note);
     }
 
-    const groups = permissionGroups.length > 0
-      ? permissionGroups
-      : [{ id: 'all', label: 'All Permissions', permissions: availablePermissions }];
+    const groups = permissionGroups.length > 0 ? permissionGroups : [{ id: 'all', label: 'All Permissions', permissions: availablePermissions }];
 
     const filter = permsSearchValue.toLowerCase();
     const groupElements = [];
 
     for (const group of groups) {
-      const filteredPerms = filter
-        ? group.permissions.filter(p => p.label.toLowerCase().includes(filter) || p.key.toLowerCase().includes(filter))
-        : group.permissions;
+      const filteredPerms = filter ? group.permissions.filter((p) => p.label.toLowerCase().includes(filter) || p.key.toLowerCase().includes(filter)) : group.permissions;
 
-      if (filter && filteredPerms.length === 0) continue;
+      if (filter && filteredPerms.length === 0) {
+        continue;
+      }
 
       const isCollapsed = !filter && collapsedGroups.has(group.id);
-      const checkedCount = group.permissions.filter(p => pendingPerms.has(p.key)).length;
+      const checkedCount = group.permissions.filter((p) => pendingPerms.has(p.key)).length;
 
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;align-items:center;gap:6px;padding:6px 0 4px;cursor:pointer;user-select:none;font-size:12px;font-weight:600;color:var(--text-secondary)';
       const arrow = document.createElement('span');
       arrow.style.cssText = 'font-size:10px;width:12px;text-align:center;flex-shrink:0;transition:transform 0.15s';
       arrow.textContent = '\u25B6';
-      if (!isCollapsed) arrow.style.transform = 'rotate(90deg)';
+      if (!isCollapsed) {
+        arrow.style.transform = 'rotate(90deg)';
+      }
       const groupLabel = document.createElement('span');
       groupLabel.style.flex = '1';
       groupLabel.textContent = group.label;
@@ -4550,9 +5108,12 @@ async function _initRolesLogic(root) {
         checkbox.disabled = readOnly;
         if (!readOnly) {
           checkbox.addEventListener('change', () => {
-            if (checkbox.checked) pendingPerms.add(key);
-            else pendingPerms.delete(key);
-            counter.textContent = `${group.permissions.filter(p => pendingPerms.has(p.key)).length}/${group.permissions.length}`;
+            if (checkbox.checked) {
+              pendingPerms.add(key);
+            } else {
+              pendingPerms.delete(key);
+            }
+            counter.textContent = `${group.permissions.filter((p) => pendingPerms.has(p.key)).length}/${group.permissions.length}`;
           });
         }
         const labelSpan = document.createElement('span');
@@ -4591,7 +5152,10 @@ async function _initRolesLogic(root) {
       clearBtn.style.display = permsSearchValue ? '' : 'none';
       renderPerms(readOnly);
       const newInput = permsContainer.querySelector('.roles-perms-search');
-      if (newInput) { newInput.focus(); newInput.selectionStart = newInput.selectionEnd = newInput.value.length; }
+      if (newInput) {
+        newInput.focus();
+        newInput.selectionStart = newInput.selectionEnd = newInput.value.length;
+      }
     });
 
     clearBtn.addEventListener('click', () => {
@@ -4601,7 +5165,7 @@ async function _initRolesLogic(root) {
   };
 
   const showRoleContextMenu = (x, y, role) => {
-    document.querySelectorAll('.context-menu').forEach(m => m.remove());
+    document.querySelectorAll('.context-menu').forEach((m) => m.remove());
     const menu = document.createElement('div');
     menu.className = 'context-menu';
     menu.style.cssText = `position:fixed;left:${x}px;top:${y}px;z-index:10001`;
@@ -4611,18 +5175,24 @@ async function _initRolesLogic(root) {
     deleteItem.textContent = 'Delete Role';
     deleteItem.addEventListener('click', async () => {
       menu.remove();
-      if (role.id === 'admin' || role.id === 'user') return;
-      if (!await customConfirm(`Delete role "${role.name}"?`)) return;
+      if (role.id === 'admin' || role.id === 'user') {
+        return;
+      }
+      if (!(await customConfirm(`Delete role "${role.name}"?`))) {
+        return;
+      }
       try {
         await serverService.request('role:delete', { roleId: role.id });
-        roles = roles.filter(r => r.id !== role.id);
+        roles = roles.filter((r) => r.id !== role.id);
         if (selectedRoleId === role.id) {
           selectedRoleId = null;
           rolesDetailEmpty.style.display = 'flex';
           rolesDetailContent.style.display = 'none';
         }
         renderRolesList();
-      } catch (err) { await customAlert(err.message); }
+      } catch (err) {
+        await customAlert(err.message);
+      }
     });
 
     const cloneItem = document.createElement('div');
@@ -4643,14 +5213,19 @@ async function _initRolesLogic(root) {
         roles.push(result);
         renderRolesList();
         selectRole(result.id);
-      } catch (err) { await customAlert(err.message); }
+      } catch (err) {
+        await customAlert(err.message);
+      }
     });
 
     menu.append(deleteItem, cloneItem);
     document.body.appendChild(menu);
 
     const removeMenu = (e) => {
-      if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', removeMenu); }
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('mousedown', removeMenu);
+      }
     };
     setTimeout(() => document.addEventListener('mousedown', removeMenu), 0);
   };
@@ -4658,43 +5233,65 @@ async function _initRolesLogic(root) {
   // Add role
   root.querySelector('.roles-add-btn').addEventListener('click', async () => {
     const name = await customPrompt('New role name:');
-    if (!name || !name.trim()) return;
+    if (!name || !name.trim()) {
+      return;
+    }
     try {
       const result = await serverService.request('role:create', { name: name.trim() });
       result.permissions = result.permissions || [];
       roles.push(result);
       renderRolesList();
       selectRole(result.id);
-    } catch (err) { await customAlert(err.message); }
+    } catch (err) {
+      await customAlert(err.message);
+    }
   });
 
   // Remove selected role
   root.querySelector('.roles-remove-btn').addEventListener('click', async () => {
-    if (!selectedRoleId) return;
-    const role = roles.find(r => r.id === selectedRoleId);
-    if (!role) return;
-    if (role.id === 'admin' || role.id === 'user') { await customAlert('Cannot delete a built-in role.'); return; }
-    if (!await customConfirm(`Delete role "${role.name}"?`)) return;
+    if (!selectedRoleId) {
+      return;
+    }
+    const role = roles.find((r) => r.id === selectedRoleId);
+    if (!role) {
+      return;
+    }
+    if (role.id === 'admin' || role.id === 'user') {
+      await customAlert('Cannot delete a built-in role.');
+      return;
+    }
+    if (!(await customConfirm(`Delete role "${role.name}"?`))) {
+      return;
+    }
     try {
       await serverService.request('role:delete', { roleId: role.id });
-      roles = roles.filter(r => r.id !== role.id);
+      roles = roles.filter((r) => r.id !== role.id);
       selectedRoleId = null;
       rolesDetailEmpty.style.display = 'flex';
       rolesDetailContent.style.display = 'none';
       renderRolesList();
-    } catch (err) { await customAlert(err.message); }
+    } catch (err) {
+      await customAlert(err.message);
+    }
   });
 
   // Save button
   root.querySelector('.roles-save-btn').addEventListener('click', async () => {
-    if (!selectedRoleId) return;
-    const role = roles.find(r => r.id === selectedRoleId);
-    if (!role) return;
+    if (!selectedRoleId) {
+      return;
+    }
+    const role = roles.find((r) => r.id === selectedRoleId);
+    if (!role) {
+      return;
+    }
     const isStatic = role.id === 'admin' || role.id === 'user';
     const newName = nameInput.value.trim();
     const newBadge = badgeInput.value.trim() || null;
     const newColor = colorInput.value || null;
-    if (!isStatic && !newName) { await customAlert('Role name cannot be empty.'); return; }
+    if (!isStatic && !newName) {
+      await customAlert('Role name cannot be empty.');
+      return;
+    }
     try {
       if (isStatic) {
         await serverService.request('role:update', { roleId: role.id, badge: newBadge, color: newColor });
@@ -4720,20 +5317,21 @@ async function _initRolesLogic(root) {
         saveBtn.disabled = false;
         saveBtn.classList.remove('roles-save-success');
       }, 1500);
-    } catch (err) { await customAlert(err.message); }
+    } catch (err) {
+      await customAlert(err.message);
+    }
   });
 
   // Cancel button - reload role from server
   root.querySelector('.roles-cancel-btn').addEventListener('click', () => {
-    if (selectedRoleId) selectRole(selectedRoleId);
+    if (selectedRoleId) {
+      selectRole(selectedRoleId);
+    }
   });
 
   // Load roles and available permissions in parallel
   try {
-    const [rolesResult, permsResult] = await Promise.all([
-      serverService.request('role:list'),
-      serverService.request('role:list-permissions'),
-    ]);
+    const [rolesResult, permsResult] = await Promise.all([serverService.request('role:list'), serverService.request('role:list-permissions')]);
     roles = rolesResult.roles;
     availablePermissions = permsResult.permissions;
     permissionGroups = permsResult.groups || [];
@@ -4744,9 +5342,12 @@ async function _initRolesLogic(root) {
   }
 }
 
+// eslint-disable-next-line no-unused-vars
 async function showManageRolesModal() {
   const existing = document.querySelector('.modal-manage-roles');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-manage-roles';
@@ -4762,10 +5363,21 @@ async function showManageRolesModal() {
 
   await renderRolesPanel(modal.querySelector('.roles-panel-container'));
 
-  const closeModal = () => { modal.remove(); document.removeEventListener('keydown', onEscape); };
+  const closeModal = () => {
+    modal.remove();
+    document.removeEventListener('keydown', onEscape);
+  };
   modal.querySelector('.roles-close-btn').addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-  const onEscape = (e) => { if (e.key === 'Escape') closeModal(); };
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
+  const onEscape = (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+  };
   document.addEventListener('keydown', onEscape);
 }
 
@@ -4798,7 +5410,9 @@ function unflattenConfig(flat) {
     const parts = dotKey.split('.');
     let cur = result;
     for (let i = 0; i < parts.length - 1; i++) {
-      if (typeof cur[parts[i]] !== 'object' || cur[parts[i]] === null) cur[parts[i]] = {};
+      if (typeof cur[parts[i]] !== 'object' || cur[parts[i]] === null) {
+        cur[parts[i]] = {};
+      }
       cur = cur[parts[i]];
     }
     cur[parts[parts.length - 1]] = val;
@@ -4836,16 +5450,25 @@ function showIconCropModal(dataUrl) {
     const cancelBtn = overlay.querySelector('.icon-crop-cancel');
     const applyBtn = overlay.querySelector('.icon-crop-apply');
 
-    let imgW = 0, imgH = 0;
+    let imgW = 0,
+      imgH = 0;
     let scale = 1;
-    let offsetX = 0, offsetY = 0;
-    let dragging = false, dragStartX = 0, dragStartY = 0, startOX = 0, startOY = 0;
+    let offsetX = 0,
+      offsetY = 0;
+    let dragging = false,
+      dragStartX = 0,
+      dragStartY = 0,
+      startOX = 0,
+      startOY = 0;
 
-    function areaSize() { return cropArea.getBoundingClientRect().width; }
+    function areaSize() {
+      return cropArea.getBoundingClientRect().width;
+    }
 
     function clampOffset() {
       const s = areaSize();
-      const sw = imgW * scale, sh = imgH * scale;
+      const sw = imgW * scale,
+        sh = imgH * scale;
       // Image must fully cover the circle
       offsetX = Math.min(0, Math.max(s - sw, offsetX));
       offsetY = Math.min(0, Math.max(s - sh, offsetY));
@@ -4891,7 +5514,8 @@ function showIconCropModal(dataUrl) {
       const oldScale = scale;
       scale = baseScale() * pct;
       // Zoom toward center
-      const cx = s / 2, cy = s / 2;
+      const cx = s / 2,
+        cy = s / 2;
       offsetX = cx - (cx - offsetX) * (scale / oldScale);
       offsetY = cy - (cy - offsetY) * (scale / oldScale);
       clampOffset();
@@ -4901,13 +5525,17 @@ function showIconCropModal(dataUrl) {
     // Drag
     cropArea.addEventListener('pointerdown', (e) => {
       dragging = true;
-      dragStartX = e.clientX; dragStartY = e.clientY;
-      startOX = offsetX; startOY = offsetY;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      startOX = offsetX;
+      startOY = offsetY;
       cropArea.style.cursor = 'grabbing';
       cropArea.setPointerCapture(e.pointerId);
     });
     cropArea.addEventListener('pointermove', (e) => {
-      if (!dragging) return;
+      if (!dragging) {
+        return;
+      }
       offsetX = startOX + (e.clientX - dragStartX);
       offsetY = startOY + (e.clientY - dragStartY);
       clampOffset();
@@ -4919,13 +5547,17 @@ function showIconCropModal(dataUrl) {
     });
 
     // Mouse wheel zoom
-    cropArea.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      let val = parseInt(zoomSlider.value) - Math.sign(e.deltaY) * 10;
-      val = Math.max(parseInt(zoomSlider.min), Math.min(parseInt(zoomSlider.max), val));
-      zoomSlider.value = val;
-      zoomSlider.dispatchEvent(new Event('input'));
-    }, { passive: false });
+    cropArea.addEventListener(
+      'wheel',
+      (e) => {
+        e.preventDefault();
+        let val = parseInt(zoomSlider.value) - Math.sign(e.deltaY) * 10;
+        val = Math.max(parseInt(zoomSlider.min), Math.min(parseInt(zoomSlider.max), val));
+        zoomSlider.value = val;
+        zoomSlider.dispatchEvent(new Event('input'));
+      },
+      { passive: false },
+    );
 
     function close(result) {
       overlay.remove();
@@ -4933,7 +5565,11 @@ function showIconCropModal(dataUrl) {
     }
 
     cancelBtn.addEventListener('click', () => close(null));
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(null); });
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        close(null);
+      }
+    });
 
     applyBtn.addEventListener('click', () => {
       const s = areaSize();
@@ -4975,19 +5611,21 @@ async function renderSettingsPanel(container) {
   try {
     const res = await serverService.request('server:get-settings', {});
     flatSettings = flattenConfig(res.settings);
-    if (Array.isArray(res.envLockedKeys)) envLockedKeys = new Set(res.envLockedKeys);
+    if (Array.isArray(res.envLockedKeys)) {
+      envLockedKeys = new Set(res.envLockedKeys);
+    }
   } catch (err) {
     formEl.innerHTML = `<p style="color:var(--danger)">Failed to load settings: ${escapeHtml(String(err.message || err))}</p>`;
     return;
   }
 
   const SETTING_LABELS = {
-    'name': 'Server Name',
-    'port': 'Port',
-    'password': 'Server Password',
-    'maxClients': 'Max Clients',
-    'maxConnectionsPerIp': 'Max Connections per IP',
-    'generateAdminToken': 'Generate Admin Token on Start',
+    name: 'Server Name',
+    port: 'Port',
+    password: 'Server Password',
+    maxClients: 'Max Clients',
+    maxConnectionsPerIp: 'Max Connections per IP',
+    generateAdminToken: 'Generate Admin Token on Start',
     'media.listenIp': 'Listen IP',
     'media.announcedIp': 'Announced IP',
     'media.rtcPort': 'RTC Base Port',
@@ -4995,7 +5633,7 @@ async function renderSettingsPanel(container) {
     'media.logLevel': 'Log Level',
     'chat.persistMessages': 'Persist Messages',
     'chat.tempChannelDeleteDelay': 'Temp Channel Auto-Delete Delay',
-    'defaultChannelId': 'Default Channel',
+    defaultChannelId: 'Default Channel',
     'files.maxFileSize': 'Max Upload Size',
     'files.storagePath': 'Storage Path',
     'files.publicUrl': 'Public URL',
@@ -5024,8 +5662,10 @@ async function renderSettingsPanel(container) {
   // Load current icon
   const currentIconHash = flatSettings['icon.hash'] || null;
   if (currentIconHash) {
-    getServerIcon(serverService.address, currentIconHash).then(url => {
-      if (url) iconPreview.src = url;
+    getServerIcon(serverService.address, currentIconHash).then((url) => {
+      if (url) {
+        iconPreview.src = url;
+      }
     });
   }
 
@@ -5051,31 +5691,42 @@ async function renderSettingsPanel(container) {
 
   iconFileInput.addEventListener('change', async () => {
     const file = iconFileInput.files[0];
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
-    const dataUrl = await new Promise(resolve => {
+    const dataUrl = await new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
       reader.onerror = () => resolve(null);
       reader.readAsDataURL(file);
     });
-    if (!dataUrl) { iconFileInput.value = ''; return; }
+    if (!dataUrl) {
+      iconFileInput.value = '';
+      return;
+    }
 
     // Show crop modal and get cropped result
     const croppedBlob = await showIconCropModal(dataUrl);
     iconFileInput.value = '';
-    if (!croppedBlob) return;
+    if (!croppedBlob) {
+      return;
+    }
 
     statusEl.textContent = 'Uploading icon...';
     statusEl.style.color = 'var(--text-muted)';
     try {
       const buffer = await croppedBlob.arrayBuffer();
       const data = await window.gimodi.iconCache.upload(serverService.address, serverService.clientId, 'image/png', new Uint8Array(buffer));
-      if (data.error) throw new Error(data.error);
+      if (data.error) {
+        throw new Error(data.error);
+      }
       statusEl.textContent = 'Icon updated.';
       statusEl.style.color = 'var(--success, #4caf50)';
       const url = await getServerIcon(serverService.address, data.hash);
-      if (url) iconPreview.src = url;
+      if (url) {
+        iconPreview.src = url;
+      }
       removeBtn.style.display = '';
     } catch (err) {
       statusEl.textContent = `Icon upload failed: ${err.message}`;
@@ -5088,7 +5739,9 @@ async function renderSettingsPanel(container) {
     statusEl.style.color = 'var(--text-muted)';
     try {
       const data = await window.gimodi.iconCache.delete(serverService.address, serverService.clientId);
-      if (data.error) throw new Error(data.error);
+      if (data.error) {
+        throw new Error(data.error);
+      }
       statusEl.textContent = 'Icon removed.';
       statusEl.style.color = 'var(--success, #4caf50)';
       iconPreview.src = '../../assets/icon.png';
@@ -5119,16 +5772,20 @@ async function renderSettingsPanel(container) {
     const locked = envLockedKeys.has(key);
     const dis = locked ? ' disabled' : '';
     if (key === 'defaultChannelId') {
-      const nonGroupChannels = channels.filter(c => c.type !== 'group');
-      const currentDefault = val || nonGroupChannels.find(c => c.isDefault)?.id || '';
-      const options = nonGroupChannels.map(c =>
-        `<option value="${escapeHtml(c.id)}" ${c.id === currentDefault ? 'selected' : ''}>${escapeHtml(c.name)}</option>`
-      ).join('');
+      const nonGroupChannels = channels.filter((c) => c.type !== 'group');
+      const currentDefault = val || nonGroupChannels.find((c) => c.isDefault)?.id || '';
+      const options = nonGroupChannels.map((c) => `<option value="${escapeHtml(c.id)}" ${c.id === currentDefault ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
       return `<select data-key="${escapeHtml(key)}" data-type="string" style="width:200px;${selectStyle}${locked ? `;${lockedStyle}` : ''}"${dis}>${options}</select>${locked ? ` ${lockIcon}` : ''}`;
     } else if (key === 'chat.tempChannelDeleteDelay' && type === 'number') {
-      let dUnit = 'seconds', dVal = val;
-      if (val >= 3600 && val % 3600 === 0) { dUnit = 'hours'; dVal = val / 3600; }
-      else if (val >= 60 && val % 60 === 0) { dUnit = 'minutes'; dVal = val / 60; }
+      let dUnit = 'seconds',
+        dVal = val;
+      if (val >= 3600 && val % 3600 === 0) {
+        dUnit = 'hours';
+        dVal = val / 3600;
+      } else if (val >= 60 && val % 60 === 0) {
+        dUnit = 'minutes';
+        dVal = val / 60;
+      }
       return `<div style="display:flex;gap:6px;align-items:center">
         <input type="number" min="1" data-key="${escapeHtml(key)}" data-type="duration" value="${dVal}" style="${smallInputStyle}${locked ? `;${lockedStyle}` : ''}"${dis}>
         <select data-key="${escapeHtml(key)}-unit" style="width:90px;${selectStyle}${locked ? `;${lockedStyle}` : ''}"${dis}>
@@ -5160,8 +5817,10 @@ async function renderSettingsPanel(container) {
 
   const groupedKeys = new Set();
   for (const group of SETTING_GROUPS) {
-    const visibleKeys = group.keys.filter(k => k in flatSettings);
-    if (!visibleKeys.length) continue;
+    const visibleKeys = group.keys.filter((k) => k in flatSettings);
+    if (!visibleKeys.length) {
+      continue;
+    }
 
     const section = document.createElement('div');
     section.style.cssText = 'margin-bottom:16px';
@@ -5225,8 +5884,12 @@ async function renderSettingsPanel(container) {
     for (const input of inputs) {
       const key = input.dataset.key;
       const dtype = input.dataset.type;
-      if (key.endsWith('-unit')) continue;
-      if (input.disabled) continue;
+      if (key.endsWith('-unit')) {
+        continue;
+      }
+      if (input.disabled) {
+        continue;
+      }
       let value;
       if (dtype === 'boolean') {
         value = input.checked;
@@ -5263,9 +5926,12 @@ async function renderSettingsPanel(container) {
   });
 }
 
+// eslint-disable-next-line no-unused-vars
 async function showServerSettingsModal() {
   const existing = document.querySelector('.modal-server-settings');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-server-settings';
@@ -5283,17 +5949,29 @@ async function showServerSettingsModal() {
   await renderSettingsPanel(modal.querySelector('.settings-panel-container'));
 
   modal.querySelector('.settings-close-btn').addEventListener('click', () => modal.remove());
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.remove();
+    }
+  });
 }
 
 async function renderAuditLogPanel(container) {
   const ACTION_LABELS = {
-    kick: 'Kick', ban: 'Ban', unban: 'Unban',
-    assign_role: 'Assign Role', remove_role: 'Remove Role',
-    channel_create: 'Create Channel', channel_delete: 'Delete Channel', channel_update: 'Update Channel',
-    token_create: 'Create Token', token_delete: 'Delete Token',
-    role_create: 'Create Role', role_delete: 'Delete Role',
-    grant_voice: 'Grant Voice', revoke_voice: 'Revoke Voice',
+    kick: 'Kick',
+    ban: 'Ban',
+    unban: 'Unban',
+    assign_role: 'Assign Role',
+    remove_role: 'Remove Role',
+    channel_create: 'Create Channel',
+    channel_delete: 'Delete Channel',
+    channel_update: 'Update Channel',
+    token_create: 'Create Token',
+    token_delete: 'Delete Token',
+    role_create: 'Create Role',
+    role_delete: 'Delete Role',
+    grant_voice: 'Grant Voice',
+    revoke_voice: 'Revoke Voice',
   };
 
   const AUDIT_COLUMNS = [
@@ -5333,9 +6011,15 @@ async function renderAuditLogPanel(container) {
     </div>
   `;
 
-  container.querySelectorAll('.audit-col-resize').forEach(handle => {
-    handle.addEventListener('mouseenter', () => { handle.style.background = 'var(--accent)'; });
-    handle.addEventListener('mouseleave', () => { if (!handle._dragging) handle.style.background = ''; });
+  container.querySelectorAll('.audit-col-resize').forEach((handle) => {
+    handle.addEventListener('mouseenter', () => {
+      handle.style.background = 'var(--accent)';
+    });
+    handle.addEventListener('mouseleave', () => {
+      if (!handle._dragging) {
+        handle.style.background = '';
+      }
+    });
     handle.addEventListener('mousedown', (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
@@ -5343,13 +6027,13 @@ async function renderAuditLogPanel(container) {
       handle.style.background = 'var(--accent)';
       const th = handle.parentElement;
       const colKey = th.dataset.col;
-      const colDef = AUDIT_COLUMNS.find(c => c.key === colKey);
+      const colDef = AUDIT_COLUMNS.find((c) => c.key === colKey);
       const startX = ev.clientX;
       const startWidth = th.offsetWidth;
       const table = th.closest('table');
       const allThs = [...table.querySelectorAll('thead th')];
       const colIndex = allThs.indexOf(th);
-      const othersCurrentWidth = allThs.reduce((sum, t, i) => i !== colIndex ? sum + t.offsetWidth : sum, 0);
+      const othersCurrentWidth = allThs.reduce((sum, t, i) => (i !== colIndex ? sum + t.offsetWidth : sum), 0);
       const maxWidth = table.parentElement.clientWidth - othersCurrentWidth;
       const onMove = (me) => {
         const newWidth = Math.max(colDef.minWidth, Math.min(maxWidth, startWidth + me.clientX - startX));
@@ -5360,8 +6044,10 @@ async function renderAuditLogPanel(container) {
         handle.style.background = '';
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
-        const settings = await window.gimodi.settings.load() || {};
-        if (!settings.auditColumnWidths) settings.auditColumnWidths = {};
+        const settings = (await window.gimodi.settings.load()) || {};
+        if (!settings.auditColumnWidths) {
+          settings.auditColumnWidths = {};
+        }
         settings.auditColumnWidths[colKey] = th.offsetWidth;
         window.gimodi.settings.save(settings);
       };
@@ -5379,9 +6065,7 @@ async function renderAuditLogPanel(container) {
 
   const renderLogs = (logs) => {
     tbody.innerHTML = '';
-    const visible = filterSelect.value
-      ? logs.filter(l => l.action === filterSelect.value)
-      : logs;
+    const visible = filterSelect.value ? logs.filter((l) => l.action === filterSelect.value) : logs;
 
     if (!visible.length) {
       emptyMsg.style.display = 'block';
@@ -5422,7 +6106,7 @@ async function renderAuditLogPanel(container) {
   };
 
   const populateFilter = (logs) => {
-    const actions = [...new Set(logs.map(l => l.action))].sort();
+    const actions = [...new Set(logs.map((l) => l.action))].sort();
     for (const action of actions) {
       const opt = document.createElement('option');
       opt.value = action;
@@ -5444,9 +6128,12 @@ async function renderAuditLogPanel(container) {
   }
 }
 
+// eslint-disable-next-line no-unused-vars
 async function showAuditLogModal() {
   const existing = document.querySelector('.modal-audit-log');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-audit-log';
@@ -5463,10 +6150,21 @@ async function showAuditLogModal() {
 
   await renderAuditLogPanel(modal.querySelector('.audit-panel-container'));
 
-  const closeAuditModal = () => { modal.remove(); document.removeEventListener('keydown', onAuditEscape); };
+  const closeAuditModal = () => {
+    modal.remove();
+    document.removeEventListener('keydown', onAuditEscape);
+  };
   modal.querySelector('.audit-close-btn').addEventListener('click', closeAuditModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeAuditModal(); });
-  const onAuditEscape = (e) => { if (e.key === 'Escape') closeAuditModal(); };
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeAuditModal();
+    }
+  });
+  const onAuditEscape = (e) => {
+    if (e.key === 'Escape') {
+      closeAuditModal();
+    }
+  };
   document.addEventListener('keydown', onAuditEscape);
 }
 
@@ -5478,7 +6176,9 @@ async function showAuditLogModal() {
  * @returns {string}
  */
 function formatBytes(bytes) {
-  if (bytes === 0) return '0 B';
+  if (bytes === 0) {
+    return '0 B';
+  }
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
@@ -5495,8 +6195,12 @@ function formatUptime(ms) {
   const hours = Math.floor((s % 86400) / 3600);
   const mins = Math.floor((s % 3600) / 60);
   const parts = [];
-  if (days > 0) parts.push(`${days}d`);
-  if (hours > 0) parts.push(`${hours}h`);
+  if (days > 0) {
+    parts.push(`${days}d`);
+  }
+  if (hours > 0) {
+    parts.push(`${hours}h`);
+  }
   parts.push(`${mins}m`);
   return parts.join(' ');
 }
@@ -5510,9 +6214,9 @@ function formatUptime(ms) {
  * @param {string} [options.color]
  */
 function renderBarChart(container, data, options = {}) {
-  const formatValue = options.formatValue || (v => v.toLocaleString());
+  const formatValue = options.formatValue || ((v) => v.toLocaleString());
   const color = options.color || 'var(--accent)';
-  const maxVal = Math.max(...data.map(d => d.value), 1);
+  const maxVal = Math.max(...data.map((d) => d.value), 1);
 
   container.innerHTML = '';
   for (const item of data) {
@@ -5550,7 +6254,7 @@ function renderBarChart(container, data, options = {}) {
  * @param {Array<{x: number, y: number}>} points
  * @param {object} [options]
  */
-function renderAreaChart(canvas, points, options = {}) {
+function renderAreaChart(canvas, points, _options = {}) {
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.clientWidth;
@@ -5569,11 +6273,11 @@ function renderAreaChart(canvas, points, options = {}) {
 
   const minX = points[0].x;
   const maxX = points[points.length - 1].x;
-  const maxY = Math.max(...points.map(p => p.y), 1);
+  const maxY = Math.max(...points.map((p) => p.y), 1);
   const pad = 2;
 
-  const toCanvasX = x => pad + ((x - minX) / (maxX - minX || 1)) * (w - pad * 2);
-  const toCanvasY = y => h - pad - (y / maxY) * (h - pad * 2);
+  const toCanvasX = (x) => pad + ((x - minX) / (maxX - minX || 1)) * (w - pad * 2);
+  const toCanvasY = (y) => h - pad - (y / maxY) * (h - pad * 2);
 
   const accentRaw = getComputedStyle(canvas).getPropertyValue('--accent').trim() || '#5b8def';
 
@@ -5830,30 +6534,41 @@ async function renderAnalyticsPanel(container) {
 
   const activityCanvas = wrapper.querySelector('[data-chart="message-activity"]');
   if (activityCanvas && dbData.messageActivity.length > 0) {
-    const points = dbData.messageActivity.map(row => ({ x: row.hour, y: row.count }));
+    const points = dbData.messageActivity.map((row) => ({ x: row.hour, y: row.count }));
     renderAreaChart(activityCanvas, points);
   }
 
   const channelChart = wrapper.querySelector('[data-chart="messages-per-channel"]');
   if (channelChart && dbData.channels.messagesPerChannel.length > 0) {
-    renderBarChart(channelChart, dbData.channels.messagesPerChannel.map(r => ({ label: r.name, value: r.count })));
+    renderBarChart(
+      channelChart,
+      dbData.channels.messagesPerChannel.map((r) => ({ label: r.name, value: r.count })),
+    );
   } else if (channelChart) {
     channelChart.innerHTML = '<div class="analytics-empty">No data</div>';
   }
 
   const uploadersChart = wrapper.querySelector('[data-chart="top-uploaders"]');
   if (uploadersChart && dbData.files.topUploaders.length > 0) {
-    renderBarChart(uploadersChart, dbData.files.topUploaders.map(r => ({ label: r.nickname, value: r.totalSize })), { formatValue: formatBytes });
+    renderBarChart(
+      uploadersChart,
+      dbData.files.topUploaders.map((r) => ({ label: r.nickname, value: r.totalSize })),
+      { formatValue: formatBytes },
+    );
   } else if (uploadersChart) {
     uploadersChart.innerHTML = '<div class="analytics-empty">No uploads</div>';
   }
 
   const fileTypeChart = wrapper.querySelector('[data-chart="files-by-type"]');
   if (fileTypeChart && dbData.files.byType.length > 0) {
-    renderBarChart(fileTypeChart, dbData.files.byType.map(r => ({
-      label: r.mime_type.replace('application/', '').replace('image/', 'img/'),
-      value: r.totalSize,
-    })), { formatValue: formatBytes });
+    renderBarChart(
+      fileTypeChart,
+      dbData.files.byType.map((r) => ({
+        label: r.mime_type.replace('application/', '').replace('image/', 'img/'),
+        value: r.totalSize,
+      })),
+      { formatValue: formatBytes },
+    );
   } else if (fileTypeChart) {
     fileTypeChart.innerHTML = '<div class="analytics-empty">No files</div>';
   }
@@ -5873,15 +6588,17 @@ const ADMIN_TABS = [
 
 export function showUnifiedAdminDialog(initialTab) {
   const existing = document.querySelector('.modal-admin-unified');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+  }
 
   // Filter tabs by permission
-  const visibleTabs = ADMIN_TABS.filter(t => serverService.hasPermission(t.permission));
-  if (!visibleTabs.length) return;
+  const visibleTabs = ADMIN_TABS.filter((t) => serverService.hasPermission(t.permission));
+  if (!visibleTabs.length) {
+    return;
+  }
 
-  const startTab = initialTab && visibleTabs.find(t => t.id === initialTab)
-    ? initialTab
-    : visibleTabs[0].id;
+  const startTab = initialTab && visibleTabs.find((t) => t.id === initialTab) ? initialTab : visibleTabs[0].id;
 
   const modal = document.createElement('div');
   modal.className = 'modal modal-admin-unified';
@@ -5928,11 +6645,13 @@ export function showUnifiedAdminDialog(initialTab) {
   let activeTab = null;
 
   async function switchTab(tabId) {
-    if (activeTab === tabId) return;
+    if (activeTab === tabId) {
+      return;
+    }
     activeTab = tabId;
 
     // Update nav active state
-    nav.querySelectorAll('.admin-nav-item').forEach(item => {
+    nav.querySelectorAll('.admin-nav-item').forEach((item) => {
       item.classList.toggle('active', item.dataset.tab === tabId);
     });
 
@@ -5987,8 +6706,16 @@ export function showUnifiedAdminDialog(initialTab) {
     document.removeEventListener('keydown', onAdminEscape);
   };
   closeBtn.addEventListener('click', closeAdminDialog);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeAdminDialog(); });
-  const onAdminEscape = (e) => { if (e.key === 'Escape') closeAdminDialog(); };
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeAdminDialog();
+    }
+  });
+  const onAdminEscape = (e) => {
+    if (e.key === 'Escape') {
+      closeAdminDialog();
+    }
+  };
   document.addEventListener('keydown', onAdminEscape);
 
   // Open initial tab

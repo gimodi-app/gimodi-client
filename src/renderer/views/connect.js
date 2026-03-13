@@ -1,14 +1,5 @@
 import connectionManager, { connKey } from '../services/connectionManager.js';
-import {
-  initSidebar as _initSidebar,
-  renderSidebar,
-  setActiveServer,
-  clearActiveServer,
-  updateServerInList,
-  addOrUpdateServer,
-  removeServerByIdentity,
-  replaceServerInPlace,
-} from './sidebar.js';
+import { initSidebar as _initSidebar, renderSidebar, setActiveServer, clearActiveServer, updateServerInList, addOrUpdateServer, replaceServerInPlace } from './sidebar.js';
 
 export { renderSidebar, setActiveServer, clearActiveServer, refreshIdentitySelects };
 
@@ -119,7 +110,9 @@ export async function initConnectView() {
 
   btnUpdateDownload.addEventListener('click', () => {
     const version = btnUpdateDownload.dataset.version;
-    if (!version) return;
+    if (!version) {
+      return;
+    }
     startDownload(version);
   });
 
@@ -136,24 +129,32 @@ export async function initSidebar() {
   btnConfirmAddServer.addEventListener('click', handleAddServer);
   btnCancelAddServer.addEventListener('click', closeAddServerModal);
   modalAddServer.addEventListener('click', (e) => {
-    if (e.target === modalAddServer) closeAddServerModal();
+    if (e.target === modalAddServer) {
+      closeAddServerModal();
+    }
   });
 
   for (const input of [addServerAddress, addServerNickname, addServerPassword]) {
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') handleAddServer();
+      if (e.key === 'Enter') {
+        handleAddServer();
+      }
     });
   }
 
   btnConfirmEditServer.addEventListener('click', handleEditServer);
   btnCancelEditServer.addEventListener('click', closeEditServerModal);
   modalEditServer.addEventListener('click', (e) => {
-    if (e.target === modalEditServer) closeEditServerModal();
+    if (e.target === modalEditServer) {
+      closeEditServerModal();
+    }
   });
 
   for (const input of [editServerAddress, editServerNickname, editServerPassword]) {
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') handleEditServer();
+      if (e.key === 'Enter') {
+        handleEditServer();
+      }
     });
   }
 
@@ -164,7 +165,7 @@ export async function initSidebar() {
 
 /** Loads all available identities from the main process. */
 async function loadIdentities() {
-  identities = await window.gimodi.identity.loadAll() || [];
+  identities = (await window.gimodi.identity.loadAll()) || [];
 }
 
 /**
@@ -179,7 +180,9 @@ function populateIdentitySelect(selectEl, groupEl, selectedFingerprint) {
     opt.value = id.fingerprint;
     const fpShort = id.fingerprint.toUpperCase().slice(0, 8);
     opt.textContent = `${id.name} (${fpShort})`;
-    if (selectedFingerprint ? id.fingerprint === selectedFingerprint : id.isDefault) opt.selected = true;
+    if (selectedFingerprint ? id.fingerprint === selectedFingerprint : id.isDefault) {
+      opt.selected = true;
+    }
     selectEl.appendChild(opt);
   }
   groupEl.style.display = identities.length > 1 ? '' : 'none';
@@ -190,10 +193,14 @@ function populateIdentitySelect(selectEl, groupEl, selectedFingerprint) {
  * @returns {Object|null}
  */
 function getSelectedIdentityFrom(selectEl) {
-  if (identities.length === 0) return null;
-  if (identities.length === 1) return identities[0];
+  if (identities.length === 0) {
+    return null;
+  }
+  if (identities.length === 1) {
+    return identities[0];
+  }
   const fp = selectEl.value;
-  return identities.find(i => i.fingerprint === fp) || identities[0];
+  return identities.find((i) => i.fingerprint === fp) || identities[0];
 }
 
 /**
@@ -331,9 +338,11 @@ async function handleEditServer() {
   const identityFingerprint = selectedIdentity ? selectedIdentity.fingerprint : null;
 
   if (wasConnected) {
-    window.dispatchEvent(new CustomEvent('gimodi:disconnect-server', {
-      detail: { connKey: connKey(oldAddress, oldIdentityFingerprint) },
-    }));
+    window.dispatchEvent(
+      new CustomEvent('gimodi:disconnect-server', {
+        detail: { connKey: connKey(oldAddress, oldIdentityFingerprint) },
+      }),
+    );
   }
 
   const updatedServer = {
@@ -345,16 +354,20 @@ async function handleEditServer() {
   };
 
   const oldFp = oldIdentityFingerprint;
-  const matchesOld = s => s.address === oldAddress && s.nickname === oldNickname && (s.identityFingerprint || null) === oldFp;
+  const matchesOld = (s) => s.address === oldAddress && s.nickname === oldNickname && (s.identityFingerprint || null) === oldFp;
   replaceServerInPlace(oldAddress, oldNickname, oldIdentityFingerprint, updatedServer);
   const items = await window.gimodi.servers.list();
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     if (item.type === 'group') {
       const idx = item.servers.findIndex(matchesOld);
-      if (idx >= 0) { item.servers[idx] = updatedServer; break; }
+      if (idx >= 0) {
+        item.servers[idx] = updatedServer;
+        break;
+      }
     } else if (matchesOld(item)) {
-      items[i] = updatedServer; break;
+      items[i] = updatedServer;
+      break;
     }
   }
   await window.gimodi.servers.save(items);
@@ -375,30 +388,26 @@ async function handleEditServer() {
 async function connectToServer(server, { autoJoin = false } = {}) {
   const key = connKey(server.address, server.identityFingerprint);
   if (connectionManager.isConnected(key)) {
-    window.dispatchEvent(new CustomEvent('gimodi:switch-server', {
-      detail: { connKey: key },
-    }));
+    window.dispatchEvent(
+      new CustomEvent('gimodi:switch-server', {
+        detail: { connKey: key },
+      }),
+    );
     return;
   }
 
   let publicKey;
   if (server.identityFingerprint) {
-    const match = identities.find(i => i.fingerprint === server.identityFingerprint);
+    const match = identities.find((i) => i.fingerprint === server.identityFingerprint);
     publicKey = match ? match.publicKeyArmored : undefined;
   }
   if (!publicKey) {
-    const defaultId = identities.find(i => i.isDefault) || identities[0];
+    const defaultId = identities.find((i) => i.isDefault) || identities[0];
     publicKey = defaultId ? defaultId.publicKeyArmored : undefined;
   }
 
   try {
-    const data = await connectionManager.connect(
-      key,
-      server.address,
-      server.nickname,
-      server.password || undefined,
-      publicKey
-    );
+    const data = await connectionManager.connect(key, server.address, server.nickname, server.password || undefined, publicKey);
 
     if (data.serverName && data.serverName !== server.name) {
       server.name = data.serverName;
@@ -424,8 +433,8 @@ async function connectToServer(server, { autoJoin = false } = {}) {
  * @param {string} identityFingerprint
  */
 async function saveToHistory(address, nickname, password, serverName, identityFingerprint) {
-  const history = await window.gimodi.history.load() || [];
-  const existing = history.findIndex(b => b.address === address && b.nickname === nickname);
+  const history = (await window.gimodi.history.load()) || [];
+  const existing = history.findIndex((b) => b.address === address && b.nickname === nickname);
   if (existing >= 0) {
     history[existing].name = serverName || address;
     history[existing].password = password || null;

@@ -76,7 +76,7 @@ class ChatService extends EventTarget {
    * @param {string} [password]
    */
   subscribeChannel(channelId, password) {
-    serverService.send('chat:subscribe', { channelId, ...(password != null && { password }) });
+    serverService.send('chat:subscribe', { channelId, ...(password !== null && password !== undefined && { password }) });
   }
 
   /**
@@ -125,7 +125,7 @@ class ChatService extends EventTarget {
    * @returns {Promise<object>}
    */
   async fetchHistory(channelId, before, limit = 50, password) {
-    return serverService.request('chat:history', { channelId, before, limit, ...(password != null && { password }) });
+    return serverService.request('chat:history', { channelId, before, limit, ...(password !== null && password !== undefined && { password }) });
   }
 
   /**

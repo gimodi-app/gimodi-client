@@ -26,10 +26,10 @@ const https = require('https');
 
 // Maps --format to the maker output directory and expected file extension.
 const FORMAT_CONFIG = {
-  squirrel: { dir: 'squirrel.windows', ext: '.exe',      platform: 'win' },
-  deb:      { dir: 'deb',              ext: '.deb',      platform: 'linux' },
+  squirrel: { dir: 'squirrel.windows', ext: '.exe', platform: 'win' },
+  deb: { dir: 'deb', ext: '.deb', platform: 'linux' },
   appimage: { dir: 'AppImage', ext: '.AppImage', platform: 'linux' },
-  zip:      { dir: 'zip',              ext: '.zip',      platform: null },
+  zip: { dir: 'zip', ext: '.zip', platform: null },
 };
 
 const VALID_PLATFORMS = ['win', 'linux', 'darwin'];
@@ -132,10 +132,14 @@ function findArtifact(format) {
 
 async function login(grsUrl, clientId, clientSecret) {
   const body = JSON.stringify({ client_id: clientId, client_secret: clientSecret });
-  const res = await request(`${grsUrl}/v2/admin/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-  }, body);
+  const res = await request(
+    `${grsUrl}/v2/admin/login`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    },
+    body,
+  );
 
   if (res.status !== 200) {
     die(`GRS login failed (${res.status}): ${res.body}`);
@@ -145,14 +149,18 @@ async function login(grsUrl, clientId, clientSecret) {
 
 async function createRelease(grsUrl, token, version) {
   const body = JSON.stringify({ version });
-  const res = await request(`${grsUrl}/v2/admin/releases`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(body),
-      Authorization: `Bearer ${token}`,
+  const res = await request(
+    `${grsUrl}/v2/admin/releases`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        Authorization: `Bearer ${token}`,
+      },
     },
-  }, body);
+    body,
+  );
 
   // 204 = created, 409/conflict = already exists (both are fine)
   if (res.status !== 204 && res.status !== 409) {
@@ -167,11 +175,7 @@ function uploadFile(grsUrl, token, version, platform, channel, format, filePath)
     const fileSize = fs.statSync(filePath).size;
     const boundary = `----GimodiPublish${Date.now()}`;
 
-    const prelude = Buffer.from(
-      `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
-      `Content-Type: application/octet-stream\r\n\r\n`
-    );
+    const prelude = Buffer.from(`--${boundary}\r\n` + `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` + `Content-Type: application/octet-stream\r\n\r\n`);
     const epilogue = Buffer.from(`\r\n--${boundary}--\r\n`);
     const totalLength = prelude.length + fileSize + epilogue.length;
 
@@ -179,28 +183,31 @@ function uploadFile(grsUrl, token, version, platform, channel, format, filePath)
     const mod = url.startsWith('https') ? https : http;
     const parsed = new URL(url);
 
-    const req = mod.request({
-      hostname: parsed.hostname,
-      port: parsed.port,
-      path: parsed.pathname,
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'Content-Length': totalLength,
+    const req = mod.request(
+      {
+        hostname: parsed.hostname,
+        port: parsed.port,
+        path: parsed.pathname,
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': totalLength,
+        },
       },
-    }, (res) => {
-      const chunks = [];
-      res.on('data', (c) => chunks.push(c));
-      res.on('end', () => {
-        const body = Buffer.concat(chunks).toString();
-        if (res.statusCode !== 204) {
-          reject(new Error(`Upload failed (${res.statusCode}): ${body}`));
-        } else {
-          resolve();
-        }
-      });
-    });
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          const body = Buffer.concat(chunks).toString();
+          if (res.statusCode !== 204) {
+            reject(new Error(`Upload failed (${res.statusCode}): ${body}`));
+          } else {
+            resolve();
+          }
+        });
+      },
+    );
 
     req.on('error', reject);
     req.write(prelude);

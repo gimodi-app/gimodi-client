@@ -13,7 +13,9 @@ const iconCacheDir = path.join(app.getPath('userData'), 'icon-cache');
 const GRS_URL = 'https://releases.gimodi.com';
 let updateChannel = 'stable';
 
-if (require('electron-squirrel-startup')) app.quit();
+if (require('electron-squirrel-startup')) {
+  app.quit();
+}
 
 // --- Custom Protocol (gimodi://) ---
 
@@ -36,20 +38,30 @@ if (process.defaultApp) {
 function parseProtocolUrl(rawUrl) {
   try {
     const url = new URL(rawUrl);
-    if (url.protocol !== `${PROTOCOL}:`) return null;
-    if (url.hostname !== 'add-server') return null;
+    if (url.protocol !== `${PROTOCOL}:`) {
+      return null;
+    }
+    if (url.hostname !== 'add-server') {
+      return null;
+    }
 
     const host = url.searchParams.get('host');
-    if (!host) return null;
+    if (!host) {
+      return null;
+    }
 
     const port = url.searchParams.get('port');
     const address = port ? `${host}:${port}` : host;
 
     const result = { address };
     const nickname = url.searchParams.get('nickname');
-    if (nickname) result.nickname = nickname;
+    if (nickname) {
+      result.nickname = nickname;
+    }
     const password = url.searchParams.get('password');
-    if (password) result.password = password;
+    if (password) {
+      result.password = password;
+    }
 
     return result;
   } catch {
@@ -65,7 +77,9 @@ let pendingProtocolUrl = null;
  */
 function handleProtocolUrl(rawUrl) {
   const parsed = parseProtocolUrl(rawUrl);
-  if (!parsed) return;
+  if (!parsed) {
+    return;
+  }
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.show();
     mainWindow.focus();
@@ -82,13 +96,17 @@ if (!gotTheLock) {
 } else {
   app.on('second-instance', (event, argv) => {
     if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
       mainWindow.show();
       mainWindow.focus();
     }
     // On Windows/Linux, the protocol URL is passed as the last argument
-    const protocolArg = argv.find(arg => arg.startsWith(`${PROTOCOL}://`));
-    if (protocolArg) handleProtocolUrl(protocolArg);
+    const protocolArg = argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
+    if (protocolArg) {
+      handleProtocolUrl(protocolArg);
+    }
   });
 }
 
@@ -100,9 +118,12 @@ app.on('open-url', (event, url) => {
 
 function getPlatformKey() {
   switch (process.platform) {
-    case 'win32': return 'win';
-    case 'darwin': return 'darwin';
-    default: return 'linux';
+    case 'win32':
+      return 'win';
+    case 'darwin':
+      return 'darwin';
+    default:
+      return 'linux';
   }
 }
 
@@ -113,7 +134,9 @@ function getInstallType() {
   if (process.platform === 'win32') {
     // Squirrel installs have Update.exe in the parent directory
     const updateExe = path.join(path.dirname(exe), '..', 'Update.exe');
-    if (fs.existsSync(updateExe)) return 'squirrel';
+    if (fs.existsSync(updateExe)) {
+      return 'squirrel';
+    }
     return 'zip';
   }
 
@@ -123,14 +146,18 @@ function getInstallType() {
 
   // Linux
   // AppImage sets APPIMAGE env var pointing to the mounted image path
-  if (process.env.APPIMAGE) return 'appimage';
+  if (process.env.APPIMAGE) {
+    return 'appimage';
+  }
 
   // Check if installed via dpkg (deb package)
   if (exe.startsWith('/usr/') || exe.startsWith('/opt/')) {
     try {
       execSync(`dpkg -S "${exe}" 2>/dev/null`, { stdio: 'pipe' });
       return 'deb';
-    } catch {}
+    } catch {
+      /* ignored */
+    }
   }
 
   return 'zip';
@@ -142,19 +169,23 @@ async function checkForUpdates(manual = false) {
   const platform = getPlatformKey();
   const url = `${GRS_URL}/v2/releases/${platform}/${updateChannel}/latest`;
   const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-  const showDialog = (opts) => win ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts);
+  const showDialog = (opts) => (win ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts));
   try {
     const { net } = require('electron');
     const response = await net.fetch(url);
     if (!response.ok) {
-      if (manual) showDialog({ type: 'error', title: 'Update Check', message: 'Failed to check for updates.' });
+      if (manual) {
+        showDialog({ type: 'error', title: 'Update Check', message: 'Failed to check for updates.' });
+      }
       return;
     }
     const data = await response.json();
     if (data.version && data.version !== app.getVersion()) {
       // Check if our install format is available
       if (!data.formats || !data.formats.includes(installType)) {
-        if (manual) showDialog({ type: 'info', title: 'Update Available', message: `Version ${data.version} is available, but no ${installType} package is provided yet.` });
+        if (manual) {
+          showDialog({ type: 'info', title: 'Update Available', message: `Version ${data.version} is available, but no ${installType} package is provided yet.` });
+        }
         return;
       }
       const result = await showDialog({
@@ -173,7 +204,9 @@ async function checkForUpdates(manual = false) {
     }
   } catch (err) {
     console.error('Update check failed:', err);
-    if (manual) showDialog({ type: 'error', title: 'Update Check', message: 'Failed to check for updates.' });
+    if (manual) {
+      showDialog({ type: 'error', title: 'Update Check', message: 'Failed to check for updates.' });
+    }
   }
 }
 
@@ -218,7 +251,11 @@ ipcMain.handle('update:download', async (event, version) => {
     for await (const chunk of response.body) {
       if (abortController.signal.aborted) {
         writer.destroy();
-        try { fs.unlinkSync(filePath); } catch {}
+        try {
+          fs.unlinkSync(filePath);
+        } catch {
+          /* ignored */
+        }
         return;
       }
       received += chunk.length;
@@ -242,7 +279,11 @@ ipcMain.handle('update:download', async (event, version) => {
       const appImagePath = process.env.APPIMAGE;
       console.log(`[update] Replacing AppImage: ${appImagePath}`);
       // Linux allows unlinking an open file — remove first, then move the new one into place
-      try { fs.unlinkSync(appImagePath); } catch (e) { console.log(`[update] Unlink old AppImage: ${e.message}`); }
+      try {
+        fs.unlinkSync(appImagePath);
+      } catch (e) {
+        console.log(`[update] Unlink old AppImage: ${e.message}`);
+      }
       // renameSync fails across filesystems (e.g. /tmp → /home), so fall back to copy+delete
       try {
         fs.renameSync(filePath, appImagePath);
@@ -315,7 +356,9 @@ if (!fs.existsSync(serversPath) && fs.existsSync(historyPath)) {
     if (Array.isArray(historyData)) {
       fs.writeFileSync(serversPath, JSON.stringify(historyData, null, 2));
     }
-  } catch { /* ignore migration errors */ }
+  } catch {
+    /* ignore migration errors */
+  }
 }
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
@@ -345,18 +388,17 @@ function createWindow() {
   });
 
   // Fix Referer for YouTube embeds so they don't reject with error 153
-  mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
-    { urls: ['https://www.youtube-nocookie.com/*', 'https://www.youtube.com/*'] },
-    (details, callback) => {
-      details.requestHeaders['Referer'] = 'https://www.youtube-nocookie.com/';
-      callback({ requestHeaders: details.requestHeaders });
-    }
-  );
+  mainWindow.webContents.session.webRequest.onBeforeSendHeaders({ urls: ['https://www.youtube-nocookie.com/*', 'https://www.youtube.com/*'] }, (details, callback) => {
+    details.requestHeaders['Referer'] = 'https://www.youtube-nocookie.com/';
+    callback({ requestHeaders: details.requestHeaders });
+  });
 
   // Prevent navigation away from the app (e.g. clicking download links)
   mainWindow.webContents.on('will-navigate', (e, url) => {
     const appUrl = `file://${path.join(__dirname, '..', 'renderer', 'index.html')}`;
-    if (!url.startsWith(appUrl)) e.preventDefault();
+    if (!url.startsWith(appUrl)) {
+      e.preventDefault();
+    }
   });
 
   // Intercept getDisplayMedia calls from the renderer to show our own source picker
@@ -370,7 +412,7 @@ function createWindow() {
       fetchWindowIcons: true,
     });
 
-    const serialized = sources.map(s => ({
+    const serialized = sources.map((s) => ({
       id: s.id,
       name: s.name,
       thumbnail: s.thumbnail.toDataURL(),
@@ -390,7 +432,7 @@ function createWindow() {
       return;
     }
 
-    const selected = sources.find(s => s.id === choice.sourceId);
+    const selected = sources.find((s) => s.id === choice.sourceId);
     if (!selected) {
       callback({});
       return;
@@ -434,23 +476,43 @@ let notificationMode = 'mentions';
  * @description Rebuilds the system tray context menu based on current voice state
  */
 function rebuildTrayMenu() {
-  if (!tray) return;
+  if (!tray) {
+    return;
+  }
   const items = [
-    { label: 'Open', click: () => { mainWindow.show(); mainWindow.focus(); } },
+    {
+      label: 'Open',
+      click: () => {
+        mainWindow.show();
+        mainWindow.focus();
+      },
+    },
   ];
   if (voiceActive) {
     items.push({
       label: voiceMuted || voiceDeafened ? 'Unmute' : 'Mute',
-      click: () => { if (mainWindow) mainWindow.webContents.send('tray:toggle-mute'); },
+      click: () => {
+        if (mainWindow) {
+          mainWindow.webContents.send('tray:toggle-mute');
+        }
+      },
     });
     items.push({
       label: voiceDeafened ? 'Undeafen' : 'Deafen',
-      click: () => { if (mainWindow) mainWindow.webContents.send('tray:toggle-deafen'); },
+      click: () => {
+        if (mainWindow) {
+          mainWindow.webContents.send('tray:toggle-deafen');
+        }
+      },
     });
     items.push({ type: 'separator' });
     items.push({
       label: 'Disconnect',
-      click: () => { if (mainWindow) mainWindow.webContents.send('tray:disconnect'); },
+      click: () => {
+        if (mainWindow) {
+          mainWindow.webContents.send('tray:disconnect');
+        }
+      },
     });
   }
   items.push({ type: 'separator' });
@@ -463,7 +525,7 @@ function rebuildTrayMenu() {
   items.push({
     label: 'Notifications',
     type: 'submenu',
-    submenu: notifModes.map(m => ({
+    submenu: notifModes.map((m) => ({
       label: m.label,
       type: 'radio',
       checked: notificationMode === m.value,
@@ -473,12 +535,20 @@ function rebuildTrayMenu() {
         settings.notificationMode = m.value;
         fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
         rebuildTrayMenu();
-        if (mainWindow) mainWindow.webContents.send('notification-mode:changed', m.value);
+        if (mainWindow) {
+          mainWindow.webContents.send('notification-mode:changed', m.value);
+        }
       },
     })),
   });
   items.push({ type: 'separator' });
-  items.push({ label: 'Close', click: () => { app.isQuitting = true; app.quit(); } });
+  items.push({
+    label: 'Close',
+    click: () => {
+      app.isQuitting = true;
+      app.quit();
+    },
+  });
   tray.setContextMenu(Menu.buildFromTemplate(items));
 }
 
@@ -490,7 +560,6 @@ function loadSettingsSync() {
   }
 }
 
-
 function buildMenu(isAdmin, connected) {
   lastAdminStatus = isAdmin;
   lastConnected = connected;
@@ -501,23 +570,12 @@ function buildMenu(isAdmin, connected) {
   const hamburgerItems = [
     { action: 'open-unified-settings', label: 'Settings...' },
     { type: 'separator' },
-    ...(connected ? [
-      { action: 'redeem-token', label: 'Redeem Server Token...' },
-      { action: 'disconnect', label: 'Disconnect' },
-      { type: 'separator' },
-    ] : []),
+    ...(connected ? [{ action: 'redeem-token', label: 'Redeem Server Token...' }, { action: 'disconnect', label: 'Disconnect' }, { type: 'separator' }] : []),
     { action: 'quit', label: 'Quit' },
-    ...(lastDevMode ? [
-      { type: 'separator' },
-      { action: 'reload', label: 'Reload' },
-      { action: 'force-reload', label: 'Force Reload' },
-      { action: 'toggle-devtools', label: 'Toggle DevTools' },
-    ] : []),
+    ...(lastDevMode ? [{ type: 'separator' }, { action: 'reload', label: 'Reload' }, { action: 'force-reload', label: 'Force Reload' }, { action: 'toggle-devtools', label: 'Toggle DevTools' }] : []),
   ];
 
-  const menu = [
-    { label: '☰', items: hamburgerItems },
-  ];
+  const menu = [{ label: '☰', items: hamburgerItems }];
 
   sendToMain('menu:update', menu);
 }
@@ -526,16 +584,22 @@ app.whenReady().then(async () => {
   await identity.ensureDefaultIdentity();
 
   // Handle protocol URL from cold start (Windows/Linux pass it as argv)
-  const launchUrl = process.argv.find(arg => arg.startsWith(`${PROTOCOL}://`));
+  const launchUrl = process.argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
   if (launchUrl) {
     pendingProtocolUrl = parseProtocolUrl(launchUrl);
   }
 
   // Restore saved settings before building the first menu
   const savedSettings = loadSettingsSync();
-  if (savedSettings.devMode) lastDevMode = true;
-  if (savedSettings.updateChannel) updateChannel = savedSettings.updateChannel;
-  if (savedSettings.notificationMode) notificationMode = savedSettings.notificationMode;
+  if (savedSettings.devMode) {
+    lastDevMode = true;
+  }
+  if (savedSettings.updateChannel) {
+    updateChannel = savedSettings.updateChannel;
+  }
+  if (savedSettings.notificationMode) {
+    notificationMode = savedSettings.notificationMode;
+  }
 
   const trayExt = process.platform === 'win32' ? 'ico' : 'png';
   trayDefault = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', `tray-32x32.${trayExt}`));
@@ -543,7 +607,10 @@ app.whenReady().then(async () => {
   tray = new Tray(trayDefault);
   tray.setToolTip('Gimodi');
   rebuildTrayMenu();
-  const showWindow = () => { mainWindow.show(); mainWindow.focus(); };
+  const showWindow = () => {
+    mainWindow.show();
+    mainWindow.focus();
+  };
   tray.on('click', showWindow);
   tray.on('double-click', showWindow);
 
@@ -574,34 +641,76 @@ function sendToMain(channel, data) {
 
 // --- Window Controls (custom titlebar) ---
 
-ipcMain.on('window:minimize', () => { if (mainWindow) mainWindow.minimize(); });
-ipcMain.on('window:maximize', () => {
+ipcMain.on('window:minimize', () => {
   if (mainWindow) {
-    if (mainWindow.isMaximized()) mainWindow.unmaximize();
-    else mainWindow.maximize();
+    mainWindow.minimize();
   }
 });
-ipcMain.on('window:close', () => { if (mainWindow) mainWindow.close(); });
+ipcMain.on('window:maximize', () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  }
+});
+ipcMain.on('window:close', () => {
+  if (mainWindow) {
+    mainWindow.close();
+  }
+});
 
 // --- Menu Actions (custom titlebar) ---
 
 ipcMain.on('menu:action', (_, action, data) => {
-  if (!mainWindow) return;
+  if (!mainWindow) {
+    return;
+  }
   switch (action) {
-    case 'reload': mainWindow.webContents.reload(); break;
-    case 'force-reload': mainWindow.webContents.reloadIgnoringCache(); break;
-    case 'toggle-devtools': mainWindow.webContents.toggleDevTools(); break;
-    case 'open-unified-settings': sendToMain('menu:open-unified-settings'); break;
-    case 'check-updates': checkForUpdates(true).catch(() => {}); break;
-    case 'disconnect': sendToMain('menu:disconnect'); break;
-    case 'quit': app.isQuitting = true; app.quit(); break;
-    case 'redeem-token': sendToMain('menu:redeem-token'); break;
-    case 'admin:list-users': sendToMain('server-admin:list-users'); break;
-    case 'admin:manage-bans': sendToMain('server-admin:manage-bans'); break;
-    case 'admin:manage-tokens': sendToMain('server-admin:manage-tokens'); break;
-    case 'admin:manage-roles': sendToMain('server-admin:manage-roles'); break;
-    case 'admin:server-settings': sendToMain('server-admin:server-settings'); break;
-    case 'admin:audit-log': sendToMain('server-admin:audit-log'); break;
+    case 'reload':
+      mainWindow.webContents.reload();
+      break;
+    case 'force-reload':
+      mainWindow.webContents.reloadIgnoringCache();
+      break;
+    case 'toggle-devtools':
+      mainWindow.webContents.toggleDevTools();
+      break;
+    case 'open-unified-settings':
+      sendToMain('menu:open-unified-settings');
+      break;
+    case 'check-updates':
+      checkForUpdates(true).catch(() => {});
+      break;
+    case 'disconnect':
+      sendToMain('menu:disconnect');
+      break;
+    case 'quit':
+      app.isQuitting = true;
+      app.quit();
+      break;
+    case 'redeem-token':
+      sendToMain('menu:redeem-token');
+      break;
+    case 'admin:list-users':
+      sendToMain('server-admin:list-users');
+      break;
+    case 'admin:manage-bans':
+      sendToMain('server-admin:manage-bans');
+      break;
+    case 'admin:manage-tokens':
+      sendToMain('server-admin:manage-tokens');
+      break;
+    case 'admin:manage-roles':
+      sendToMain('server-admin:manage-roles');
+      break;
+    case 'admin:server-settings':
+      sendToMain('server-admin:server-settings');
+      break;
+    case 'admin:audit-log':
+      sendToMain('server-admin:audit-log');
+      break;
     default:
       if (action.startsWith('history:')) {
         sendToMain('menu:connect-server', data);
@@ -618,13 +727,16 @@ ipcMain.handle('settings:set-dev-mode', (_, enabled) => {
 
 ipcMain.handle('settings:set-update-channel', (_, channel) => {
   const valid = ['stable', 'beta', 'nightly'];
-  if (valid.includes(channel)) updateChannel = channel;
+  if (valid.includes(channel)) {
+    updateChannel = channel;
+  }
 });
 
 // --- Identity Manager Window ---
 
 let identityManagerWindow = null;
 
+// eslint-disable-next-line no-unused-vars
 function openIdentityManager() {
   if (identityManagerWindow && !identityManagerWindow.isDestroyed()) {
     identityManagerWindow.focus();
@@ -663,7 +775,9 @@ ipcMain.handle('set-voice-active', (event, active) => {
     voiceMuted = false;
     voiceDeafened = false;
   }
-  if (tray) tray.setImage(active ? trayOnline : trayDefault);
+  if (tray) {
+    tray.setImage(active ? trayOnline : trayDefault);
+  }
   rebuildTrayMenu();
 });
 
@@ -701,9 +815,11 @@ ipcMain.handle('servers:add', (event, server) => {
   let items = [];
   try {
     items = JSON.parse(fs.readFileSync(serversPath, 'utf-8'));
-  } catch { /* empty */ }
+  } catch {
+    /* empty */
+  }
   const fp = server.identityFingerprint || null;
-  const matches = s => s.address === server.address && s.nickname === server.nickname && (s.identityFingerprint || null) === fp;
+  const matches = (s) => s.address === server.address && s.nickname === server.nickname && (s.identityFingerprint || null) === fp;
   let found = false;
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
@@ -720,7 +836,9 @@ ipcMain.handle('servers:add', (event, server) => {
       break;
     }
   }
-  if (!found) items.push(server);
+  if (!found) {
+    items.push(server);
+  }
   fs.writeFileSync(serversPath, JSON.stringify(items, null, 2));
   return items;
 });
@@ -734,8 +852,12 @@ ipcMain.handle('servers:reorder', (event, fromIndex, toIndex) => {
   let items = [];
   try {
     items = JSON.parse(fs.readFileSync(serversPath, 'utf-8'));
-  } catch { /* empty */ }
-  if (fromIndex < 0 || fromIndex >= items.length || toIndex < 0 || toIndex >= items.length) return items;
+  } catch {
+    /* empty */
+  }
+  if (fromIndex < 0 || fromIndex >= items.length || toIndex < 0 || toIndex >= items.length) {
+    return items;
+  }
   const [moved] = items.splice(fromIndex, 1);
   items.splice(toIndex, 0, moved);
   fs.writeFileSync(serversPath, JSON.stringify(items, null, 2));
@@ -750,15 +872,20 @@ ipcMain.handle('servers:remove', (event, address, nickname, identityFingerprint)
   let items = [];
   try {
     items = JSON.parse(fs.readFileSync(serversPath, 'utf-8'));
-  } catch { /* empty */ }
+  } catch {
+    /* empty */
+  }
   const fp = identityFingerprint || null;
-  const matches = s => s.address === address && s.nickname === nickname && (s.identityFingerprint || null) === fp;
+  const matches = (s) => s.address === address && s.nickname === nickname && (s.identityFingerprint || null) === fp;
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i];
     if (item.type === 'group') {
-      item.servers = item.servers.filter(s => !matches(s));
-      if (item.servers.length === 0) items.splice(i, 1);
-      else if (item.servers.length === 1) items[i] = item.servers[0];
+      item.servers = item.servers.filter((s) => !matches(s));
+      if (item.servers.length === 0) {
+        items.splice(i, 1);
+      } else if (item.servers.length === 1) {
+        items[i] = item.servers[0];
+      }
     } else if (matches(item)) {
       items.splice(i, 1);
     }
@@ -792,10 +919,8 @@ ipcMain.handle('identity:delete', (event, fingerprint) => identity.deleteIdentit
 ipcMain.handle('identity:rename', (event, fingerprint, newName) => identity.renameIdentity(fingerprint, newName));
 ipcMain.handle('identity:set-default', (event, fingerprint) => identity.setDefaultIdentity(fingerprint));
 ipcMain.handle('identity:get-default', () => identity.getDefaultIdentity());
-ipcMain.handle('identity:encrypt', (event, recipientPublicKeys, plaintext) =>
-  identity.encryptMessage(recipientPublicKeys, plaintext));
-ipcMain.handle('identity:decrypt', (event, armoredMessage) =>
-  identity.decryptMessage(armoredMessage));
+ipcMain.handle('identity:encrypt', (event, recipientPublicKeys, plaintext) => identity.encryptMessage(recipientPublicKeys, plaintext));
+ipcMain.handle('identity:decrypt', (event, armoredMessage) => identity.decryptMessage(armoredMessage));
 
 ipcMain.handle('identity:export', async (event, fingerprint) => {
   const win = BrowserWindow.fromWebContents(event.sender);
@@ -805,7 +930,9 @@ ipcMain.handle('identity:export', async (event, fingerprint) => {
     defaultPath: `${data.name.replace(/[^a-z0-9_-]/gi, '_')}.gimodi-identity`,
     filters: [{ name: 'Gimodi Identity', extensions: ['gimodi-identity'] }],
   });
-  if (canceled || !filePath) return { canceled: true };
+  if (canceled || !filePath) {
+    return { canceled: true };
+  }
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
   return { canceled: false, filePath };
 });
@@ -817,7 +944,9 @@ ipcMain.handle('identity:import', async (event) => {
     filters: [{ name: 'Gimodi Identity', extensions: ['gimodi-identity'] }],
     properties: ['openFile'],
   });
-  if (canceled || !filePaths.length) return { canceled: true };
+  if (canceled || !filePaths.length) {
+    return { canceled: true };
+  }
   const raw = JSON.parse(fs.readFileSync(filePaths[0], 'utf-8'));
   const imported = await identity.importIdentity(raw);
   return { canceled: false, identity: imported };
@@ -833,9 +962,13 @@ ipcMain.handle('open-external', (event, url) => {
 // Download a file via Electron's built-in download manager
 ipcMain.handle('download-file', (event, url, filename) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win || typeof url !== 'string') return;
+  if (!win || typeof url !== 'string') {
+    return;
+  }
   win.webContents.session.once('will-download', (e, item) => {
-    if (filename) item.setSavePath(''); // triggers save dialog
+    if (filename) {
+      item.setSavePath('');
+    } // triggers save dialog
     item.setSaveDialogOptions({ defaultPath: filename || undefined });
   });
   win.webContents.downloadURL(url);
@@ -873,7 +1006,9 @@ ipcMain.handle('wcpopout:open', () => {
 });
 
 ipcMain.on('wcpopout:close', () => {
-  if (wcPopoutWindow && !wcPopoutWindow.isDestroyed()) wcPopoutWindow.close();
+  if (wcPopoutWindow && !wcPopoutWindow.isDestroyed()) {
+    wcPopoutWindow.close();
+  }
 });
 
 ipcMain.on('wcpopout:to-popout', (_, data) => {
@@ -926,7 +1061,9 @@ ipcMain.handle('popout:open', () => {
 });
 
 ipcMain.on('popout:close', () => {
-  if (popoutWindow && !popoutWindow.isDestroyed()) popoutWindow.close();
+  if (popoutWindow && !popoutWindow.isDestroyed()) {
+    popoutWindow.close();
+  }
 });
 
 ipcMain.on('popout:to-popout', (_, data) => {
@@ -959,7 +1096,7 @@ ipcMain.handle('screen:get-platform', () => process.platform);
  */
 function getAudioServicePid() {
   const metrics = app.getAppMetrics();
-  const audioService = metrics.find(proc => proc.name === 'Audio Service');
+  const audioService = metrics.find((proc) => proc.name === 'Audio Service');
   return audioService?.pid?.toString() ?? '';
 }
 
@@ -969,7 +1106,7 @@ ipcMain.handle('venmic:list', () => {
   const audioPid = getAudioServicePid();
   const nodes = venmic.list();
   // Filter out our own audio output from the list (same as Equibop)
-  return nodes.filter(n => n['application.process.id'] !== audioPid);
+  return nodes.filter((n) => n['application.process.id'] !== audioPid);
 });
 
 ipcMain.handle('venmic:start', (_, include, exclude) => {
@@ -986,7 +1123,9 @@ ipcMain.handle('venmic:stop', () => venmic.stop());
 
 // Desktop notifications
 ipcMain.handle('show-notification', (event, options) => {
-  if (!Notification.isSupported()) return;
+  if (!Notification.isSupported()) {
+    return;
+  }
 
   const notification = new Notification({
     title: options.title || 'Gimodi',
@@ -996,7 +1135,9 @@ ipcMain.handle('show-notification', (event, options) => {
 
   notification.on('click', () => {
     if (mainWindow) {
-      if (!mainWindow.isVisible()) mainWindow.show();
+      if (!mainWindow.isVisible()) {
+        mainWindow.show();
+      }
       mainWindow.focus();
 
       // Send event to renderer to navigate to the relevant channel/DM
@@ -1015,7 +1156,9 @@ ipcMain.handle('icon-cache:get', (event, address, hash) => {
   const addrHash = crypto.createHash('sha256').update(address).digest('hex');
   const filename = `${addrHash}-${hash}`;
   const filePath = path.join(iconCacheDir, filename);
-  if (fs.existsSync(filePath)) return filePath;
+  if (fs.existsSync(filePath)) {
+    return filePath;
+  }
   return null;
 });
 
@@ -1023,7 +1166,9 @@ ipcMain.handle('icon-cache:health', async (event, address) => {
   try {
     const { net } = require('electron');
     const resp = await net.fetch(`https://${address}/health`);
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      return null;
+    }
     return await resp.json();
   } catch {
     return null;
@@ -1034,7 +1179,9 @@ ipcMain.handle('icon-cache:fetch', async (event, address) => {
   try {
     const { net } = require('electron');
     const resp = await net.fetch(`https://${address}/icon`);
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      return null;
+    }
     const buf = await resp.arrayBuffer();
     return Buffer.from(buf);
   } catch {
@@ -1050,7 +1197,9 @@ ipcMain.handle('icon-cache:upload', async (event, address, clientId, contentType
       headers: { 'X-Client-Id': clientId, 'Content-Type': contentType },
       body: Buffer.from(arrayBuffer),
     });
-    if (!resp.ok) return { error: `HTTP ${resp.status}` };
+    if (!resp.ok) {
+      return { error: `HTTP ${resp.status}` };
+    }
     return await resp.json();
   } catch (err) {
     return { error: err.message };
@@ -1064,7 +1213,9 @@ ipcMain.handle('icon-cache:delete', async (event, address, clientId) => {
       method: 'DELETE',
       headers: { 'X-Client-Id': clientId },
     });
-    if (!resp.ok) return { error: `HTTP ${resp.status}` };
+    if (!resp.ok) {
+      return { error: `HTTP ${resp.status}` };
+    }
     return await resp.json();
   } catch (err) {
     return { error: err.message };
@@ -1085,7 +1236,9 @@ ipcMain.handle('icon-cache:save', (event, address, hash, arrayBuffer) => {
         fs.unlinkSync(path.join(iconCacheDir, f));
       }
     }
-  } catch {}
+  } catch {
+    /* ignored */
+  }
 
   fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
   return filePath;

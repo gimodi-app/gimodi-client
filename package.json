@@ -38,7 +38,11 @@
     "nightly:win": "npm run nightly:win:squirrel && npm run nightly:win:zip",
     "nightly:mac": "npm run nightly:mac:zip",
     "nightly:linux": "npm run nightly:linux:deb && npm run nightly:linux:appimage && npm run nightly:linux:zip",
-    "nightly": "npm run nightly:linux && npm run nightly:win && npm run nightly:mac"
+    "nightly": "npm run nightly:linux && npm run nightly:win && npm run nightly:mac",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@jitsi/rnnoise-wasm": "^0.2.1",
@@ -58,8 +62,13 @@
     "@electron-forge/maker-deb": "^7.0.0",
     "@electron-forge/maker-squirrel": "^7.0.0",
     "@electron-forge/maker-zip": "^7.0.0",
+    "@eslint/js": "^10.0.1",
     "@reforged/maker-appimage": "^5.2.0",
     "electron": "^33.0.0",
-    "esbuild": "^0.27.3"
+    "esbuild": "^0.27.3",
+    "eslint": "^10.0.3",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.4.0",
+    "prettier": "^3.8.1"
   }
 }

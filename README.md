@@ -20,12 +20,12 @@ This builds the renderer bundle and launches the app in development mode.
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm start` | Build and run in development mode |
-| `npm run build` | Build the renderer bundle only |
+| Command           | Description                                   |
+| ----------------- | --------------------------------------------- |
+| `npm start`       | Build and run in development mode             |
+| `npm run build`   | Build the renderer bundle only                |
 | `npm run package` | Package the app without creating an installer |
-| `npm run make` | Create platform-specific installers |
+| `npm run make`    | Create platform-specific installers           |
 
 ### Distribution
 
