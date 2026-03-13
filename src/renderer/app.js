@@ -2,7 +2,7 @@ import serverService from './services/server.js';
 import connectionManager, { connKey, addressFromKey } from './services/connectionManager.js';
 import voiceService from './services/voice.js';
 import notificationService from './services/notifications.js';
-import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects } from './views/connect.js';
+import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects, removeServerByIdentity } from './views/connect.js';
 import {
   initServerView,
   cleanup as cleanupServer,
@@ -361,7 +361,14 @@ initConnectView();
 initSidebar();
 loadSettings();
 
-// Menu: Disconnect (disconnects the currently viewed server)
+// Auto-connect to all saved servers on startup
+(async () => {
+  const servers = (await window.gimodi.servers.list()) || [];
+  const identities = (await window.gimodi.identity.loadAll()) || [];
+  connectionManager.connectAll(servers.flatMap((s) => (s.type === 'group' ? s.servers : [s])), identities);
+})();
+
+// Menu: Disconnect (leave voice on the currently viewed server)
 window.gimodi.onDisconnect(() => {
   const key = connectionManager.activeKey;
   log('Menu disconnect clicked, active:', key);
@@ -461,6 +468,18 @@ window.addEventListener('gimodi:switch-server', (e) => {
 
 window.addEventListener('gimodi:disconnect-server', (e) => {
   disconnectServer(e.detail.connKey);
+});
+
+window.addEventListener('gimodi:remove-server', async (e) => {
+  const { connKey: key, server } = e.detail;
+  const conn = connectionManager.getConnection(key);
+  if (conn) {
+    conn.stopReconnect();
+    disconnectServer(key);
+  }
+  await window.gimodi.servers.remove(server.address, server.nickname, server.identityFingerprint);
+  removeServerByIdentity(server.address, server.nickname, server.identityFingerprint);
+  rerenderSidebar();
 });
 
 window.addEventListener('gimodi:auto-join-voice', () => {
@@ -1373,107 +1392,64 @@ connectionManager.addEventListener('voice-server-changed', () => {
 });
 
 // Handle unexpected connection loss from connectionManager
-let _reconnectAbort = null;
-
 connectionManager.addEventListener('connection-lost', (e) => {
-  const { key, reason, hadVoice } = e.detail;
-  log('Connection lost:', key, reason);
+  const { key, reason, hadVoice, willReconnect } = e.detail;
+  log('Connection lost:', key, reason, 'willReconnect:', willReconnect);
 
-  // Auto-reconnect on server shutdown (not kick/ban)
-  // Capture channel state before disconnect cleanup clears it
-  const creds = connectionManager.getCredentials(key);
-  const previousChannelId = reason && reason.startsWith('Server shut down:') && creds && hadVoice ? getCurrentChannelId() : null;
+  if (willReconnect) {
+    if (hadVoice && connectionManager.activeKey === key) {
+      voiceService.cleanup();
+      connectionManager.clearVoiceServer();
+      setVoiceChannel(null);
+      stopMicLevelMeter();
+    }
+    appendSystemMessage(`Connection lost. Reconnecting...`);
+    rerenderSidebar();
+    return;
+  }
 
+  // Kick/ban/intentional - dispatch full disconnected event
   window.dispatchEvent(
     new CustomEvent('gimodi:disconnected', {
       detail: { connKey: key, reason },
     }),
   );
 
-  if (reason && reason.startsWith('Server shut down:') && creds) {
-    attemptReconnect(key, creds, previousChannelId);
-    return;
-  }
-
-  // Clean up stored credentials since we won't reconnect
-  connectionManager._credentials.delete(key);
-
   if (reason) {
-    const errorEl = document.getElementById('connect-error');
-    if (errorEl) {
-      errorEl.textContent = reason;
-    }
+    appendSystemMessage(reason);
   }
 });
 
-const modalReconnect = document.getElementById('modal-reconnect');
-const reconnectStatus = document.getElementById('reconnect-status');
-const btnCancelReconnect = document.getElementById('btn-cancel-reconnect');
+// Handle successful reconnection
+connectionManager.addEventListener('reconnected', (e) => {
+  const { key, data } = e.detail;
+  log('Reconnected to', key);
+  rerenderSidebar();
 
-btnCancelReconnect.addEventListener('click', () => {
-  if (_reconnectAbort) {
-    _reconnectAbort.abort();
-    _reconnectAbort = null;
+  if (connectionManager.activeKey === key) {
+    data._connKey = key;
+    window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: data }));
   }
-  modalReconnect.classList.add('hidden');
+  appendSystemMessage('Reconnected to server.');
 });
 
-async function attemptReconnect(key, creds, previousChannelId) {
-  const controller = new AbortController();
-  _reconnectAbort = controller;
+// Handle background connections (auto-connect on startup)
+connectionManager.addEventListener('background-connected', (e) => {
+  const { key, data, server } = e.detail;
+  log('Background connected:', key, data.serverName);
 
-  reconnectStatus.textContent = 'Server shut down. Reconnecting...';
-  modalReconnect.classList.remove('hidden');
-
-  const MAX_ATTEMPTS = 10;
-  for (let i = 1; i <= MAX_ATTEMPTS; i++) {
-    if (controller.signal.aborted) {
-      break;
-    }
-
-    reconnectStatus.textContent = `Reconnecting... (attempt ${i}/${MAX_ATTEMPTS})`;
-
-    await new Promise((r) => setTimeout(r, 1000));
-    if (controller.signal.aborted) {
-      break;
-    }
-
-    try {
-      const address = addressFromKey(key);
-      const data = await connectionManager.connect(key, address, creds.nickname, creds.password, creds.publicKey);
-      // Success
-      _reconnectAbort = null;
-      modalReconnect.classList.add('hidden');
-      data._connKey = key;
-      window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: data }));
-      log('Reconnected to', key);
-
-      // Rejoin previous channel (which also sets up voice)
-      if (previousChannelId) {
-        const channelStillExists = data.channels?.some((c) => c.id === previousChannelId);
-        if (channelStillExists) {
-          log('Rejoining channel', previousChannelId);
-          await switchChannel(previousChannelId);
-        }
-      }
-      return;
-    } catch (err) {
-      log(`Reconnect attempt ${i} failed:`, err.message);
-    }
+  if (data.serverName && data.serverName !== server.name) {
+    server.name = data.serverName;
+    window.gimodi.servers.add(server);
   }
 
-  // All attempts failed or cancelled
-  _reconnectAbort = null;
-  modalReconnect.classList.add('hidden');
-  connectionManager._credentials.delete(key);
+  rerenderSidebar();
+});
 
-  if (!controller.signal.aborted) {
-    const errorEl = document.getElementById('connect-error');
-    if (errorEl) {
-      errorEl.textContent = 'Failed to reconnect to server.';
-    }
-  }
-}
+// Update sidebar when connection status changes
+connectionManager.addEventListener('connection-status-changed', () => {
+  rerenderSidebar();
+});
 
 // --- Menu: connect to server from history ---
 

@@ -556,7 +556,7 @@ body {
   border-radius: 16px;
 }
 
-/* Voice-active server indicator (orange dot) */
+/* Voice-active server indicator (green dot) */
 .server-sidebar-btn.voice-active::after {
   content: '';
   position: absolute;
@@ -568,6 +568,26 @@ body {
   background: #0aaf30;
   border: 2px solid var(--bg-primary);
   z-index: 1;
+}
+
+/* Reconnecting indicator (pulsing orange dot) */
+.server-sidebar-btn.reconnecting::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f59e0b;
+  border: 2px solid var(--bg-primary);
+  z-index: 1;
+  animation: reconnect-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes reconnect-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 .server-sidebar-add {

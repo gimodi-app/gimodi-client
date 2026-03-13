@@ -67,7 +67,7 @@ channelTree.addEventListener('drop', (e) => {
 });
 
 const serverNameEl = document.getElementById('server-name');
-const btnDisconnect = document.getElementById('btn-disconnect');
+const btnLeaveVoice = document.getElementById('btn-leave-voice');
 const btnCreateChannel = document.getElementById('btn-create-channel');
 
 let channels = [];
@@ -179,8 +179,9 @@ export function initServerView(data) {
 
   renderChannelTree();
 
-  btnDisconnect.addEventListener('click', handleDisconnect);
-  window.gimodi.onTrayDisconnect(handleDisconnect);
+  btnLeaveVoice.addEventListener('click', handleLeaveVoice);
+  window.gimodi.onTrayDisconnect(handleLeaveVoice);
+  btnLeaveVoice.classList.add('hidden');
   const canCreate = serverService.hasPermission('channel.create');
   const canCreateTemp = serverService.hasPermission('channel.create_temporary');
   const canCreateGroup = serverService.hasPermission('channel.group_create');
@@ -287,7 +288,7 @@ export function cleanup() {
   window.removeEventListener('gimodi:channel-access-error', onChannelAccessError);
   window.removeEventListener('gimodi:channel-unread-changed', onChannelUnreadChanged);
   window.removeEventListener('gimodi:user-context-menu', onUserContextMenuEvent);
-  btnDisconnect.removeEventListener('click', handleDisconnect);
+  btnLeaveVoice.removeEventListener('click', handleLeaveVoice);
   btnCreateChannel.removeEventListener('click', onCreateChannelClick);
   document.getElementById('create-dropdown').classList.add('hidden');
   window.gimodi.removeMenuListeners();
@@ -408,7 +409,7 @@ export function restoreState(state) {
   serverService.addEventListener('server:permissions-changed', onPermissionsChanged);
   window.addEventListener('gimodi:channel-access-error', onChannelAccessError);
   window.addEventListener('gimodi:channel-unread-changed', onChannelUnreadChanged);
-  btnDisconnect.addEventListener('click', handleDisconnect);
+  btnLeaveVoice.addEventListener('click', handleLeaveVoice);
   btnCreateChannel.addEventListener('click', onCreateChannelClick);
   window.gimodi.onMenuAction(onMenuAction);
 
@@ -473,18 +474,12 @@ function getChannelName(id) {
   return channels.find((c) => c.id === id)?.name || 'Unknown';
 }
 
-function handleDisconnect() {
-  playSound(sndDisconnect);
-  if (currentChannelId && connectionManager.voiceKey === connectionManager.activeKey) {
-    leaveVoiceChannel();
-  } else {
-    const targetKey = connectionManager.voiceKey || connectionManager.activeKey;
-    window.dispatchEvent(
-      new CustomEvent('gimodi:disconnect-server', {
-        detail: { connKey: targetKey },
-      }),
-    );
+function handleLeaveVoice() {
+  if (!currentChannelId) {
+    return;
   }
+  playSound(sndDisconnect);
+  leaveVoiceChannel();
 }
 
 /**
@@ -501,6 +496,7 @@ function leaveVoiceChannel() {
     self.channelId = null;
   }
   currentChannelId = null;
+  btnLeaveVoice.classList.add('hidden');
   connectionManager.clearVoiceServer();
   setVoiceChannel(null);
   renderChannelTree();
@@ -737,6 +733,7 @@ export async function switchChannel(channelId) {
     voiceService.cleanup();
     const data = await serverService.request('channel:join', { channelId, password });
     currentChannelId = channelId;
+    btnLeaveVoice.classList.remove('hidden');
     updateChannelTabLabel(channelId);
 
     if (data.moderated && data.voiceGranted) {
@@ -799,6 +796,7 @@ function onForceJoined(e) {
   }
 
   currentChannelId = channelId;
+  btnLeaveVoice.classList.remove('hidden');
   updateChannelTabLabel(channelId);
 
   const self = clients.find((c) => c.id === serverService.clientId);

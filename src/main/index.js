@@ -507,7 +507,7 @@ function rebuildTrayMenu() {
     });
     items.push({ type: 'separator' });
     items.push({
-      label: 'Disconnect',
+      label: 'Leave Voice',
       click: () => {
         if (mainWindow) {
           mainWindow.webContents.send('tray:disconnect');
@@ -570,7 +570,7 @@ function buildMenu(isAdmin, connected) {
   const hamburgerItems = [
     { action: 'open-unified-settings', label: 'Settings...' },
     { type: 'separator' },
-    ...(connected ? [{ action: 'redeem-token', label: 'Redeem Server Token...' }, { action: 'disconnect', label: 'Disconnect' }, { type: 'separator' }] : []),
+    ...(connected ? [{ action: 'redeem-token', label: 'Redeem Server Token...' }, { type: 'separator' }] : []),
     { action: 'quit', label: 'Quit' },
     ...(lastDevMode ? [{ type: 'separator' }, { action: 'reload', label: 'Reload' }, { action: 'force-reload', label: 'Force Reload' }, { action: 'toggle-devtools', label: 'Toggle DevTools' }] : []),
   ];

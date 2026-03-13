@@ -33,8 +33,18 @@ class ConnectionManager extends EventTarget {
     this._serverStates = new Map();
     /** @type {Map<string, {nickname: string, password: string|undefined, publicKey: string|undefined}>} */
     this._credentials = new Map();
+    /** @type {Map<string, string>} */
+    this._connectionStatus = new Map();
   }
 
+  /**
+   * @param {string} key
+   * @param {string} address
+   * @param {string} nickname
+   * @param {string} [password]
+   * @param {string} [publicKey]
+   * @returns {Promise<object>}
+   */
   /**
    * @param {string} key
    * @param {string} address
@@ -55,12 +65,100 @@ class ConnectionManager extends EventTarget {
 
     this._connections.set(key, conn);
     this._credentials.set(key, { nickname, password, publicKey });
+    this._connectionStatus.set(key, 'connected');
+    this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'connected' } }));
+
+    this._bindReconnectEvents(key, conn);
 
     conn.addEventListener('disconnected', (e) => {
-      this._onConnectionLost(key, e.detail?.reason);
+      this._onConnectionLost(key, e.detail?.reason, e.detail?.disconnectType);
     });
 
     return data;
+  }
+
+  /**
+   * @param {Array} servers
+   * @param {Array} identities
+   */
+  async connectAll(servers, identities) {
+    for (const server of servers) {
+      const key = connKey(server.address, server.identityFingerprint);
+      if (this._connections.has(key)) {
+        continue;
+      }
+
+      let publicKey;
+      if (server.identityFingerprint) {
+        const match = identities.find((i) => i.fingerprint === server.identityFingerprint);
+        publicKey = match ? match.publicKeyArmored : undefined;
+      }
+      if (!publicKey) {
+        const defaultId = identities.find((i) => i.isDefault) || identities[0];
+        publicKey = defaultId ? defaultId.publicKeyArmored : undefined;
+      }
+
+      this._connectionStatus.set(key, 'connecting');
+      this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'connecting' } }));
+
+      this._connectInBackground(key, server, publicKey);
+    }
+  }
+
+  /**
+   * @private
+   * @param {string} key
+   * @param {object} server
+   * @param {string} [publicKey]
+   */
+  async _connectInBackground(key, server, publicKey) {
+    try {
+      const conn = new ServerService();
+      const data = await conn.connect(server.address, server.nickname, server.password || undefined, publicKey);
+
+      this._connections.set(key, conn);
+      this._credentials.set(key, { nickname: server.nickname, password: server.password || undefined, publicKey });
+      this._connectionStatus.set(key, 'connected');
+      this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'connected' } }));
+
+      this._bindReconnectEvents(key, conn);
+
+      conn.addEventListener('disconnected', (e) => {
+        this._onConnectionLost(key, e.detail?.reason, e.detail?.disconnectType);
+      });
+
+      this.dispatchEvent(new CustomEvent('background-connected', { detail: { key, data, server } }));
+    } catch {
+      this._connectionStatus.set(key, 'disconnected');
+      this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'disconnected' } }));
+    }
+  }
+
+  /**
+   * @private
+   * @param {string} key
+   * @param {ServerService} conn
+   */
+  _bindReconnectEvents(key, conn) {
+    conn.addEventListener('reconnecting', (e) => {
+      this._connectionStatus.set(key, 'reconnecting');
+      this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'reconnecting' } }));
+      this.dispatchEvent(new CustomEvent('reconnecting', { detail: { key, attempt: e.detail.attempt } }));
+    });
+
+    conn.addEventListener('reconnected', (e) => {
+      this._connectionStatus.set(key, 'connected');
+      this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'connected' } }));
+      this.dispatchEvent(new CustomEvent('reconnected', { detail: { key, data: e.detail } }));
+    });
+  }
+
+  /**
+   * @param {string} key
+   * @returns {string}
+   */
+  getStatus(key) {
+    return this._connectionStatus.get(key) || 'disconnected';
   }
 
   /**
@@ -97,10 +195,12 @@ class ConnectionManager extends EventTarget {
       return;
     }
 
+    conn.stopReconnect();
     conn.disconnect();
     this._connections.delete(key);
     this._serverStates.delete(key);
     this._credentials.delete(key);
+    this._connectionStatus.set(key, 'disconnected');
 
     if (this._voiceKey === key) {
       this._voiceKey = null;
@@ -129,6 +229,7 @@ class ConnectionManager extends EventTarget {
    */
   disconnectAll() {
     for (const [, conn] of this._connections) {
+      conn.stopReconnect();
       conn.disconnect();
     }
     const oldActive = this._activeKey ? this._connections.get(this._activeKey) : null;
@@ -138,6 +239,7 @@ class ConnectionManager extends EventTarget {
     this._connections.clear();
     this._serverStates.clear();
     this._credentials.clear();
+    this._connectionStatus.clear();
     this._activeKey = null;
     this._voiceKey = null;
     this.dispatchEvent(new CustomEvent('all-disconnected'));
@@ -147,15 +249,33 @@ class ConnectionManager extends EventTarget {
    * @private
    * @param {string} key
    * @param {string} [reason]
+   * @param {string} [disconnectType]
    */
-  _onConnectionLost(key, reason) {
-    this._connections.delete(key);
-    this._serverStates.delete(key);
-
+  _onConnectionLost(key, reason, disconnectType) {
     const hadVoice = this._voiceKey === key;
     if (hadVoice) {
       this._voiceKey = null;
     }
+
+    const willReconnect = disconnectType === 'connection-lost' || disconnectType === 'shutdown';
+
+    if (willReconnect) {
+      this._connectionStatus.set(key, 'reconnecting');
+      this._serverStates.delete(key);
+      this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'reconnecting' } }));
+      this.dispatchEvent(
+        new CustomEvent('connection-lost', {
+          detail: { key, reason, hadVoice, willReconnect: true },
+        }),
+      );
+      return;
+    }
+
+    this._connections.delete(key);
+    this._serverStates.delete(key);
+    this._credentials.delete(key);
+    this._connectionStatus.set(key, 'disconnected');
+    this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'disconnected' } }));
 
     if (this._activeKey === key) {
       this._activeKey = null;
@@ -169,7 +289,7 @@ class ConnectionManager extends EventTarget {
 
     this.dispatchEvent(
       new CustomEvent('connection-lost', {
-        detail: { key, reason, hadVoice },
+        detail: { key, reason, hadVoice, willReconnect: false },
       }),
     );
   }
