@@ -58,11 +58,9 @@ const TYPING_EXPIRE_TIMEOUT = 3000;
 let replyToMessage = null; // { id, nickname, content, channelId } | null
 
 // --- Tab state ---
-let activeTab = { type: 'channel' }; // { type: 'channel' } | { type: 'dm', userId, persistentUserId, nickname } | { type: 'channel-view', channelId, channelName }
-const dmTabs = []; // [{ userId, persistentUserId, nickname }]
-const dmMessages = new Map(); // userId (clientId) → message[]
+let activeTab = { type: 'channel' }; // { type: 'channel' } | { type: 'channel-view', channelId, channelName }
 const channelViewTabs = []; // [{ channelId, channelName }]
-const tabOrder = []; // unified visual order: [{ type: 'dm'|'channel-view', id: string }, ...]
+const tabOrder = []; // unified visual order: [{ type: 'channel-view', id: string }, ...]
 let draggedTab = null; // { index } for drag-and-drop reordering
 const channelViewMessagesCache = new Map(); // channelId → DOM nodes[]
 const channelViewMessagesPending = new Map(); // channelId → message[] (buffered while tab inactive)
@@ -76,16 +74,12 @@ let voiceChannelId = null; // channelId of the active voice channel (rendered as
 const HISTORY_PAGE_SIZE = 50;
 const paginationState = {
   channel: { oldestTs: null, allLoaded: false, loading: false },
-  dm: new Map(), // userId → { oldestTs, allLoaded, loading }
   channelView: new Map(), // channelId → { oldestTs, allLoaded, loading }
 };
 
 function getPaginationForTab() {
   if (activeTab.type === 'channel') {
     return paginationState.channel;
-  }
-  if (activeTab.type === 'dm') {
-    return paginationState.dm.get(activeTab.userId) || null;
   }
   if (activeTab.type === 'channel-view') {
     return paginationState.channelView.get(activeTab.channelId) || null;
@@ -676,7 +670,7 @@ function renderNotificationDropdown() {
       item.dataset.type = entry.type;
 
       const icon = document.createElement('i');
-      icon.className = entry.type === 'dm' ? 'bi bi-envelope notif-icon' : 'bi bi-at notif-icon';
+      icon.className = 'bi bi-at notif-icon';
       item.appendChild(icon);
 
       const text = document.createElement('div');
@@ -699,9 +693,7 @@ function renderNotificationDropdown() {
         item.style.cursor = 'pointer';
         item.addEventListener('click', () => {
           closeNotificationDropdown();
-          if (entry.action.type === 'dm') {
-            switchToTab({ type: 'dm', userId: entry.action.userId, persistentUserId: entry.action.persistentUserId, nickname: entry.action.nickname });
-          } else if (entry.action.type === 'channel') {
+          if (entry.action.type === 'channel') {
             switchToTab({ type: 'channel' });
           }
         });
@@ -761,14 +753,11 @@ export function initChatView(channelId) {
   currentChannelId = channelId;
 
   activeTab = { type: 'channel' };
-  dmTabs.length = 0;
-  dmMessages.clear();
   tabOrder.length = 0;
   channelMessagesCache.length = 0;
   channelMessagesPending.length = 0;
   channelTabUnread = false;
   resetChannelPagination();
-  paginationState.dm.clear();
   paginationState.channelView.clear();
   clientNicknameMap.clear();
   cancelReply();
@@ -801,7 +790,6 @@ export function initChatView(channelId) {
   chatService.addEventListener('link-preview', onLinkPreview);
   chatService.addEventListener('preview-removed', onPreviewRemoved);
   chatService.addEventListener('message-deleted', onMessageDeleted);
-  chatService.addEventListener('dm-message', onDmMessage);
   chatService.addEventListener('cleared', onChatCleared);
   chatService.addEventListener('purged', onChatPurged);
   chatService.addEventListener('typing', onTypingEvent);
@@ -811,7 +799,6 @@ export function initChatView(channelId) {
   serverService.addEventListener('chat:message-pinned', onMessagePinned);
   serverService.addEventListener('chat:message-unpinned', onMessageUnpinned);
   serverService.addEventListener('channel:updated', onChannelUpdatedForReadRoles);
-  window.addEventListener('gimodi:open-dm', onOpenDm);
   window.addEventListener('gimodi:navigate-channel', onNavigateChannel);
   serverService.addEventListener('server:client-joined', onClientJoinedForCache);
   serverService.addEventListener('server:client-left', onClientLeftForCache);
@@ -871,13 +858,11 @@ export function cleanup() {
   chatService.removeEventListener('link-preview', onLinkPreview);
   chatService.removeEventListener('preview-removed', onPreviewRemoved);
   chatService.removeEventListener('message-deleted', onMessageDeleted);
-  chatService.removeEventListener('dm-message', onDmMessage);
   chatService.removeEventListener('cleared', onChatCleared);
   chatService.removeEventListener('purged', onChatPurged);
   chatService.removeEventListener('typing', onTypingEvent);
   chatService.removeEventListener('reaction-update', onReactionUpdate);
   chatService.removeEventListener('message-edited', onMessageEdited);
-  window.removeEventListener('gimodi:open-dm', onOpenDm);
   window.removeEventListener('gimodi:navigate-channel', onNavigateChannel);
   serverService.removeEventListener('server:client-joined', onClientJoinedForCache);
   serverService.removeEventListener('server:client-left', onClientLeftForCache);
@@ -914,7 +899,6 @@ export function saveState() {
     currentChannelName,
     activeTab: { ...activeTab },
     channelViewTabs: channelViewTabs.map((t) => ({ ...t })),
-    dmTabs: dmTabs.map((t) => ({ ...t })),
     tabOrder: tabOrder.map((t) => ({ ...t })),
   };
 }
@@ -923,16 +907,9 @@ export function restoreState(state) {
   if (!state) {
     return;
   }
-  console.log('[chat] restoreState', { currentChannelId: state.currentChannelId, activeTab: state.activeTab, cvTabs: state.channelViewTabs?.length, dmTabs: state.dmTabs?.length });
+  console.log('[chat] restoreState', { currentChannelId: state.currentChannelId, activeTab: state.activeTab, cvTabs: state.channelViewTabs?.length });
 
   initChatView(state.currentChannelId);
-
-  for (const dt of state.dmTabs || []) {
-    dmTabs.push({ ...dt });
-    if (!dmMessages.has(dt.userId)) {
-      dmMessages.set(dt.userId, []);
-    }
-  }
 
   for (const cv of state.channelViewTabs || []) {
     channelViewTabs.push({ channelId: cv.channelId, channelName: cv.channelName, ...(cv.password !== null && cv.password !== undefined && { password: cv.password }) });
@@ -940,23 +917,13 @@ export function restoreState(state) {
   }
 
   if (state.tabOrder?.length) {
-    tabOrder.push(...state.tabOrder);
+    tabOrder.push(...state.tabOrder.filter((t) => t.type !== 'dm'));
   } else {
-    for (const dt of dmTabs) {
-      tabOrder.push({ type: 'dm', id: dt.userId });
-    }
     for (const cv of channelViewTabs) {
       tabOrder.push({ type: 'channel-view', id: cv.channelId });
     }
   }
 
-  if (state.activeTab?.type === 'dm') {
-    const dt = dmTabs.find((t) => t.userId === state.activeTab.userId);
-    if (dt) {
-      switchToTab({ type: 'dm', userId: dt.userId, persistentUserId: dt.persistentUserId, nickname: dt.nickname });
-      return;
-    }
-  }
   if (state.activeTab?.type === 'channel-view') {
     const cv = channelViewTabs.find((t) => t.channelId === state.activeTab.channelId);
     if (cv) {
@@ -1068,9 +1035,7 @@ function sendMessage() {
 
   const replyTo = replyToMessage?.id || null;
 
-  if (activeTab.type === 'dm') {
-    chatService.sendDm(activeTab.userId, resolved);
-  } else if (activeTab.type === 'channel-view') {
+  if (activeTab.type === 'channel-view') {
     chatService.sendMessage(activeTab.channelId, resolved, replyTo);
   } else {
     if (!currentChannelId) {
@@ -1189,50 +1154,6 @@ async function loadHistory(channelId) {
     }
   } catch {
     // History may not be available
-  }
-}
-
-async function loadDmHistory(tabUserId, targetUserId) {
-  try {
-    const pg = { oldestTs: null, allLoaded: false, loading: false };
-    paginationState.dm.set(tabUserId, pg);
-
-    const result = await chatService.fetchDmHistory(targetUserId, undefined, HISTORY_PAGE_SIZE);
-    if (!result || !result.messages) {
-      return;
-    }
-    // Only render if this tab is still active
-    if (activeTab.type !== 'dm' || activeTab.userId !== tabUserId) {
-      return;
-    }
-
-    updatePaginationFromMessages(pg, result.messages);
-
-    chatMessages.innerHTML = '';
-    showDmEncryptionNotice(true);
-    const sorted = [...result.messages].reverse();
-    // Pre-resolve nicknames for DM senders
-    const userIds = sorted.map((m) => m.fromUserId).filter(Boolean);
-    if (userIds.length > 0) {
-      await resolveNicknames(userIds);
-    }
-    for (const msg of sorted) {
-      const decrypted = await tryDecryptDmMessage(msg);
-      appendDmMessage(decrypted, false);
-    }
-
-    // Append only in-session messages that arrived after the last history message
-    const lastHistoryTs = sorted.length > 0 ? sorted[sorted.length - 1].timestamp : 0;
-    const sessionMsgs = dmMessages.get(tabUserId) || [];
-    const pendingMsgs = sessionMsgs.filter((m) => m.timestamp > lastHistoryTs);
-    for (const msg of pendingMsgs) {
-      appendDmMessage(msg, false);
-    }
-    dmMessages.set(tabUserId, pendingMsgs);
-
-    scrollToBottom();
-  } catch {
-    // History unavailable
   }
 }
 
@@ -1402,7 +1323,6 @@ export function setVoiceChannel(channelId) {
 
 export function getChannelViewTabsState() {
   const activeChannelId = activeTab.type === 'channel-view' ? activeTab.channelId : null;
-  const activeDmUserId = activeTab.type === 'dm' ? activeTab.persistentUserId : null;
   return {
     tabs: tabOrder
       .filter((o) => o.type === 'channel-view')
@@ -1412,22 +1332,9 @@ export function getChannelViewTabsState() {
       })
       .filter(Boolean),
     activeChannelId,
-    dmTabs: dmTabs
-      .filter((t) => t.persistentUserId)
-      .map((t) => ({
-        persistentUserId: t.persistentUserId,
-        nickname: t.nickname,
-      })),
     tabOrder: tabOrder
-      .map((entry) => {
-        if (entry.type === 'dm') {
-          const dt = dmTabs.find((t) => t.userId === entry.id);
-          return dt?.persistentUserId ? { type: 'dm', id: dt.persistentUserId } : null;
-        }
-        return { type: entry.type, id: entry.id };
-      })
+      .map((entry) => ({ type: entry.type, id: entry.id }))
       .filter(Boolean),
-    activeDmUserId,
   };
 }
 
@@ -1453,25 +1360,14 @@ export function restoreChannelViewTabs(tabs, activeChannelId) {
 /**
  * @param {Object} saved
  * @param {Array} saved.cvTabs
- * @param {Array} saved.dmTabs
  * @param {Array} saved.savedTabOrder
  * @param {string|null} saved.activeChannelId
- * @param {string|null} saved.activeDmUserId
  */
-export function restoreTabs({ cvTabs, dmTabs: savedDmTabs, savedTabOrder, activeChannelId, activeDmUserId }) {
+export function restoreTabs({ cvTabs, savedTabOrder, activeChannelId }) {
   for (const { channelId, channelName, password } of cvTabs || []) {
     if (!channelViewTabs.find((t) => t.channelId === channelId)) {
       channelViewTabs.push({ channelId, channelName, ...(password !== null && password !== undefined && { password }) });
       chatService.subscribeChannel(channelId, password);
-    }
-  }
-
-  for (const { persistentUserId, nickname } of savedDmTabs || []) {
-    if (!dmTabs.find((t) => t.persistentUserId === persistentUserId)) {
-      dmTabs.push({ userId: persistentUserId, persistentUserId, nickname });
-      if (!dmMessages.has(persistentUserId)) {
-        dmMessages.set(persistentUserId, []);
-      }
     }
   }
 
@@ -1480,11 +1376,6 @@ export function restoreTabs({ cvTabs, dmTabs: savedDmTabs, savedTabOrder, active
     for (const entry of savedTabOrder) {
       if (entry.type === 'channel-view' && channelViewTabs.find((t) => t.channelId === entry.id)) {
         tabOrder.push({ type: 'channel-view', id: entry.id });
-      } else if (entry.type === 'dm') {
-        const dt = dmTabs.find((t) => t.persistentUserId === entry.id);
-        if (dt) {
-          tabOrder.push({ type: 'dm', id: dt.userId });
-        }
       }
     }
   }
@@ -1493,19 +1384,7 @@ export function restoreTabs({ cvTabs, dmTabs: savedDmTabs, savedTabOrder, active
       tabOrder.push({ type: 'channel-view', id: cv.channelId });
     }
   }
-  for (const dt of dmTabs) {
-    if (!tabOrder.find((t) => t.type === 'dm' && t.id === dt.userId)) {
-      tabOrder.push({ type: 'dm', id: dt.userId });
-    }
-  }
 
-  if (activeDmUserId) {
-    const dt = dmTabs.find((t) => t.persistentUserId === activeDmUserId);
-    if (dt) {
-      switchToTab({ type: 'dm', userId: dt.userId, persistentUserId: dt.persistentUserId, nickname: dt.nickname });
-      return;
-    }
-  }
   if (activeChannelId) {
     const cvTab = channelViewTabs.find((t) => t.channelId === activeChannelId);
     if (cvTab && (activeTab.type !== 'channel-view' || activeTab.channelId !== activeChannelId)) {
@@ -1514,18 +1393,6 @@ export function restoreTabs({ cvTabs, dmTabs: savedDmTabs, savedTabOrder, active
     }
   }
   renderTabs();
-}
-
-async function tryDecryptDmMessage(msg) {
-  if (!msg.content || !msg.content.startsWith('-----BEGIN PGP MESSAGE-----')) {
-    return msg;
-  }
-  try {
-    const plaintext = await window.gimodi.identity.decrypt(msg.content);
-    return { ...msg, content: plaintext };
-  } catch {
-    return { ...msg, content: '[Encrypted message - unable to decrypt]' };
-  }
 }
 
 function onClientJoinedForCache(e) {
@@ -1537,29 +1404,6 @@ function onClientJoinedForCache(e) {
     invalidateNickname(userId);
     setNickname(userId, nickname);
     updateVisibleNicknames(userId, nickname);
-  }
-  if (userId && clientId) {
-    const dmTab = dmTabs.find((t) => t.persistentUserId === userId && t.userId !== clientId);
-    if (dmTab) {
-      const oldId = dmTab.userId;
-      dmTab.userId = clientId;
-      if (nickname) {
-        dmTab.nickname = nickname;
-      }
-      const orderEntry = tabOrder.find((t) => t.type === 'dm' && t.id === oldId);
-      if (orderEntry) {
-        orderEntry.id = clientId;
-      }
-      if (activeTab.type === 'dm' && activeTab.userId === oldId) {
-        activeTab.userId = clientId;
-      }
-      const msgs = dmMessages.get(oldId);
-      if (msgs) {
-        dmMessages.delete(oldId);
-        dmMessages.set(clientId, msgs);
-      }
-      renderTabs();
-    }
   }
 }
 
@@ -2463,20 +2307,6 @@ function buildMessageEl(msg, prevEl) {
     });
   }
 
-  // Click on nickname → open DM tab (only for identified users, not self)
-  if (msg.userId && msg.userId !== serverService.userId) {
-    for (const nEl of el.querySelectorAll('.chat-msg-nick, .compact-nick')) {
-      nEl.addEventListener('click', () => {
-        const onlineClient = window.gimodiClients?.find((c) => c.userId === msg.userId);
-        if (onlineClient) {
-          openDmTab(onlineClient.id, displayNickname, msg.userId);
-        } else {
-          openDmTab(msg.userId, displayNickname, msg.userId);
-        }
-      });
-    }
-  }
-
   // Add copy button to code blocks
   for (const pre of el.querySelectorAll('.chat-msg-body pre')) {
     pre.style.position = 'relative';
@@ -2741,13 +2571,6 @@ export function refreshTimestamps() {
   }
 }
 
-function showDmEncryptionNotice(show = true) {
-  const el = document.getElementById('dm-encryption-notice');
-  if (el) {
-    el.classList.toggle('hidden', !show);
-  }
-}
-
 function onChatSubscribed(e) {
   const { channelId, readRestricted, writeRestricted } = e.detail;
   const tab = channelViewTabs.find((t) => t.channelId === channelId);
@@ -2868,8 +2691,6 @@ async function loadOlderMessages() {
   try {
     if (activeTab.type === 'channel') {
       await loadOlderChannelMessages(pg);
-    } else if (activeTab.type === 'dm') {
-      await loadOlderDmMessages(pg);
     } else if (activeTab.type === 'channel-view') {
       await loadOlderChannelViewMessages(pg);
     }
@@ -2899,36 +2720,6 @@ async function loadOlderChannelMessages(pg) {
     }
   }
   chatMessages.prepend(frag);
-}
-
-async function loadOlderDmMessages(pg) {
-  const { userId: tabUserId } = activeTab;
-  const targetUserId = activeTab.persistentUserId;
-  const result = await chatService.fetchDmHistory(targetUserId, pg.oldestTs, HISTORY_PAGE_SIZE);
-  if (!result?.messages || activeTab.type !== 'dm' || activeTab.userId !== tabUserId) {
-    return;
-  }
-  const sorted = [...result.messages].reverse();
-  updatePaginationFromMessages(pg, result.messages);
-  const userIds = sorted.map((m) => m.fromUserId).filter(Boolean);
-  if (userIds.length > 0) {
-    await resolveNicknames(userIds);
-  }
-  const frag = document.createDocumentFragment();
-  for (const msg of sorted) {
-    const decrypted = await tryDecryptDmMessage(msg);
-    const el = buildDmMessageEl(decrypted);
-    if (el) {
-      frag.appendChild(el);
-    }
-  }
-  // Prepend after the encryption notice if present
-  const notice = chatMessages.querySelector('.dm-encryption-notice');
-  if (notice && notice.nextSibling) {
-    chatMessages.insertBefore(frag, notice.nextSibling);
-  } else {
-    chatMessages.prepend(frag);
-  }
 }
 
 async function loadOlderChannelViewMessages(pg) {
@@ -2980,11 +2771,6 @@ function openLightbox(src, alt, meta) {
 
 // --- Tab management ---
 
-function onOpenDm(e) {
-  const { userId, persistentUserId, nickname } = e.detail;
-  openDmTab(userId, nickname, persistentUserId || null);
-}
-
 function onNavigateChannel(e) {
   const { channelId } = e.detail;
   if (channelId) {
@@ -2992,61 +2778,10 @@ function onNavigateChannel(e) {
   }
 }
 
-function openDmTab(userId, nickname, persistentUserId = null) {
-  let tab = dmTabs.find((t) => t.userId === userId);
-  let changed = false;
-  if (!tab && persistentUserId) {
-    tab = dmTabs.find((t) => t.persistentUserId === persistentUserId);
-    if (tab) {
-      const oldId = tab.userId;
-      tab.userId = userId;
-      tab.nickname = nickname;
-      const orderEntry = tabOrder.find((t) => t.type === 'dm' && t.id === oldId);
-      if (orderEntry) {
-        orderEntry.id = userId;
-      }
-      changed = true;
-    }
-  }
-  if (!tab) {
-    tab = { userId, persistentUserId, nickname };
-    dmTabs.push(tab);
-    tabOrder.push({ type: 'dm', id: userId });
-    if (!dmMessages.has(userId)) {
-      dmMessages.set(userId, []);
-    }
-    changed = true;
-  }
-  switchToTab({ type: 'dm', userId: tab.userId, persistentUserId: tab.persistentUserId, nickname: tab.nickname });
-  if (changed) {
-    window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
-  }
-}
-
-function closeDmTab(userId) {
-  const idx = dmTabs.findIndex((t) => t.userId === userId);
-  if (idx === -1) {
-    return;
-  }
-  dmTabs.splice(idx, 1);
-  const orderIdx = tabOrder.findIndex((t) => t.type === 'dm' && t.id === userId);
-  if (orderIdx !== -1) {
-    tabOrder.splice(orderIdx, 1);
-  }
-  dmMessages.delete(userId);
-  window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
-
-  if (activeTab.type === 'dm' && activeTab.userId === userId) {
-    switchToTab({ type: 'channel' });
-  } else {
-    renderTabs();
-  }
-}
-
 function switchToTab(tab) {
-  console.log('[chat] switchToTab', tab.type, tab.channelId || tab.userId || '', 'from', activeTab.type, activeTab.channelId || activeTab.userId || '');
+  console.log('[chat] switchToTab', tab.type, tab.channelId || '', 'from', activeTab.type, activeTab.channelId || '');
   const isSameTab =
-    activeTab.type === tab.type && (tab.type === 'channel' || (tab.type === 'dm' && activeTab.userId === tab.userId) || (tab.type === 'channel-view' && activeTab.channelId === tab.channelId));
+    activeTab.type === tab.type && (tab.type === 'channel' || (tab.type === 'channel-view' && activeTab.channelId === tab.channelId));
   if (isSameTab) {
     renderTabs();
     return;
@@ -3072,7 +2807,6 @@ function switchToTab(tab) {
 
   activeTab = tab;
   chatMessages.innerHTML = '';
-  showDmEncryptionNotice(tab.type === 'dm');
   updateInputForTab();
   cancelReply();
   renderTypingIndicator();
@@ -3080,8 +2814,6 @@ function switchToTab(tab) {
   // Clear in-app notification entries for the destination tab
   if (tab.type === 'channel') {
     notificationService.clearByAction({ type: 'channel', channelId: currentChannelId });
-  } else if (tab.type === 'dm') {
-    notificationService.clearByAction({ type: 'dm', userId: tab.userId });
   }
 
   if (tab.type === 'channel') {
@@ -3134,156 +2866,10 @@ function switchToTab(tab) {
     } else {
       loadChannelViewHistory(tab.channelId);
     }
-  } else {
-    // Load DM history first if we have a persistentUserId, then render in-session messages on top
-    const dmTab = dmTabs.find((t) => t.userId === tab.userId);
-    if (dmTab) {
-      dmTab.unread = false;
-    }
-    renderPinnedMessages();
-
-    if (tab.persistentUserId) {
-      loadDmHistory(tab.userId, tab.persistentUserId);
-    } else {
-      // No persistent history available, just show in-session messages
-      showDmEncryptionNotice(true);
-      const msgs = dmMessages.get(tab.userId) || [];
-      for (const msg of msgs) {
-        appendDmMessage(msg, false);
-      }
-      scrollToBottom();
-    }
   }
 
   renderTabs();
   window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
-}
-
-async function onDmMessage(e) {
-  const msg = e.detail;
-  // Cache the sender's nickname
-  if (msg.fromUserId && msg.fromNickname) {
-    setNickname(msg.fromUserId, msg.fromNickname);
-  }
-  // Determine the "other" user in this DM
-  const isSelf = msg.fromId === serverService.clientId;
-  const otherUserId = isSelf ? msg.targetId : msg.fromId;
-  const otherNickname = isSelf ? null : msg.fromNickname;
-  const otherPersistentUserId = isSelf ? null : msg.fromUserId || null;
-
-  // Decrypt content
-  const decrypted = await tryDecryptDmMessage(msg);
-
-  let tab = dmTabs.find((t) => t.userId === otherUserId);
-  if (!tab && otherPersistentUserId) {
-    tab = dmTabs.find((t) => t.persistentUserId === otherPersistentUserId);
-    if (tab) {
-      const oldId = tab.userId;
-      tab.userId = otherUserId;
-      const orderEntry = tabOrder.find((t) => t.type === 'dm' && t.id === oldId);
-      if (orderEntry) {
-        orderEntry.id = otherUserId;
-      }
-    }
-  }
-  if (!tab) {
-    const nickname = otherNickname || otherUserId;
-    tab = { userId: otherUserId, persistentUserId: otherPersistentUserId, nickname };
-    dmTabs.push(tab);
-    tabOrder.push({ type: 'dm', id: otherUserId });
-    if (!dmMessages.has(otherUserId)) {
-      dmMessages.set(otherUserId, []);
-    }
-  }
-
-  // Store the decrypted message
-  const msgs = dmMessages.get(otherUserId) || [];
-  msgs.push(decrypted);
-  dmMessages.set(otherUserId, msgs);
-
-  // If this DM tab is active, append to DOM
-  if (activeTab.type === 'dm' && activeTab.userId === otherUserId) {
-    appendDmMessage(decrypted, true);
-  } else {
-    // Mark tab as unread
-    tab.unread = true;
-
-    // Show desktop notification for incoming DMs
-    if (!isSelf) {
-      const nickname = otherNickname || 'Someone';
-      const preview = decrypted.content.length > 100 ? decrypted.content.substring(0, 100) + '...' : decrypted.content;
-      notificationService.show({
-        type: 'dm',
-        title: `DM from ${nickname}`,
-        body: preview,
-        action: { type: 'dm', userId: otherUserId, persistentUserId: otherPersistentUserId, nickname: tab.nickname },
-      });
-    }
-  }
-
-  renderTabs();
-}
-
-function buildDmMessageEl(msg) {
-  const el = document.createElement('div');
-  el.className = 'chat-msg';
-  el.dataset.userId = msg.fromUserId || '';
-  const headerTime = formatRelativeTime(msg.timestamp);
-  const nickname = (msg.fromUserId && getCachedNickname(msg.fromUserId)) || msg.fromNickname || '[Anonymous]';
-
-  let badge = msg.badge || null;
-  let dmRoleColor = null;
-  if (window.gimodiClients) {
-    const liveClient = (msg.fromUserId && window.gimodiClients.find((c) => c.userId === msg.fromUserId)) || (msg.fromId && window.gimodiClients.find((c) => c.id === msg.fromId));
-    if (liveClient) {
-      badge = liveClient.badge || null;
-      dmRoleColor = liveClient.roleColor || null;
-    }
-  }
-  const badgeHtml = badge ? `<span class="admin-badge">${escapeHtml(badge)}</span>` : '';
-  const dmNickColor = dmRoleColor || '#FFD700';
-
-  const fullTime = formatDateTime(msg.timestamp);
-  const compactTime = formatTimeShort(msg.timestamp);
-  const compactHtml = `<span class="compact-row"><span class="compact-time" title="${escapeHtml(fullTime)}">${compactTime}</span> <span class="compact-nick" style="color:${dmNickColor}" title="${badge ? escapeHtml(badge) : ''}">${escapeHtml(nickname)}:</span></span>`;
-  el.innerHTML = `
-    ${compactHtml}
-    <div class="chat-msg-header">
-      <span class="chat-msg-nick-group"><span class="chat-msg-nick" style="color:${dmNickColor}">${escapeHtml(nickname)}</span>${badgeHtml}</span>
-      <span class="chat-msg-time">${headerTime}</span>
-    </div>
-    <div class="chat-msg-body">${renderMarkdown(msg.content)}</div>
-  `;
-
-  // Open links in system browser
-  for (const a of el.querySelectorAll('.chat-msg-body a')) {
-    a.addEventListener('click', (e) => {
-      e.preventDefault();
-      const href = a.getAttribute('href');
-      if (href) {
-        window.gimodi.openExternal(href);
-      }
-    });
-    a.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const href = a.getAttribute('href');
-      if (href) {
-        showLinkContextMenu(e.clientX, e.clientY, href);
-      }
-    });
-  }
-
-  return el;
-}
-
-function appendDmMessage(msg, doScroll) {
-  const el = buildDmMessageEl(msg);
-  maybeInsertDaySeparator(msg.timestamp);
-  chatMessages.appendChild(el);
-  if (doScroll) {
-    scrollToBottom();
-  }
 }
 
 function renderTabs() {
@@ -3332,32 +2918,7 @@ function renderTabs() {
     tab.draggable = true;
     addTabDragListeners(tab, i);
 
-    if (entry.type === 'dm') {
-      const dt = dmTabs.find((t) => t.userId === entry.id);
-      if (!dt) {
-        continue;
-      }
-      tab.className = `tab${activeTab.type === 'dm' && activeTab.userId === dt.userId ? ' active' : ''}${dt.unread ? ' unread' : ''}`;
-      tab.dataset.type = 'dm';
-      tab.dataset.userId = dt.userId;
-
-      const label = document.createElement('span');
-      label.className = 'tab-label';
-      label.textContent = dt.nickname;
-      tab.appendChild(label);
-
-      const closeBtn = document.createElement('span');
-      closeBtn.className = 'tab-close';
-      closeBtn.innerHTML = '&times;';
-      closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeDmTab(dt.userId);
-      });
-      tab.appendChild(closeBtn);
-
-      tab.addEventListener('click', () => switchToTab({ type: 'dm', userId: dt.userId, persistentUserId: dt.persistentUserId, nickname: dt.nickname }));
-      tab.addEventListener('contextmenu', (e) => showTabContextMenu(e, { type: 'dm', userId: dt.userId }));
-    } else {
+    {
       const cv = channelViewTabs.find((t) => t.channelId === entry.id);
       if (!cv) {
         continue;
@@ -3508,11 +3069,7 @@ function showTabContextMenu(e, tabInfo) {
   closeItem.textContent = 'Close Tab';
   closeItem.addEventListener('click', () => {
     menu.remove();
-    if (tabInfo.type === 'dm') {
-      closeDmTab(tabInfo.userId);
-    } else {
-      closeChannelViewTab(tabInfo.channelId);
-    }
+    closeChannelViewTab(tabInfo.channelId);
   });
   menu.appendChild(closeItem);
 
@@ -3521,9 +3078,6 @@ function showTabContextMenu(e, tabInfo) {
   closeAllItem.textContent = 'Close All Tabs';
   closeAllItem.addEventListener('click', () => {
     menu.remove();
-    for (const t of [...dmTabs]) {
-      closeDmTab(t.userId);
-    }
     for (const t of [...channelViewTabs]) {
       closeChannelViewTab(t.channelId);
     }
@@ -3535,23 +3089,9 @@ function showTabContextMenu(e, tabInfo) {
   closeOthersItem.textContent = 'Close Other Tabs';
   closeOthersItem.addEventListener('click', () => {
     menu.remove();
-    if (tabInfo.type === 'dm') {
-      for (const t of [...dmTabs]) {
-        if (t.userId !== tabInfo.userId) {
-          closeDmTab(t.userId);
-        }
-      }
-      for (const t of [...channelViewTabs]) {
+    for (const t of [...channelViewTabs]) {
+      if (t.channelId !== tabInfo.channelId) {
         closeChannelViewTab(t.channelId);
-      }
-    } else {
-      for (const t of [...dmTabs]) {
-        closeDmTab(t.userId);
-      }
-      for (const t of [...channelViewTabs]) {
-        if (t.channelId !== tabInfo.channelId) {
-          closeChannelViewTab(t.channelId);
-        }
       }
     }
   });

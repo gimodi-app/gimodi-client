@@ -17,10 +17,6 @@ class ChatService extends EventTarget {
       this.dispatchEvent(new CustomEvent('link-preview', { detail: e.detail }));
     });
 
-    serverService.addEventListener('chat:dm-receive', (e) => {
-      this.dispatchEvent(new CustomEvent('dm-message', { detail: e.detail }));
-    });
-
     serverService.addEventListener('chat:deleted', (e) => {
       this.dispatchEvent(new CustomEvent('message-deleted', { detail: e.detail }));
     });
@@ -87,37 +83,6 @@ class ChatService extends EventTarget {
   }
 
   /**
-   * @param {string} targetClientId
-   * @param {string} content
-   * @returns {Promise<void>}
-   */
-  async sendDm(targetClientId, content) {
-    let encryptedContent = content;
-
-    try {
-      const result = await serverService.request('user:get-public-key', { clientId: targetClientId });
-      const recipientPublicKey = result?.publicKey;
-
-      if (recipientPublicKey) {
-        const ownIdentity = await window.gimodi.identity.getDefault();
-        const ownPublicKey = ownIdentity?.publicKeyArmored;
-
-        const keys = [recipientPublicKey];
-        if (ownPublicKey && ownPublicKey !== recipientPublicKey) {
-          keys.push(ownPublicKey);
-        }
-
-        encryptedContent = await window.gimodi.identity.encrypt(keys, content);
-      }
-    } catch (err) {
-      console.warn('[chat] DM encryption failed, sending plaintext:', err.message);
-      encryptedContent = content;
-    }
-
-    serverService.send('chat:dm-send', { targetId: targetClientId, content: encryptedContent });
-  }
-
-  /**
    * @param {string} channelId
    * @param {number} [before]
    * @param {number} [limit=50]
@@ -144,16 +109,6 @@ class ChatService extends EventTarget {
    */
   deleteMessage(messageId) {
     return serverService.request('chat:delete', { messageId });
-  }
-
-  /**
-   * @param {string} targetUserId
-   * @param {number} [before]
-   * @param {number} [limit=50]
-   * @returns {Promise<object>}
-   */
-  async fetchDmHistory(targetUserId, before, limit = 50) {
-    return serverService.request('chat:dm-history', { targetUserId, before, limit });
   }
 
   /**

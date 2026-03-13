@@ -588,12 +588,10 @@ window.addEventListener('gimodi:connected', async (e) => {
       .filter((t) => validChannelIds.has(t.channelId))
       .map((t) => ({ channelId: t.channelId, channelName: channelNameMap.get(t.channelId) || t.channelName, ...(t.password !== null && t.password !== undefined && { password: t.password }) }));
     const activeChannelId = saved.activeChannelId && validChannelIds.has(saved.activeChannelId) ? saved.activeChannelId : null;
-    const savedDmTabs = saved.dmTabs || [];
     const savedTabOrder = saved.tabOrder || [];
-    const activeDmUserId = saved.activeDmUserId || null;
 
-    if (cvTabs.length > 0 || savedDmTabs.length > 0 || activeChannelId || activeDmUserId) {
-      restoreTabs({ cvTabs, dmTabs: savedDmTabs, savedTabOrder, activeChannelId, activeDmUserId });
+    if (cvTabs.length > 0 || activeChannelId) {
+      restoreTabs({ cvTabs, savedTabOrder, activeChannelId });
     }
   }
   suppressTabSave = false;
@@ -1339,9 +1337,6 @@ window.gimodi.onNotificationClicked((action) => {
   if (action.type === 'channel') {
     // Navigate to channel (trigger join via chat view)
     window.dispatchEvent(new CustomEvent('gimodi:navigate-channel', { detail: { channelId: action.channelId } }));
-  } else if (action.type === 'dm') {
-    // Open DM tab
-    window.dispatchEvent(new CustomEvent('gimodi:open-dm', { detail: action }));
   }
 });
 

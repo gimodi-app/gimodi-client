@@ -1648,22 +1648,6 @@ function renderChannel(ch, isChild, _groupId) {
 
       userEl.addEventListener('contextmenu', (e) => showUserContextMenu(e, u));
 
-      // Double-click to open DM
-      if (u.id !== serverService.clientId) {
-        userEl.style.cursor = 'pointer';
-        userEl.addEventListener('dblclick', () => {
-          window.dispatchEvent(
-            new CustomEvent('gimodi:open-dm', {
-              detail: {
-                userId: u.id,
-                persistentUserId: u.userId || null,
-                nickname: u.nickname,
-              },
-            }),
-          );
-        });
-      }
-
       usersEl.appendChild(userEl);
     }
     channelTree.appendChild(usersEl);
@@ -3129,10 +3113,6 @@ export function showUserContextMenu(e, user, options = {}) {
   };
 
   if (isOther) {
-    addItem('Send Message', () => {
-      window.dispatchEvent(new CustomEvent('gimodi:open-dm', { detail: { userId: user.id, persistentUserId: user.userId || null, nickname: user.nickname } }));
-    });
-
     if (!options.fromChat && serverService.hasPermission('user.poke')) {
       addItem('Poke', async () => {
         const message = await customPrompt(`Poke message for ${user.nickname} (optional):`);
@@ -3650,7 +3630,7 @@ async function renderUsersPanel(container) {
     if (count === 0) {
       return;
     }
-    if (!(await customConfirm(`Are you sure you want to permanently delete ${count} user${count > 1 ? 's' : ''}?\n\nThis will remove their identities, roles, and all DM history.`))) {
+    if (!(await customConfirm(`Are you sure you want to permanently delete ${count} user${count > 1 ? 's' : ''}?\n\nThis will remove their identities and roles.`))) {
       return;
     }
 
@@ -3868,10 +3848,6 @@ function showAdminUserContextMenu(e, user, panelContainer) {
     addSeparator();
     addLabel('Communication');
 
-    addItem('Send Message', () => {
-      window.dispatchEvent(new CustomEvent('gimodi:open-dm', { detail: { userId: user.clientId, persistentUserId: user.userId, nickname: user.nickname } }));
-    });
-
     if (serverService.hasPermission('user.poke')) {
       addItem('Poke', async () => {
         const message = await customPrompt(`Poke message for ${user.nickname} (optional):`);
@@ -3929,7 +3905,7 @@ function showAdminUserContextMenu(e, user, panelContainer) {
       addItem(
         'Delete User',
         async () => {
-          if (!(await customConfirm(`Are you sure you want to permanently delete user "${user.nickname}"?\n\nThis will remove their identity, roles, all registered nicknames, and all DM history.`))) {
+          if (!(await customConfirm(`Are you sure you want to permanently delete user "${user.nickname}"?\n\nThis will remove their identity, roles, and all registered nicknames.`))) {
             return;
           }
           try {
@@ -6389,12 +6365,6 @@ async function renderAnalyticsPanel(container) {
         </div>
         <div class="analytics-card card-compact">
           <div class="analytics-card-body">
-            <div class="analytics-card-value">${live.sessionDmsTotal.toLocaleString()}</div>
-            <div class="analytics-card-label">DMs Sent</div>
-          </div>
-        </div>
-        <div class="analytics-card card-compact">
-          <div class="analytics-card-body">
             <div class="analytics-card-value">${live.sessionFilesTotal.toLocaleString()}</div>
             <div class="analytics-card-label">Files Uploaded</div>
           </div>
@@ -6433,12 +6403,6 @@ async function renderAnalyticsPanel(container) {
           <div class="analytics-card-body">
             <div class="analytics-card-value">${dbData.messages.last30d.toLocaleString()}</div>
             <div class="analytics-card-label">Last 30 Days</div>
-          </div>
-        </div>
-        <div class="analytics-card card-compact">
-          <div class="analytics-card-body">
-            <div class="analytics-card-value">${dbData.dms.total.toLocaleString()}</div>
-            <div class="analytics-card-label">Total DMs</div>
           </div>
         </div>
         <div class="analytics-card card-compact">
