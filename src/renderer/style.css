@@ -1143,6 +1143,25 @@ label:has(input[type="checkbox"]) {
   padding-left: 24px;
 }
 
+.channel-item.placeholder {
+  cursor: default;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 4px 16px;
+}
+
+.channel-item.placeholder:hover {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.channel-item.placeholder.child {
+  padding-left: 24px;
+}
+
 .channel-item.dragging,
 .channel-user.dragging {
   opacity: 0.4;

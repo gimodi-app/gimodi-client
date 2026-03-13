@@ -93,6 +93,7 @@
                     style="position:absolute;right:0;top:100%;margin-top:4px">
                     <div id="create-dropdown-channel" class="context-menu-item">Channel</div>
                     <div id="create-dropdown-group" class="context-menu-item">Group</div>
+                    <div id="create-dropdown-placeholder" class="context-menu-item">Placeholder</div>
                   </div>
                 </div>
               </div>
@@ -357,6 +358,22 @@
       <div class="modal-buttons">
         <button id="btn-confirm-create-group" class="btn-primary">Create</button>
         <button id="btn-cancel-create-group" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create placeholder modal -->
+  <div id="modal-create-placeholder" class="modal hidden">
+    <div class="modal-content">
+      <h2>Create Placeholder</h2>
+      <div class="form-group">
+        <label for="new-placeholder-name">Name</label>
+        <input type="text" id="new-placeholder-name" placeholder="Placeholder name">
+      </div>
+      <input type="hidden" id="new-placeholder-parent-id" value="">
+      <div class="modal-buttons">
+        <button id="btn-confirm-create-placeholder" class="btn-primary">Create</button>
+        <button id="btn-cancel-create-placeholder" class="btn-secondary">Cancel</button>
       </div>
     </div>
   </div>

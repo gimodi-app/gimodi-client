@@ -144,7 +144,8 @@ export function initServerView(data) {
   const canCreate = serverService.hasPermission('channel.create');
   const canCreateTemp = serverService.hasPermission('channel.create_temporary');
   const canCreateGroup = serverService.hasPermission('channel.group_create');
-  btnCreateChannel.style.display = (canCreate || canCreateTemp || canCreateGroup) ? '' : 'none';
+  const canCreatePlaceholder = serverService.hasPermission('channel.placeholder_create');
+  btnCreateChannel.style.display = (canCreate || canCreateTemp || canCreateGroup || canCreatePlaceholder) ? '' : 'none';
   btnCreateChannel.addEventListener('click', onCreateChannelClick);
   if (!createDropdownInitialized) {
     initCreateDropdown();
@@ -369,7 +370,8 @@ export function restoreState(state) {
   const canCreate = serverService.hasPermission('channel.create');
   const canCreateTemp = serverService.hasPermission('channel.create_temporary');
   const canCreateGroup = serverService.hasPermission('channel.group_create');
-  btnCreateChannel.style.display = (canCreate || canCreateTemp || canCreateGroup) ? '' : 'none';
+  const canCreatePlaceholder = serverService.hasPermission('channel.placeholder_create');
+  btnCreateChannel.style.display = (canCreate || canCreateTemp || canCreateGroup || canCreatePlaceholder) ? '' : 'none';
 
   renderChannelTree();
 
@@ -499,6 +501,7 @@ function initCreateDropdown() {
   const dropdown = document.getElementById('create-dropdown');
   const channelItem = document.getElementById('create-dropdown-channel');
   const groupItem = document.getElementById('create-dropdown-group');
+  const placeholderItem = document.getElementById('create-dropdown-placeholder');
 
   channelItem.addEventListener('click', () => {
     dropdown.classList.add('hidden');
@@ -507,6 +510,11 @@ function initCreateDropdown() {
   groupItem.addEventListener('click', () => {
     dropdown.classList.add('hidden');
     document.getElementById('modal-create-group').classList.remove('hidden');
+  });
+  placeholderItem.addEventListener('click', () => {
+    dropdown.classList.add('hidden');
+    document.getElementById('new-placeholder-parent-id').value = '';
+    document.getElementById('modal-create-placeholder').classList.remove('hidden');
   });
 
   document.addEventListener('click', (e) => {
@@ -524,22 +532,29 @@ function showCreateDropdown() {
   const dropdown = document.getElementById('create-dropdown');
   const channelItem = document.getElementById('create-dropdown-channel');
   const groupItem = document.getElementById('create-dropdown-group');
+  const placeholderItem = document.getElementById('create-dropdown-placeholder');
 
   const canCreate = serverService.hasPermission('channel.create');
   const canCreateTemp = serverService.hasPermission('channel.create_temporary');
   const canCreateGroup = serverService.hasPermission('channel.group_create');
+  const canCreatePlaceholder = serverService.hasPermission('channel.placeholder_create');
   const canCreateAnyChannel = canCreate || canCreateTemp;
 
   channelItem.style.display = canCreateAnyChannel ? '' : 'none';
   groupItem.style.display = canCreateGroup ? '' : 'none';
+  placeholderItem.style.display = canCreatePlaceholder ? '' : 'none';
 
-  const optionCount = [canCreateAnyChannel, canCreateGroup].filter(Boolean).length;
+  const optionCount = [canCreateAnyChannel, canCreateGroup, canCreatePlaceholder].filter(Boolean).length;
   if (optionCount === 0) return;
 
-  // If only one option, skip dropdown and open directly
   if (optionCount === 1) {
     if (canCreateAnyChannel) { showCreateChannelModal(); return; }
     if (canCreateGroup) { document.getElementById('modal-create-group').classList.remove('hidden'); return; }
+    if (canCreatePlaceholder) {
+      document.getElementById('new-placeholder-parent-id').value = '';
+      document.getElementById('modal-create-placeholder').classList.remove('hidden');
+      return;
+    }
   }
 
   dropdown.classList.toggle('hidden');
@@ -1005,10 +1020,16 @@ function renderChannelTree() {
   for (const ch of topLevel) {
     if (ch.type === 'group') {
       renderGroup(ch, childrenOf(ch.id));
+    } else if (ch.type === 'placeholder') {
+      renderPlaceholder(ch, false);
     } else {
       renderChannel(ch, false);
       for (const child of childrenOf(ch.id)) {
-        renderChannel(child, true);
+        if (child.type === 'placeholder') {
+          renderPlaceholder(child, true);
+        } else {
+          renderChannel(child, true);
+        }
       }
     }
   }
@@ -1136,7 +1157,11 @@ function renderGroup(group, children) {
   // Render children if not collapsed
   if (!collapsed) {
     for (const child of children) {
-      renderChannel(child, true, group.id);
+      if (child.type === 'placeholder') {
+        renderPlaceholder(child, true, group.id);
+      } else {
+        renderChannel(child, true, group.id);
+      }
     }
   }
 
@@ -1165,6 +1190,57 @@ function renderGroup(group, children) {
     });
     channelTree.appendChild(spacer);
   }
+}
+
+function renderPlaceholder(ch, isChild, groupId) {
+  const el = document.createElement('div');
+  el.className = `channel-item placeholder${isChild ? ' child' : ''}`;
+  el.dataset.channelId = ch.id;
+
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'placeholder-name';
+  nameSpan.textContent = ch.name;
+  el.appendChild(nameSpan);
+
+  el.addEventListener('contextmenu', (e) => showPlaceholderContextMenu(e, ch));
+
+  if (serverService.hasPermission('channel.update')) {
+    el.draggable = true;
+    el.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', ch.id);
+      e.dataTransfer.effectAllowed = 'move';
+      el.classList.add('dragging');
+    });
+    el.addEventListener('dragend', () => el.classList.remove('dragging'));
+  }
+
+  if (serverService.hasPermission('channel.update')) {
+    el.addEventListener('dragover', (e) => {
+      if (e.dataTransfer.types.includes('application/x-gimodi-user')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = el.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      el.classList.remove('drop-above', 'drop-below');
+      el.classList.add(y < rect.height / 2 ? 'drop-above' : 'drop-below');
+    });
+    el.addEventListener('dragleave', () => {
+      el.classList.remove('drop-above', 'drop-below');
+    });
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      el.classList.remove('drop-above', 'drop-below');
+      const draggedId = e.dataTransfer.getData('text/plain');
+      if (!draggedId || draggedId === ch.id) return;
+      const targetParent = ch.parentId || null;
+      const ci = siblingIndex(ch.id, targetParent, draggedId);
+      const rect = el.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      moveChannel(draggedId, targetParent, y < rect.height / 2 ? ci : ci + 1);
+    });
+  }
+
+  channelTree.appendChild(el);
 }
 
 function renderChannel(ch, isChild, groupId) {
@@ -2272,7 +2348,7 @@ function showGroupContextMenu(e, group) {
   e.stopPropagation();
   dismissContextMenu();
 
-  if (!serverService.hasPermission('channel.update') && !serverService.hasPermission('channel.delete') && !serverService.hasPermission('channel.create')) return;
+  if (!serverService.hasPermission('channel.update') && !serverService.hasPermission('channel.delete') && !serverService.hasPermission('channel.create') && !serverService.hasPermission('channel.placeholder_create')) return;
 
   const menu = document.createElement('div');
   menu.className = 'context-menu';
@@ -2289,6 +2365,18 @@ function showGroupContextMenu(e, group) {
       document.getElementById('modal-create-channel').classList.remove('hidden');
     });
     menu.appendChild(createItem);
+  }
+
+  if (serverService.hasPermission('channel.placeholder_create')) {
+    const createPlaceholderItem = document.createElement('div');
+    createPlaceholderItem.className = 'context-menu-item';
+    createPlaceholderItem.textContent = 'Create Placeholder';
+    createPlaceholderItem.addEventListener('click', () => {
+      dismissContextMenu();
+      document.getElementById('new-placeholder-parent-id').value = group.id;
+      document.getElementById('modal-create-placeholder').classList.remove('hidden');
+    });
+    menu.appendChild(createPlaceholderItem);
   }
 
   if (serverService.hasPermission('channel.update')) {
@@ -2501,6 +2589,118 @@ async function showEditGroupModal(group) {
   };
 
   modal.querySelector('.modal-save-btn').addEventListener('click', save);
+  modal.querySelector('.modal-cancel-btn').addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+  const onEscape = (e) => {
+    if (e.key === 'Escape') closeModal();
+    if (e.key === 'Enter' && e.target === nameInput) save();
+  };
+  document.addEventListener('keydown', onEscape);
+}
+
+function showPlaceholderContextMenu(e, ch) {
+  e.preventDefault();
+  e.stopPropagation();
+  dismissContextMenu();
+
+  const canUpdate = serverService.hasPermission('channel.update');
+  const canDelete = serverService.hasPermission('channel.delete');
+  if (!canUpdate && !canDelete) return;
+
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  menu.style.left = `${e.clientX}px`;
+  menu.style.top = `${e.clientY}px`;
+
+  if (canUpdate) {
+    const editItem = document.createElement('div');
+    editItem.className = 'context-menu-item';
+    editItem.textContent = 'Edit Placeholder';
+    editItem.addEventListener('click', () => {
+      dismissContextMenu();
+      showEditPlaceholderModal(ch);
+    });
+    menu.appendChild(editItem);
+  }
+
+  if (canDelete) {
+    const deleteItem = document.createElement('div');
+    deleteItem.className = 'context-menu-item danger';
+    deleteItem.textContent = 'Delete Placeholder';
+    deleteItem.addEventListener('click', () => {
+      dismissContextMenu();
+      showDeleteChannelConfirm(ch);
+    });
+    menu.appendChild(deleteItem);
+  }
+
+  document.body.appendChild(menu);
+
+  const onClickOutside = (ev) => {
+    if (!menu.contains(ev.target)) {
+      dismissContextMenu();
+      document.removeEventListener('click', onClickOutside, true);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', onClickOutside, true), 0);
+
+  const onEscape = (ev) => {
+    if (ev.key === 'Escape') {
+      dismissContextMenu();
+      document.removeEventListener('keydown', onEscape);
+    }
+  };
+  document.addEventListener('keydown', onEscape);
+}
+
+function showEditPlaceholderModal(ch) {
+  const existing = document.querySelector('.modal-edit-placeholder');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.className = 'modal modal-edit-placeholder';
+
+  modal.innerHTML = `
+    <div class="modal-content">
+      <h2>Edit Placeholder</h2>
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" class="edit-placeholder-name" value="${escapeHtml(ch.name)}" maxlength="50">
+      </div>
+      <div class="modal-buttons modal-buttons-end">
+        <button class="btn-secondary modal-cancel-btn">Cancel</button>
+        <button class="btn-primary modal-save-btn" disabled>Save Changes</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const nameInput = modal.querySelector('.edit-placeholder-name');
+  const saveBtn = modal.querySelector('.modal-save-btn');
+
+  function updateSaveBtn() {
+    saveBtn.disabled = nameInput.value.trim() === ch.name || !nameInput.value.trim();
+  }
+
+  nameInput.addEventListener('input', updateSaveBtn);
+  nameInput.focus();
+  nameInput.select();
+
+  const closeModal = () => {
+    modal.remove();
+    document.removeEventListener('keydown', onEscape);
+  };
+
+  const save = () => {
+    const name = nameInput.value.trim();
+    if (!name || name === ch.name) return;
+    serverService.send('channel:update', { channelId: ch.id, name });
+    closeModal();
+  };
+
+  saveBtn.addEventListener('click', save);
   modal.querySelector('.modal-cancel-btn').addEventListener('click', closeModal);
   modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 

@@ -143,6 +143,13 @@ const btnConfirmCreateGroup = document.getElementById('btn-confirm-create-group'
 const btnCancelCreateGroup = document.getElementById('btn-cancel-create-group');
 const newGroupName = document.getElementById('new-group-name');
 
+// Create placeholder modal
+const modalCreatePlaceholder = document.getElementById('modal-create-placeholder');
+const btnConfirmCreatePlaceholder = document.getElementById('btn-confirm-create-placeholder');
+const btnCancelCreatePlaceholder = document.getElementById('btn-cancel-create-placeholder');
+const newPlaceholderName = document.getElementById('new-placeholder-name');
+const newPlaceholderParentId = document.getElementById('new-placeholder-parent-id');
+
 // Settings modal elements
 const modalSettings = document.getElementById('modal-settings');
 const btnSettings = document.getElementById('btn-settings');
@@ -789,6 +796,27 @@ btnConfirmCreateGroup.addEventListener('click', async () => {
 btnCancelCreateGroup.addEventListener('click', () => {
   modalCreateGroup.classList.add('hidden');
   newGroupName.value = '';
+});
+
+btnConfirmCreatePlaceholder.addEventListener('click', async () => {
+  const name = newPlaceholderName.value.trim();
+  if (!name) return;
+
+  const parentId = newPlaceholderParentId.value || undefined;
+  try {
+    await serverService.request('channel:create', { name, type: 'placeholder', parentId });
+    modalCreatePlaceholder.classList.add('hidden');
+    newPlaceholderName.value = '';
+    newPlaceholderParentId.value = '';
+  } catch (e) {
+    await customAlert(e.message);
+  }
+});
+
+btnCancelCreatePlaceholder.addEventListener('click', () => {
+  modalCreatePlaceholder.classList.add('hidden');
+  newPlaceholderName.value = '';
+  newPlaceholderParentId.value = '';
 });
 
 // --- Settings modal ---
