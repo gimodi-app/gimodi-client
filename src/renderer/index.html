@@ -185,6 +185,36 @@
             </div>
           </div>
         </div>
+
+        <!-- DM View -->
+        <div id="view-dm" class="view">
+          <div class="dm-layout">
+            <aside class="dm-sidebar">
+              <div class="dm-sidebar-header">
+                <span>Direct Messages</span>
+              </div>
+              <div id="dm-conversation-list" class="dm-conversation-list"></div>
+            </aside>
+            <main class="dm-main">
+              <div id="dm-chat-header" class="dm-chat-header">
+                <span id="dm-chat-partner-name"></span>
+                <span id="dm-chat-presence" class="dm-presence-indicator"></span>
+              </div>
+              <div id="dm-chat-messages" class="dm-chat-messages"></div>
+              <div class="dm-chat-input-row">
+                <div class="chat-input-wrapper">
+                  <textarea id="dm-chat-input" placeholder="Type a message..." rows="1" autocomplete="off"></textarea>
+                  <div class="chat-input-actions">
+                    <button id="dm-btn-send" class="btn-icon btn-send" title="Send"><i class="bi bi-arrow-right"></i></button>
+                  </div>
+                </div>
+              </div>
+              <div id="dm-empty-state" class="dm-empty-state">
+                <p>Select a conversation to start messaging</p>
+              </div>
+            </main>
+          </div>
+        </div>
       </div>
       <!-- /.app-main -->
     </div>

@@ -60,6 +60,12 @@ class ConnectionManager extends EventTarget {
       this._onConnectionLost(key, e.detail?.reason);
     });
 
+    this.dispatchEvent(
+      new CustomEvent('connection-added', {
+        detail: { key, conn },
+      }),
+    );
+
     return data;
   }
 
@@ -78,6 +84,13 @@ class ConnectionManager extends EventTarget {
     const oldConn = oldKey ? this._connections.get(oldKey) : null;
     const newConn = this._connections.get(key);
 
+    if (oldConn) {
+      oldConn.send('server:set-mode', { mode: 'background' });
+    }
+    if (newConn) {
+      newConn.send('server:set-mode', { mode: 'active' });
+    }
+
     this._rebindProxyListeners(oldConn, newConn);
     this._activeKey = key;
 
@@ -86,6 +99,26 @@ class ConnectionManager extends EventTarget {
         detail: { from: oldKey, to: key },
       }),
     );
+  }
+
+  /**
+   * Sets all connections to background mode (used when entering DM view).
+   */
+  setAllBackground() {
+    for (const [, conn] of this._connections) {
+      conn.send('server:set-mode', { mode: 'background' });
+    }
+  }
+
+  /**
+   * Sets a specific connection to active mode.
+   * @param {string} key
+   */
+  setActive(key) {
+    const conn = this._connections.get(key);
+    if (conn) {
+      conn.send('server:set-mode', { mode: 'active' });
+    }
   }
 
   /**

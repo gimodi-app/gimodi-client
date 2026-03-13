@@ -688,49 +688,184 @@ body {
   max-width: 80px;
 }
 
-/* Friends mode - replaces server view with friends-only layout */
-.server-layout.friends-mode .sidebar-header,
-.server-layout.friends-mode .sidebar-section,
-.server-layout.friends-mode .voice-controls {
-  display: none !important;
+/* DM view layout */
+.dm-layout {
+  display: flex;
+  height: 100%;
+  background: var(--bg-primary);
 }
 
-.server-layout.friends-mode .main-header,
-.server-layout.friends-mode #media-grid,
-.server-layout.friends-mode #webcam-viewer-container,
-.server-layout.friends-mode #screen-share-container,
-.server-layout.friends-mode #focus-strip,
-.server-layout.friends-mode #pinned-messages,
-.server-layout.friends-mode #side-panel {
-  display: none !important;
+.dm-sidebar {
+  width: 260px;
+  min-width: 200px;
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-color);
 }
 
-.server-layout.friends-mode #friends-list-section {
-  display: block !important;
+.dm-sidebar-header {
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.dm-conversation-list {
   flex: 1;
   overflow-y: auto;
 }
 
-.server-layout.friends-mode #friends-list-section .sidebar-section-header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--bg-secondary);
-  padding-top: 12px;
+.dm-conversation-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.server-layout.friends-mode .friends-entry.active {
+.dm-conversation-entry:hover {
   background: var(--bg-tertiary);
 }
 
-.server-layout.friends-mode .sidebar {
-  display: flex;
-  flex-direction: column;
+.dm-conversation-entry.active {
+  background: var(--bg-tertiary);
 }
 
-/* DM tab styling */
-.tab.dm-tab .tab-label::before {
-  content: '';
+.dm-conv-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dm-conv-indicator.online {
+  background: #3ba55d;
+}
+
+.dm-conv-indicator.offline {
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+
+.dm-conv-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dm-conv-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dm-conv-preview {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.dm-conv-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dm-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+.dm-chat-header {
+  padding: 10px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dm-presence-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dm-presence-indicator.online {
+  background: #3ba55d;
+}
+
+.dm-presence-indicator.offline {
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+
+.dm-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px;
+}
+
+.dm-chat-input-row {
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.dm-chat-input-row .chat-input-wrapper {
+  display: flex;
+  align-items: flex-end;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.dm-chat-input-row textarea {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  resize: none;
+  outline: none;
+  padding: 6px 0;
+  min-height: 20px;
+  max-height: 150px;
+}
+
+.dm-empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.dm-empty-state.hidden {
+  display: none;
+}
+
+.dm-conversations-empty {
+  padding: 20px 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
 }
 
 /* Server groups */

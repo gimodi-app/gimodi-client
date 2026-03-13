@@ -38,7 +38,8 @@ import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoi
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
 import { initSidePanel } from './views/side-panel.js';
-import { initFriendsView, cleanup as cleanupFriends, exitFriendsMode, isDmModeActive, enterFriendsMode } from './views/friends.js';
+import { initDmView, onDmViewActive, cleanup as cleanupDmView } from './views/friends.js';
+import dmService from './services/dm.js';
 
 const log = (...args) => console.log('[app]', ...args);
 
@@ -167,6 +168,7 @@ document.addEventListener('click', (e) => {
 // Views
 const viewConnect = document.getElementById('view-connect');
 const viewServer = document.getElementById('view-server');
+const viewDm = document.getElementById('view-dm');
 
 // Create channel modal
 const modalCreateChannel = document.getElementById('modal-create-channel');
@@ -362,6 +364,30 @@ initConnectView();
 initSidebar();
 loadSettings();
 
+// Init DM view and service
+initDmView();
+dmService.init(connectionManager);
+
+connectionManager.addEventListener('connection-added', (e) => {
+  const { key, conn } = e.detail;
+  dmService.onConnectionAdded(key, conn);
+});
+
+connectionManager.addEventListener('connection-removed', (e) => {
+  const { key } = e.detail;
+  const conn = connectionManager.getConnection(key);
+  if (conn) {
+    dmService.onConnectionRemoved(key, conn);
+  }
+});
+
+const dmBtn = document.getElementById('btn-dm');
+if (dmBtn) {
+  dmBtn.addEventListener('click', () => {
+    showDmView();
+  });
+}
+
 // Menu: Disconnect (disconnects the currently viewed server)
 window.gimodi.onDisconnect(() => {
   const key = connectionManager.activeKey;
@@ -381,7 +407,21 @@ window.gimodi.onOpenUnifiedSettings(() => {
 function showView(id) {
   viewConnect.classList.remove('active');
   viewServer.classList.remove('active');
+  viewDm.classList.remove('active');
   document.getElementById(id).classList.add('active');
+}
+
+/**
+ * Switches to the DM view, setting all server connections to background mode.
+ */
+async function showDmView() {
+  const prevKey = connectionManager.activeKey;
+  if (prevKey && connectionManager.isConnected(prevKey)) {
+    saveCurrentViewState(prevKey);
+  }
+  connectionManager.setAllBackground();
+  showView('view-dm');
+  await onDmViewActive();
 }
 
 // --- Multi-server helpers ---
@@ -416,7 +456,6 @@ function switchToServer(key) {
     cleanupVoice();
   }
   cleanupChat();
-  cleanupFriends();
   cleanupServer();
   if (!voiceActive) {
     stopMicLevelMeter();
@@ -458,7 +497,6 @@ function switchToServer(key) {
 
 // Listen for view-switch requests from sidebar
 window.addEventListener('gimodi:switch-server', (e) => {
-  exitFriendsMode();
   switchToServer(e.detail.connKey);
 });
 
@@ -579,7 +617,6 @@ window.addEventListener('gimodi:connected', async (e) => {
 
   log('Initial channel:', channelId, '(lobby)');
   initChatView(channelId);
-  initFriendsView();
   initSidePanel(getViewingChannelId);
   initUnreadState(data.channels, serverService.address);
 
@@ -689,7 +726,7 @@ window.addEventListener('gimodi:disconnected', (e) => {
     cleanupVoice();
     cleanupChat();
     cleanupServer();
-    cleanupFriends();
+    cleanupDmView();
     voiceService.cleanup();
     connectionManager.clearVoiceServer();
     setVoiceChannel(null);

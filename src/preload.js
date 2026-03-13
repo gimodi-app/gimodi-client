@@ -16,8 +16,8 @@ contextBridge.exposeInMainWorld('gimodi', {
   friends: {
     list: () => ipcRenderer.invoke('friends:list'),
     add: (friend) => ipcRenderer.invoke('friends:add', friend),
-    remove: (userId) => ipcRenderer.invoke('friends:remove', userId),
-    update: (userId, updates) => ipcRenderer.invoke('friends:update', userId, updates),
+    remove: (fingerprint) => ipcRenderer.invoke('friends:remove', fingerprint),
+    update: (fingerprint, updates) => ipcRenderer.invoke('friends:update', fingerprint, updates),
   },
   settings: {
     load: () => ipcRenderer.invoke('settings:load'),

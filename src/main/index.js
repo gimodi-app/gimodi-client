@@ -898,55 +898,112 @@ ipcMain.handle('get-version', () => {
   return app.getVersion();
 });
 
-// Friends list (persistent across sessions)
+// Friends list (persistent across sessions, keyed by fingerprint)
 const friendsPath = path.join(app.getPath('userData'), 'friends.json');
 
-ipcMain.handle('friends:list', () => {
+/**
+ * Loads friends list and auto-migrates old userId-based format to fingerprint-based.
+ * @returns {object[]}
+ */
+function loadFriends() {
+  let items = [];
   try {
-    return JSON.parse(fs.readFileSync(friendsPath, 'utf-8'));
+    items = JSON.parse(fs.readFileSync(friendsPath, 'utf-8'));
   } catch {
     return [];
   }
+
+  let migrated = false;
+  items = items
+    .map((f) => {
+      if (f.fingerprint) {
+        return f;
+      }
+      if (!f.identityFingerprint) {
+        return null;
+      }
+      migrated = true;
+      return {
+        fingerprint: f.identityFingerprint,
+        displayName: f.displayName || f.userId,
+        servers: [{ address: f.serverAddress || '', userId: f.userId }],
+        addedAt: f.addedAt || Date.now(),
+      };
+    })
+    .filter(Boolean);
+
+  if (migrated) {
+    const merged = [];
+    const byFp = new Map();
+    for (const f of items) {
+      const existing = byFp.get(f.fingerprint);
+      if (existing) {
+        for (const s of f.servers) {
+          if (!existing.servers.some((es) => es.address === s.address)) {
+            existing.servers.push(s);
+          }
+        }
+      } else {
+        byFp.set(f.fingerprint, f);
+        merged.push(f);
+      }
+    }
+    fs.writeFileSync(friendsPath, JSON.stringify(merged, null, 2));
+    return merged;
+  }
+
+  return items;
+}
+
+/**
+ * Saves the friends list to disk.
+ * @param {object[]} items
+ */
+function saveFriends(items) {
+  fs.writeFileSync(friendsPath, JSON.stringify(items, null, 2));
+}
+
+ipcMain.handle('friends:list', () => {
+  return loadFriends();
 });
 
 ipcMain.handle('friends:add', (event, friend) => {
-  let items = [];
-  try {
-    items = JSON.parse(fs.readFileSync(friendsPath, 'utf-8'));
-  } catch {
-    /* empty */
-  }
-  if (items.some((f) => f.userId === friend.userId)) {
+  const items = loadFriends();
+  const existing = items.find((f) => f.fingerprint === friend.fingerprint);
+  if (existing) {
+    if (friend.servers) {
+      for (const s of friend.servers) {
+        if (!existing.servers.some((es) => es.address === s.address)) {
+          existing.servers.push(s);
+        }
+      }
+    }
+    saveFriends(items);
     return items;
   }
-  items.push(friend);
-  fs.writeFileSync(friendsPath, JSON.stringify(items, null, 2));
+  items.push({
+    fingerprint: friend.fingerprint,
+    displayName: friend.displayName,
+    servers: friend.servers || [],
+    addedAt: friend.addedAt || Date.now(),
+  });
+  saveFriends(items);
   return items;
 });
 
-ipcMain.handle('friends:remove', (event, userId) => {
-  let items = [];
-  try {
-    items = JSON.parse(fs.readFileSync(friendsPath, 'utf-8'));
-  } catch {
-    /* empty */
-  }
-  items = items.filter((f) => f.userId !== userId);
-  fs.writeFileSync(friendsPath, JSON.stringify(items, null, 2));
+ipcMain.handle('friends:remove', (event, fingerprint) => {
+  let items = loadFriends();
+  items = items.filter((f) => f.fingerprint !== fingerprint);
+  saveFriends(items);
   return items;
 });
 
-ipcMain.handle('friends:update', (event, userId, updates) => {
-  let items = [];
-  try {
-    items = JSON.parse(fs.readFileSync(friendsPath, 'utf-8'));
-  } catch {
-    /* empty */
-  }
-  const friend = items.find((f) => f.userId === userId);
+ipcMain.handle('friends:update', (event, fingerprint, updates) => {
+  const items = loadFriends();
+  const friend = items.find((f) => f.fingerprint === fingerprint);
   if (friend) {
     Object.assign(friend, updates);
-    fs.writeFileSync(friendsPath, JSON.stringify(items, null, 2));
+    saveFriends(items);
   }
   return items;
 });
