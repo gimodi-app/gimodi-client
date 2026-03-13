@@ -5,12 +5,15 @@ let friendsList = [];
 let dmModeActive = false;
 let channelSection = null;
 let friendsContainer = null;
+let serverLayout = null;
+let activeFriendUserId = null;
 
 /**
  * Initializes the friends view and wires up the DM button.
  */
 export function initFriendsView() {
   channelSection = document.querySelector('.sidebar-section');
+  serverLayout = document.querySelector('.server-layout');
   createFriendsContainer();
 
   const dmBtn = document.getElementById('btn-dm');
@@ -19,6 +22,10 @@ export function initFriendsView() {
   }
 
   window.addEventListener('gimodi:friends-updated', () => loadFriends());
+  window.addEventListener('gimodi:open-dm', (e) => {
+    activeFriendUserId = e.detail.userId;
+    renderFriendsList();
+  });
 
   loadFriends();
 }
@@ -56,22 +63,50 @@ async function loadFriends() {
 }
 
 /**
- * Toggles between DM mode (friends list) and channel tree.
+ * Toggles between friends mode and server mode.
  */
 function toggleDmMode() {
-  dmModeActive = !dmModeActive;
-  const dmBtn = document.getElementById('btn-dm');
-
   if (dmModeActive) {
-    channelSection.classList.add('hidden');
-    friendsContainer.classList.remove('hidden');
-    dmBtn.classList.add('active');
-    renderFriendsList();
+    exitFriendsMode();
   } else {
-    channelSection.classList.remove('hidden');
-    friendsContainer.classList.add('hidden');
+    enterFriendsMode();
+  }
+}
+
+/**
+ * Enters friends mode - shows friends list and hides server UI.
+ */
+export function enterFriendsMode() {
+  dmModeActive = true;
+  const dmBtn = document.getElementById('btn-dm');
+  if (dmBtn) {
+    dmBtn.classList.add('active');
+  }
+
+  serverLayout.classList.add('friends-mode');
+  renderFriendsList();
+
+  window.dispatchEvent(new CustomEvent('gimodi:friends-mode-changed', { detail: { active: true } }));
+}
+
+/**
+ * Exits friends mode - restores server UI.
+ */
+export function exitFriendsMode() {
+  if (!dmModeActive) {
+    return;
+  }
+  dmModeActive = false;
+  activeFriendUserId = null;
+
+  const dmBtn = document.getElementById('btn-dm');
+  if (dmBtn) {
     dmBtn.classList.remove('active');
   }
+
+  serverLayout.classList.remove('friends-mode');
+
+  window.dispatchEvent(new CustomEvent('gimodi:friends-mode-changed', { detail: { active: false } }));
 }
 
 /**
@@ -96,7 +131,7 @@ function renderFriendsList() {
 
   for (const friend of friendsList) {
     const entry = document.createElement('div');
-    entry.className = 'friends-entry';
+    entry.className = 'friends-entry' + (activeFriendUserId === friend.userId ? ' active' : '');
 
     const indicator = document.createElement('span');
     indicator.className = 'friends-online-indicator ' + (connectedClients.has(friend.userId) ? 'online' : 'offline');
@@ -113,6 +148,8 @@ function renderFriendsList() {
     entry.appendChild(server);
 
     entry.addEventListener('click', () => {
+      activeFriendUserId = friend.userId;
+      renderFriendsList();
       window.dispatchEvent(new CustomEvent('gimodi:open-dm', { detail: { userId: friend.userId, displayName: friend.displayName } }));
     });
 
@@ -200,15 +237,13 @@ function showFriendContextMenu(e, friend) {
  */
 export function cleanup() {
   dmModeActive = false;
+  activeFriendUserId = null;
   const dmBtn = document.getElementById('btn-dm');
   if (dmBtn) {
     dmBtn.classList.remove('active');
   }
-  if (friendsContainer) {
-    friendsContainer.classList.add('hidden');
-  }
-  if (channelSection) {
-    channelSection.classList.remove('hidden');
+  if (serverLayout) {
+    serverLayout.classList.remove('friends-mode');
   }
 }
 

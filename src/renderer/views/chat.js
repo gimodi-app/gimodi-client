@@ -1409,22 +1409,41 @@ function appendDmMessage(msg, prepend = false) {
   el.className = 'chat-msg';
   el.dataset.messageId = msg.id;
   el.dataset.senderUserId = msg.senderUserId;
+  el.dataset.timestamp = msg.timestamp;
+
+  const displayNickname = msg.senderNickname || msg.senderUserId;
+  const nickColor = msg.senderRoleColor || 'var(--text-primary)';
+  const compactTime = formatTimeShort(msg.timestamp);
+  const fullTime = formatDateTime(msg.timestamp);
+  const badgeTitle = msg.senderBadge ? escapeHtml(msg.senderBadge) : '';
+
+  const compactRow = document.createElement('span');
+  compactRow.className = 'compact-row';
+  compactRow.innerHTML = `<span class="compact-time" title="${escapeHtml(fullTime)}">${compactTime}</span> <span class="compact-nick" style="color:${nickColor}" title="${badgeTitle}">${escapeHtml(displayNickname)}</span>`;
+  el.appendChild(compactRow);
 
   const header = document.createElement('div');
   header.className = 'chat-msg-header';
 
   const nick = document.createElement('span');
   nick.className = 'chat-msg-nick';
-  nick.textContent = msg.senderNickname || msg.senderUserId;
+  nick.textContent = displayNickname;
   if (msg.senderRoleColor) {
     nick.style.color = msg.senderRoleColor;
   }
   header.appendChild(nick);
 
+  if (msg.senderBadge) {
+    const badge = document.createElement('span');
+    badge.className = 'admin-badge';
+    badge.textContent = msg.senderBadge;
+    header.appendChild(badge);
+  }
+
   const time = document.createElement('span');
   time.className = 'chat-msg-time';
   time.textContent = formatTime(msg.timestamp);
-  time.title = formatDateTime(msg.timestamp);
+  time.title = fullTime;
   header.appendChild(time);
 
   el.appendChild(header);

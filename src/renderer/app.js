@@ -38,7 +38,7 @@ import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoi
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
 import { initSidePanel } from './views/side-panel.js';
-import { initFriendsView, cleanup as cleanupFriends } from './views/friends.js';
+import { initFriendsView, cleanup as cleanupFriends, exitFriendsMode, isDmModeActive, enterFriendsMode } from './views/friends.js';
 
 const log = (...args) => console.log('[app]', ...args);
 
@@ -458,7 +458,17 @@ function switchToServer(key) {
 
 // Listen for view-switch requests from sidebar
 window.addEventListener('gimodi:switch-server', (e) => {
+  exitFriendsMode();
   switchToServer(e.detail.connKey);
+});
+
+// Friends mode: show view-server even when on connect view
+window.addEventListener('gimodi:friends-mode-changed', (e) => {
+  if (e.detail.active) {
+    showView('view-server');
+  } else if (!connectionManager.activeKey) {
+    showView('view-connect');
+  }
 });
 
 window.addEventListener('gimodi:disconnect-server', (e) => {
@@ -679,6 +689,7 @@ window.addEventListener('gimodi:disconnected', (e) => {
     cleanupVoice();
     cleanupChat();
     cleanupServer();
+    cleanupFriends();
     voiceService.cleanup();
     connectionManager.clearVoiceServer();
     setVoiceChannel(null);

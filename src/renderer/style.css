@@ -688,6 +688,46 @@ body {
   max-width: 80px;
 }
 
+/* Friends mode - replaces server view with friends-only layout */
+.server-layout.friends-mode .sidebar-header,
+.server-layout.friends-mode .sidebar-section,
+.server-layout.friends-mode .voice-controls {
+  display: none !important;
+}
+
+.server-layout.friends-mode .main-header,
+.server-layout.friends-mode #media-grid,
+.server-layout.friends-mode #webcam-viewer-container,
+.server-layout.friends-mode #screen-share-container,
+.server-layout.friends-mode #focus-strip,
+.server-layout.friends-mode #pinned-messages,
+.server-layout.friends-mode #side-panel {
+  display: none !important;
+}
+
+.server-layout.friends-mode #friends-list-section {
+  display: block !important;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.server-layout.friends-mode #friends-list-section .sidebar-section-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-secondary);
+  padding-top: 12px;
+}
+
+.server-layout.friends-mode .friends-entry.active {
+  background: var(--bg-tertiary);
+}
+
+.server-layout.friends-mode .sidebar {
+  display: flex;
+  flex-direction: column;
+}
+
 /* DM tab styling */
 .tab.dm-tab .tab-label::before {
   content: '';
