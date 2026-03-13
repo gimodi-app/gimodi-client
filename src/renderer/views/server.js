@@ -3,7 +3,7 @@ import connectionManager from '../services/connectionManager.js';
 import voiceService from '../services/voice.js';
 import screenShareService from '../services/screen.js';
 import { getServerIcon } from '../services/iconCache.js';
-import { setChannelName, openChannelViewTab, switchToChannelTab, updateChatBadges, updateChatNickColors, isChannelUnread } from './chat.js';
+import { setChannelName, openChannelViewTab, setVoiceChannel, switchToChannelTab, updateChatBadges, updateChatNickColors, isChannelUnread } from './chat.js';
 import { setNickname } from '../services/nicknameCache.js';
 import { customAlert, customConfirm, customPrompt } from '../services/dialogs.js';
 
@@ -429,6 +429,7 @@ function leaveVoiceChannel() {
   if (self) self.channelId = null;
   currentChannelId = null;
   connectionManager.clearVoiceServer();
+  setVoiceChannel(null);
   renderChannelTree();
 }
 

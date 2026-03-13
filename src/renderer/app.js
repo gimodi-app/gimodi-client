@@ -4,7 +4,7 @@ import voiceService from './services/voice.js';
 import notificationService from './services/notifications.js';
 import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects } from './views/connect.js';
 import { initServerView, cleanup as cleanupServer, getCurrentChannelId, getFirstChannelId, setFeedbackVolume, isCurrentChannelModerated, hasVoiceGrant, showUnifiedAdminDialog, showRedeemTokenModal, switchChannel, saveState as saveServerState, restoreState as restoreServerState, syncLocalVoiceIndicators } from './views/server.js';
-import { initChatView, cleanup as cleanupChat, switchChannel as switchChatChannel, appendSystemMessage, refreshTimestamps, setChatDisplayMode, setMediaEmbedPrivacy, openChannelViewTab, getChannelViewTabsState, restoreTabs, saveState as saveChatState, restoreState as restoreChatState, initUnreadState, getViewingChannelId } from './views/chat.js';
+import { initChatView, cleanup as cleanupChat, switchChannel as switchChatChannel, appendSystemMessage, refreshTimestamps, setChatDisplayMode, setMediaEmbedPrivacy, openChannelViewTab, setVoiceChannel, getChannelViewTabsState, restoreTabs, saveState as saveChatState, restoreState as restoreChatState, initUnreadState, getViewingChannelId } from './views/chat.js';
 import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoiceServerName, syncVoiceControlsUI } from './views/voice.js';
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
@@ -435,6 +435,7 @@ function disconnectServer(key) {
   if (connectionManager.voiceKey === key) {
     voiceService.cleanup();
     connectionManager.clearVoiceServer();
+    setVoiceChannel(null);
   }
 
   conn.disconnect();
@@ -577,6 +578,7 @@ window.addEventListener('gimodi:disconnected', (e) => {
       if (isVoiceServer) {
         voiceService.cleanup();
         connectionManager.clearVoiceServer();
+        setVoiceChannel(null);
         stopMicLevelMeter();
       }
 
@@ -608,6 +610,7 @@ window.addEventListener('gimodi:disconnected', (e) => {
     cleanupServer();
     voiceService.cleanup();
     connectionManager.clearVoiceServer();
+    setVoiceChannel(null);
     stopMicLevelMeter();
     // Hide any open modals
     modalCreateChannel.classList.add('hidden');
@@ -647,6 +650,7 @@ window.addEventListener('gimodi:channel-changed', async (e) => {
   connectionManager.setVoiceServer(activeKey);
   const serverName = document.getElementById('server-name')?.textContent || '';
   setVoiceServerName(serverName);
+  setVoiceChannel(channelId);
   await setupVoice();
 });
 

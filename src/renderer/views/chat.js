@@ -66,6 +66,7 @@ const channelMessagesCache = []; // stores channel DOM nodes when switching away
 const channelMessagesPending = []; // messages received while not on channel tab, buffered for re-render
 let channelTabUnread = false;
 const unreadChannels = new Set(); // channelIds with unread messages
+let voiceChannelId = null; // channelId of the active voice channel (rendered as first, non-closable tab)
 
 // --- Pagination state ---
 const HISTORY_PAGE_SIZE = 50;
@@ -832,6 +833,7 @@ chatService.removeEventListener('cleared', onChatCleared);
   for (const cv of channelViewTabs) chatService.unsubscribeChannel(cv.channelId);
   channelViewTabs.length = 0;
   tabOrder.length = 0;
+  voiceChannelId = null;
   channelViewMessagesCache.clear();
   channelViewMessagesPending.clear();
   channelPinnedMessages.clear();
@@ -1222,7 +1224,9 @@ export function openChannelViewTab(channelId, channelName, password, readRestric
   if (!tab) {
     tab = { channelId, channelName, readRestricted, writeRestricted, ...(password != null && { password }) };
     channelViewTabs.push(tab);
-    tabOrder.push({ type: 'channel-view', id: channelId });
+    if (channelId !== voiceChannelId) {
+      tabOrder.push({ type: 'channel-view', id: channelId });
+    }
     chatService.subscribeChannel(channelId, password);
     window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
   } else {
@@ -1238,6 +1242,7 @@ export function openChannelViewTab(channelId, channelName, password, readRestric
 }
 
 function closeChannelViewTab(channelId) {
+  if (channelId === voiceChannelId) return;
   const idx = channelViewTabs.findIndex(t => t.channelId === channelId);
   if (idx === -1) return;
   channelViewTabs.splice(idx, 1);
@@ -1255,6 +1260,29 @@ function closeChannelViewTab(channelId) {
   } else {
     renderTabs();
   }
+}
+
+/**
+ * @param {string|null} channelId
+ */
+export function setVoiceChannel(channelId) {
+  const prevVoiceId = voiceChannelId;
+  voiceChannelId = channelId;
+
+  // Restore previous voice channel tab back into tabOrder
+  if (prevVoiceId && prevVoiceId !== channelId && channelViewTabs.find(t => t.channelId === prevVoiceId)) {
+    if (!tabOrder.find(t => t.type === 'channel-view' && t.id === prevVoiceId)) {
+      tabOrder.push({ type: 'channel-view', id: prevVoiceId });
+    }
+  }
+
+  // Remove new voice channel from tabOrder (it renders separately as first tab)
+  if (channelId) {
+    const idx = tabOrder.findIndex(t => t.type === 'channel-view' && t.id === channelId);
+    if (idx !== -1) tabOrder.splice(idx, 1);
+  }
+
+  renderTabs();
 }
 
 export function getChannelViewTabsState() {
@@ -2956,6 +2984,23 @@ function renderTabs() {
   if (!tabBar) return;
 
   tabBar.innerHTML = '';
+
+  // Voice channel tab - always first, not closable, not draggable
+  if (voiceChannelId) {
+    const vcTab = channelViewTabs.find(t => t.channelId === voiceChannelId);
+    if (vcTab) {
+      const tab = document.createElement('div');
+      tab.className = `tab${activeTab.type === 'channel-view' && activeTab.channelId === voiceChannelId ? ' active' : ''}${vcTab.unread ? ' unread' : ''}`;
+      tab.dataset.type = 'channel-view';
+      tab.dataset.channelId = vcTab.channelId;
+      const label = document.createElement('span');
+      label.className = 'tab-label';
+      label.textContent = '#' + vcTab.channelName;
+      tab.appendChild(label);
+      tab.addEventListener('click', () => switchToTab({ type: 'channel-view', channelId: vcTab.channelId, channelName: vcTab.channelName }));
+      tabBar.appendChild(tab);
+    }
+  }
 
   // Channel tab - hidden when no channel joined (lobby) or when a channel-view tab for the current channel is open
   if (currentChannelId && !channelViewTabs.find(t => t.channelId === currentChannelId)) {
