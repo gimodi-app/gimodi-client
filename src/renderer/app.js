@@ -433,7 +433,7 @@ function switchToServer(key) {
   connectionManager._rebindProxyListeners(oldConn, newConn);
   connectionManager.activeKey = key;
 
-  // Restore saved state or re-init
+  // Restore saved state or fetch fresh data
   const saved = connectionManager.getServerState(key);
   if (saved) {
     restoreServerState(saved.server);
@@ -441,24 +441,45 @@ function switchToServer(key) {
     if (!voiceActive) {
       initVoiceView([]);
     }
+
+    setActiveServer(key);
+    rerenderSidebar();
+    showView('view-server');
+
+    window.gimodi.setAdminStatus(serverService.hasPermission('server.admin_menu'), true);
+    updateAdminIconVisibility();
+
+    setVoiceControlsVisible(!!connectionManager.voiceKey);
+    if (connectionManager.voiceKey) {
+      syncVoiceControlsUI();
+      syncLocalVoiceIndicators();
+    }
+
+    log('Switched view to', key);
+  } else {
+    // No saved state (e.g. background-connected server clicked for first time)
+    // Use cached connect data from background connection
+    const connectData = connectionManager.getConnectData(key);
+    if (connectData) {
+      connectData._connKey = key;
+      window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: connectData }));
+    } else {
+      // Fallback: init with minimal data, request channels separately
+      const data = {
+        _connKey: key,
+        serverName: newConn.serverName,
+        serverVersion: newConn.serverVersion,
+        clientId: newConn.clientId,
+        userId: newConn.userId,
+        permissions: [...newConn.permissions],
+        maxFileSize: newConn.maxFileSize,
+        tempChannelDeleteDelay: newConn.tempChannelDeleteDelay,
+        channels: [],
+        clients: [],
+      };
+      window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: data }));
+    }
   }
-
-  setActiveServer(key);
-  rerenderSidebar();
-  showView('view-server');
-
-  // Update admin icon
-  window.gimodi.setAdminStatus(serverService.hasPermission('server.admin_menu'), true);
-  updateAdminIconVisibility();
-
-  // Show voice controls only when connected to a voice channel
-  setVoiceControlsVisible(!!connectionManager.voiceKey);
-  if (connectionManager.voiceKey) {
-    syncVoiceControlsUI();
-    syncLocalVoiceIndicators();
-  }
-
-  log('Switched view to', key);
 }
 
 // Listen for view-switch requests from sidebar

@@ -35,16 +35,10 @@ class ConnectionManager extends EventTarget {
     this._credentials = new Map();
     /** @type {Map<string, string>} */
     this._connectionStatus = new Map();
+    /** @type {Map<string, object>} */
+    this._connectData = new Map();
   }
 
-  /**
-   * @param {string} key
-   * @param {string} address
-   * @param {string} nickname
-   * @param {string} [password]
-   * @param {string} [publicKey]
-   * @returns {Promise<object>}
-   */
   /**
    * @param {string} key
    * @param {string} address
@@ -66,6 +60,7 @@ class ConnectionManager extends EventTarget {
     this._connections.set(key, conn);
     this._credentials.set(key, { nickname, password, publicKey });
     this._connectionStatus.set(key, 'connected');
+    this._connectData.set(key, data);
     this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'connected' } }));
 
     this._bindReconnectEvents(key, conn);
@@ -119,6 +114,7 @@ class ConnectionManager extends EventTarget {
       this._connections.set(key, conn);
       this._credentials.set(key, { nickname: server.nickname, password: server.password || undefined, publicKey });
       this._connectionStatus.set(key, 'connected');
+      this._connectData.set(key, data);
       this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'connected' } }));
 
       this._bindReconnectEvents(key, conn);
@@ -200,6 +196,7 @@ class ConnectionManager extends EventTarget {
     this._connections.delete(key);
     this._serverStates.delete(key);
     this._credentials.delete(key);
+    this._connectData.delete(key);
     this._connectionStatus.set(key, 'disconnected');
 
     if (this._voiceKey === key) {
@@ -239,6 +236,7 @@ class ConnectionManager extends EventTarget {
     this._connections.clear();
     this._serverStates.clear();
     this._credentials.clear();
+    this._connectData.clear();
     this._connectionStatus.clear();
     this._activeKey = null;
     this._voiceKey = null;
@@ -274,6 +272,7 @@ class ConnectionManager extends EventTarget {
     this._connections.delete(key);
     this._serverStates.delete(key);
     this._credentials.delete(key);
+    this._connectData.delete(key);
     this._connectionStatus.set(key, 'disconnected');
     this.dispatchEvent(new CustomEvent('connection-status-changed', { detail: { key, status: 'disconnected' } }));
 
@@ -402,6 +401,18 @@ class ConnectionManager extends EventTarget {
    */
   getServerState(key) {
     return this._serverStates.get(key) || null;
+  }
+
+  /**
+   * @param {string} key
+   * @returns {object|null}
+   */
+  getConnectData(key) {
+    const data = this._connectData.get(key) || null;
+    if (data) {
+      this._connectData.delete(key);
+    }
+    return data;
   }
 
   /**

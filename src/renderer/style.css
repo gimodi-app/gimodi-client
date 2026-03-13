@@ -1475,7 +1475,7 @@ label:has(input[type='checkbox']) {
   }
 }
 
-.voice-controls #btn-disconnect {
+.voice-controls #btn-leave-voice {
   margin-right: auto;
 }
 
