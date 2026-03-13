@@ -587,6 +587,112 @@ body {
   display: none;
 }
 
+/* DM button */
+.server-sidebar-dm {
+  background: var(--accent, #5865f2);
+  color: #fff;
+}
+
+.server-sidebar-dm:hover {
+  background: var(--accent-hover, #4752c4);
+}
+
+.server-sidebar-dm.active {
+  background: var(--accent-hover, #4752c4);
+  border-radius: 35%;
+}
+
+.server-sidebar-dm::before {
+  display: none;
+}
+
+.server-sidebar-dm i {
+  font-size: 18px;
+}
+
+.server-sidebar-dm {
+  position: relative;
+}
+
+.dm-unread-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  background: #ed4245;
+  border-radius: 50%;
+  border: 2px solid var(--bg-primary);
+}
+
+.server-sidebar-separator {
+  width: 32px;
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  margin: 2px auto;
+}
+
+/* Friends list */
+.friends-empty {
+  padding: 16px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.friends-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.friends-entry:hover {
+  background: var(--bg-tertiary);
+}
+
+.friends-online-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.friends-online-indicator.online {
+  background: #3ba55d;
+}
+
+.friends-online-indicator.offline {
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+
+.friends-name {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friends-server {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 80px;
+}
+
+/* DM tab styling */
+.tab.dm-tab .tab-label::before {
+  content: '';
+}
+
 /* Server groups */
 .server-group {
   display: flex;

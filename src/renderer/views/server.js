@@ -3227,6 +3227,27 @@ export function showUserContextMenu(e, user, options = {}) {
     }
   }
 
+  if (isOther && user.userId) {
+    addSeparator();
+    addItem('Add Friend', async () => {
+      const displayName = await customPrompt('Display name for friend:', user.nickname);
+      if (displayName === null) {
+        return;
+      }
+      await window.gimodi.friends.add({
+        userId: user.userId,
+        displayName: displayName || user.nickname,
+        serverAddress: serverService.address,
+        identityFingerprint: user.userId,
+        addedAt: Date.now(),
+      });
+      window.dispatchEvent(new CustomEvent('gimodi:friends-updated'));
+    });
+    addItem('Direct Message', () => {
+      window.dispatchEvent(new CustomEvent('gimodi:open-dm', { detail: { userId: user.userId, displayName: user.nickname } }));
+    });
+  }
+
   const hasAdminActions = isOther && (serverService.hasPermission('user.kick') || serverService.hasPermission('user.ban') || serverService.hasPermission('user.assign_role'));
 
   if (hasAdminActions) {

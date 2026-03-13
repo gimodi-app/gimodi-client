@@ -898,6 +898,59 @@ ipcMain.handle('get-version', () => {
   return app.getVersion();
 });
 
+// Friends list (persistent across sessions)
+const friendsPath = path.join(app.getPath('userData'), 'friends.json');
+
+ipcMain.handle('friends:list', () => {
+  try {
+    return JSON.parse(fs.readFileSync(friendsPath, 'utf-8'));
+  } catch {
+    return [];
+  }
+});
+
+ipcMain.handle('friends:add', (event, friend) => {
+  let items = [];
+  try {
+    items = JSON.parse(fs.readFileSync(friendsPath, 'utf-8'));
+  } catch {
+    /* empty */
+  }
+  if (items.some((f) => f.userId === friend.userId)) {
+    return items;
+  }
+  items.push(friend);
+  fs.writeFileSync(friendsPath, JSON.stringify(items, null, 2));
+  return items;
+});
+
+ipcMain.handle('friends:remove', (event, userId) => {
+  let items = [];
+  try {
+    items = JSON.parse(fs.readFileSync(friendsPath, 'utf-8'));
+  } catch {
+    /* empty */
+  }
+  items = items.filter((f) => f.userId !== userId);
+  fs.writeFileSync(friendsPath, JSON.stringify(items, null, 2));
+  return items;
+});
+
+ipcMain.handle('friends:update', (event, userId, updates) => {
+  let items = [];
+  try {
+    items = JSON.parse(fs.readFileSync(friendsPath, 'utf-8'));
+  } catch {
+    /* empty */
+  }
+  const friend = items.find((f) => f.userId === userId);
+  if (friend) {
+    Object.assign(friend, updates);
+    fs.writeFileSync(friendsPath, JSON.stringify(items, null, 2));
+  }
+  return items;
+});
+
 // Settings
 ipcMain.handle('settings:load', () => {
   try {

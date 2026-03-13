@@ -58,12 +58,15 @@ const TYPING_EXPIRE_TIMEOUT = 3000;
 let replyToMessage = null; // { id, nickname, content, channelId } | null
 
 // --- Tab state ---
-let activeTab = { type: 'channel' }; // { type: 'channel' } | { type: 'channel-view', channelId, channelName }
+let activeTab = { type: 'channel' }; // { type: 'channel' } | { type: 'channel-view', channelId, channelName } | { type: 'dm', recipientUserId, displayName }
 const channelViewTabs = []; // [{ channelId, channelName }]
-const tabOrder = []; // unified visual order: [{ type: 'channel-view', id: string }, ...]
+const tabOrder = []; // unified visual order: [{ type: 'channel-view', id: string }, { type: 'dm', id: string }, ...]
 let draggedTab = null; // { index } for drag-and-drop reordering
 const channelViewMessagesCache = new Map(); // channelId → DOM nodes[]
 const channelViewMessagesPending = new Map(); // channelId → message[] (buffered while tab inactive)
+const dmTabs = []; // [{ recipientUserId, displayName }]
+const dmMessagesCache = new Map(); // recipientUserId → DOM nodes[]
+const dmMessagesPending = new Map(); // recipientUserId → message[]
 const channelMessagesCache = []; // stores channel DOM nodes when switching away
 const channelMessagesPending = []; // messages received while not on channel tab, buffered for re-render
 let channelTabUnread = false;
@@ -75,6 +78,7 @@ const HISTORY_PAGE_SIZE = 50;
 const paginationState = {
   channel: { oldestTs: null, allLoaded: false, loading: false },
   channelView: new Map(), // channelId → { oldestTs, allLoaded, loading }
+  dm: new Map(), // recipientUserId → { oldestTs, allLoaded, loading }
 };
 
 function getPaginationForTab() {
@@ -83,6 +87,9 @@ function getPaginationForTab() {
   }
   if (activeTab.type === 'channel-view') {
     return paginationState.channelView.get(activeTab.channelId) || null;
+  }
+  if (activeTab.type === 'dm') {
+    return paginationState.dm.get(activeTab.recipientUserId) || null;
   }
   return null;
 }
@@ -802,6 +809,10 @@ export function initChatView(channelId) {
   window.addEventListener('gimodi:navigate-channel', onNavigateChannel);
   serverService.addEventListener('server:client-joined', onClientJoinedForCache);
   serverService.addEventListener('server:client-left', onClientLeftForCache);
+  chatService.addEventListener('dm-message', onDmMessage);
+  chatService.addEventListener('dm-message-deleted', onDmMessageDeleted);
+  chatService.addEventListener('dm-link-preview', onDmLinkPreview);
+  window.addEventListener('gimodi:open-dm', onOpenDm);
 
   // Seed clientNicknameMap from current client list
   for (const c of window.gimodiClients || []) {
@@ -869,6 +880,10 @@ export function cleanup() {
   serverService.removeEventListener('chat:message-pinned', onMessagePinned);
   serverService.removeEventListener('chat:message-unpinned', onMessageUnpinned);
   serverService.removeEventListener('channel:updated', onChannelUpdatedForReadRoles);
+  chatService.removeEventListener('dm-message', onDmMessage);
+  chatService.removeEventListener('dm-message-deleted', onDmMessageDeleted);
+  chatService.removeEventListener('dm-link-preview', onDmLinkPreview);
+  window.removeEventListener('gimodi:open-dm', onOpenDm);
   clearTypingState();
   selectedMentions.clear();
   selectedChannelMentions.clear();
@@ -890,6 +905,10 @@ export function cleanup() {
   channelViewMessagesCache.clear();
   channelViewMessagesPending.clear();
   channelPinnedMessages.clear();
+  dmTabs.length = 0;
+  dmMessagesCache.clear();
+  dmMessagesPending.clear();
+  paginationState.dm.clear();
   unreadChannels.clear();
 }
 
@@ -1035,7 +1054,9 @@ function sendMessage() {
 
   const replyTo = replyToMessage?.id || null;
 
-  if (activeTab.type === 'channel-view') {
+  if (activeTab.type === 'dm') {
+    chatService.sendDm(activeTab.recipientUserId, resolved, replyTo);
+  } else if (activeTab.type === 'channel-view') {
     chatService.sendMessage(activeTab.channelId, resolved, replyTo);
   } else {
     if (!currentChannelId) {
@@ -1121,8 +1142,13 @@ function updateInputForTab() {
 
   btnSend.disabled = false;
   chatInput.disabled = false;
-  chatInput.placeholder = 'Type a message…';
-  btnAttach.style.display = isAttachSupported ? '' : 'none';
+  if (activeTab.type === 'dm') {
+    chatInput.placeholder = `Message @${activeTab.displayName}…`;
+    btnAttach.style.display = 'none';
+  } else {
+    chatInput.placeholder = 'Type a message…';
+    btnAttach.style.display = isAttachSupported ? '' : 'none';
+  }
 }
 
 async function loadHistory(channelId) {
@@ -1294,6 +1320,233 @@ function closeChannelViewTab(channelId) {
   } else {
     renderTabs();
   }
+}
+
+// --- DM Tab Functions ---
+
+/**
+ * Opens a DM tab for the given user, or switches to it if it already exists.
+ * @param {string} recipientUserId
+ * @param {string} displayName
+ */
+export function openDmTab(recipientUserId, displayName) {
+  let tab = dmTabs.find((t) => t.recipientUserId === recipientUserId);
+  if (!tab) {
+    tab = { recipientUserId, displayName };
+    dmTabs.push(tab);
+    tabOrder.push({ type: 'dm', id: recipientUserId });
+  }
+  switchToTab({ type: 'dm', recipientUserId, displayName });
+}
+
+/**
+ * Closes a DM tab.
+ * @param {string} recipientUserId
+ */
+function closeDmTab(recipientUserId) {
+  const idx = dmTabs.findIndex((t) => t.recipientUserId === recipientUserId);
+  if (idx === -1) {
+    return;
+  }
+  dmTabs.splice(idx, 1);
+  const orderIdx = tabOrder.findIndex((t) => t.type === 'dm' && t.id === recipientUserId);
+  if (orderIdx !== -1) {
+    tabOrder.splice(orderIdx, 1);
+  }
+  dmMessagesCache.delete(recipientUserId);
+  dmMessagesPending.delete(recipientUserId);
+  paginationState.dm.delete(recipientUserId);
+  if (activeTab.type === 'dm' && activeTab.recipientUserId === recipientUserId) {
+    switchToTab({ type: 'channel' });
+  } else {
+    renderTabs();
+  }
+}
+
+/**
+ * Loads DM history for the active DM tab.
+ * @param {string} recipientUserId
+ */
+async function loadDmHistory(recipientUserId) {
+  let ps = paginationState.dm.get(recipientUserId);
+  if (!ps) {
+    ps = { oldestTs: null, allLoaded: false, loading: false };
+    paginationState.dm.set(recipientUserId, ps);
+  }
+  if (ps.loading || ps.allLoaded) {
+    return;
+  }
+  ps.loading = true;
+  try {
+    const result = await chatService.fetchDmHistory(recipientUserId, ps.oldestTs, HISTORY_PAGE_SIZE);
+    const messages = result.messages || [];
+    if (messages.length < HISTORY_PAGE_SIZE) {
+      ps.allLoaded = true;
+    }
+    if (messages.length > 0) {
+      ps.oldestTs = messages[messages.length - 1].timestamp;
+    }
+    // Messages come newest-first, render oldest-first
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      appendDmMessage(m, true);
+    }
+    if (activeTab.type === 'dm' && activeTab.recipientUserId === recipientUserId) {
+      scrollToBottom();
+    }
+  } finally {
+    ps.loading = false;
+  }
+}
+
+/**
+ * Appends a DM message to the chat display.
+ * @param {object} msg
+ * @param {boolean} [prepend=false]
+ */
+function appendDmMessage(msg, prepend = false) {
+  const el = document.createElement('div');
+  el.className = 'chat-msg';
+  el.dataset.messageId = msg.id;
+  el.dataset.senderUserId = msg.senderUserId;
+
+  const header = document.createElement('div');
+  header.className = 'chat-msg-header';
+
+  const nick = document.createElement('span');
+  nick.className = 'chat-msg-nick';
+  nick.textContent = msg.senderNickname || msg.senderUserId;
+  if (msg.senderRoleColor) {
+    nick.style.color = msg.senderRoleColor;
+  }
+  header.appendChild(nick);
+
+  const time = document.createElement('span');
+  time.className = 'chat-msg-time';
+  time.textContent = formatTime(msg.timestamp);
+  time.title = formatDateTime(msg.timestamp);
+  header.appendChild(time);
+
+  el.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'chat-msg-body';
+  body.innerHTML = renderMarkdown(escapeHtml(msg.content));
+  el.appendChild(body);
+
+  if (msg.linkPreviews && msg.linkPreviews.length > 0) {
+    for (const preview of msg.linkPreviews) {
+      el.appendChild(createLinkPreviewEl(preview));
+    }
+  }
+
+  if (prepend) {
+    chatMessages.insertBefore(el, chatMessages.firstChild);
+  } else {
+    const atBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 80;
+    chatMessages.appendChild(el);
+    if (atBottom) {
+      scrollToBottom();
+    }
+  }
+}
+
+/**
+ * Creates a link preview element.
+ * @param {object} preview
+ * @returns {HTMLElement}
+ */
+function createLinkPreviewEl(preview) {
+  const container = document.createElement('div');
+  container.className = 'link-preview';
+  if (preview.title) {
+    const title = document.createElement('div');
+    title.className = 'link-preview-title';
+    title.textContent = preview.title;
+    container.appendChild(title);
+  }
+  if (preview.description) {
+    const desc = document.createElement('div');
+    desc.className = 'link-preview-desc';
+    desc.textContent = preview.description;
+    container.appendChild(desc);
+  }
+  if (preview.image) {
+    const img = document.createElement('img');
+    img.className = 'link-preview-image';
+    img.src = preview.image;
+    container.appendChild(img);
+  }
+  return container;
+}
+
+/**
+ * Handles incoming DM messages.
+ * @param {CustomEvent} e
+ */
+function onDmMessage(e) {
+  const msg = e.detail;
+  const myUserId = serverService.userId;
+  const otherUserId = msg.senderUserId === myUserId ? msg.recipientUserId : msg.senderUserId;
+
+  if (activeTab.type === 'dm' && activeTab.recipientUserId === otherUserId) {
+    appendDmMessage(msg);
+  } else {
+    let pending = dmMessagesPending.get(otherUserId);
+    if (!pending) {
+      pending = [];
+      dmMessagesPending.set(otherUserId, pending);
+    }
+    pending.push(msg);
+
+    // Mark DM tab as unread if it exists
+    const tab = dmTabs.find((t) => t.recipientUserId === otherUserId);
+    if (tab) {
+      tab.unread = true;
+      renderTabs();
+    }
+
+    // Show unread badge on DM button
+    const badge = document.getElementById('dm-unread-badge');
+    if (badge) {
+      badge.classList.remove('hidden');
+    }
+  }
+}
+
+/**
+ * Handles DM message deletion.
+ * @param {CustomEvent} e
+ */
+function onDmMessageDeleted(e) {
+  const { messageId } = e.detail;
+  const el = chatMessages.querySelector(`[data-message-id="${messageId}"]`);
+  if (el) {
+    el.remove();
+  }
+}
+
+/**
+ * Handles DM link preview updates.
+ * @param {CustomEvent} e
+ */
+function onDmLinkPreview(e) {
+  const { messageId, previews } = e.detail;
+  const el = chatMessages.querySelector(`[data-message-id="${messageId}"]`);
+  if (el && previews) {
+    for (const preview of previews) {
+      el.appendChild(createLinkPreviewEl(preview));
+    }
+  }
+}
+
+/**
+ * Handles the gimodi:open-dm window event.
+ * @param {CustomEvent} e
+ */
+function onOpenDm(e) {
+  const { userId, displayName } = e.detail;
+  openDmTab(userId, displayName);
 }
 
 /**
@@ -2693,6 +2946,8 @@ async function loadOlderMessages() {
       await loadOlderChannelMessages(pg);
     } else if (activeTab.type === 'channel-view') {
       await loadOlderChannelViewMessages(pg);
+    } else if (activeTab.type === 'dm') {
+      await loadOlderDmMessages(pg);
     }
     // Restore scroll position so new messages appear above without jumping
     chatMessages.scrollTop = prevTop + (chatMessages.scrollHeight - prevHeight);
@@ -2745,6 +3000,50 @@ async function loadOlderChannelViewMessages(pg) {
   chatMessages.prepend(frag);
 }
 
+async function loadOlderDmMessages(pg) {
+  const { recipientUserId } = activeTab;
+  const result = await chatService.fetchDmHistory(recipientUserId, pg.oldestTs, HISTORY_PAGE_SIZE);
+  if (!result?.messages || activeTab.type !== 'dm' || activeTab.recipientUserId !== recipientUserId) {
+    return;
+  }
+  const sorted = [...result.messages].reverse();
+  updatePaginationFromMessages(pg, result.messages);
+  const frag = document.createDocumentFragment();
+  for (const msg of sorted) {
+    const el = document.createElement('div');
+    el.className = 'chat-msg';
+    el.dataset.messageId = msg.id;
+    el.dataset.senderUserId = msg.senderUserId;
+
+    const header = document.createElement('div');
+    header.className = 'chat-msg-header';
+    const nick = document.createElement('span');
+    nick.className = 'chat-msg-nick';
+    nick.textContent = msg.senderNickname || msg.senderUserId;
+    header.appendChild(nick);
+    const time = document.createElement('span');
+    time.className = 'chat-msg-time';
+    time.textContent = formatTime(msg.timestamp);
+    time.title = formatDateTime(msg.timestamp);
+    header.appendChild(time);
+    el.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'chat-msg-body';
+    body.innerHTML = renderMarkdown(escapeHtml(msg.content));
+    el.appendChild(body);
+
+    if (msg.linkPreviews && msg.linkPreviews.length > 0) {
+      for (const preview of msg.linkPreviews) {
+        el.appendChild(createLinkPreviewEl(preview));
+      }
+    }
+
+    frag.appendChild(el);
+  }
+  chatMessages.prepend(frag);
+}
+
 function openLightbox(src, alt, meta) {
   const overlay = document.createElement('div');
   overlay.className = 'lightbox-overlay';
@@ -2781,7 +3080,7 @@ function onNavigateChannel(e) {
 function switchToTab(tab) {
   console.log('[chat] switchToTab', tab.type, tab.channelId || '', 'from', activeTab.type, activeTab.channelId || '');
   const isSameTab =
-    activeTab.type === tab.type && (tab.type === 'channel' || (tab.type === 'channel-view' && activeTab.channelId === tab.channelId));
+    activeTab.type === tab.type && (tab.type === 'channel' || (tab.type === 'channel-view' && activeTab.channelId === tab.channelId) || (tab.type === 'dm' && activeTab.recipientUserId === tab.recipientUserId));
   if (isSameTab) {
     renderTabs();
     return;
@@ -2798,6 +3097,16 @@ function switchToTab(tab) {
     if (!cached) {
       cached = [];
       channelViewMessagesCache.set(activeTab.channelId, cached);
+    }
+    cached.length = 0;
+    for (const child of chatMessages.children) {
+      cached.push(child);
+    }
+  } else if (activeTab.type === 'dm') {
+    let cached = dmMessagesCache.get(activeTab.recipientUserId);
+    if (!cached) {
+      cached = [];
+      dmMessagesCache.set(activeTab.recipientUserId, cached);
     }
     cached.length = 0;
     for (const child of chatMessages.children) {
@@ -2866,6 +3175,26 @@ function switchToTab(tab) {
     } else {
       loadChannelViewHistory(tab.channelId);
     }
+  } else if (tab.type === 'dm') {
+    const dmTab = dmTabs.find((t) => t.recipientUserId === tab.recipientUserId);
+    if (dmTab) {
+      dmTab.unread = false;
+    }
+    const cached = dmMessagesCache.get(tab.recipientUserId);
+    if (cached && cached.length > 0) {
+      for (const node of cached) {
+        chatMessages.appendChild(node);
+      }
+      cached.length = 0;
+      const pending = dmMessagesPending.get(tab.recipientUserId) || [];
+      for (const msg of pending) {
+        appendDmMessage(msg);
+      }
+      dmMessagesPending.delete(tab.recipientUserId);
+      scrollToBottom();
+    } else {
+      loadDmHistory(tab.recipientUserId);
+    }
   }
 
   renderTabs();
@@ -2918,7 +3247,31 @@ function renderTabs() {
     tab.draggable = true;
     addTabDragListeners(tab, i);
 
-    {
+    if (entry.type === 'dm') {
+      const dm = dmTabs.find((t) => t.recipientUserId === entry.id);
+      if (!dm) {
+        continue;
+      }
+      tab.className = `tab dm-tab${activeTab.type === 'dm' && activeTab.recipientUserId === dm.recipientUserId ? ' active' : ''}${dm.unread ? ' unread' : ''}`;
+      tab.dataset.type = 'dm';
+      tab.dataset.recipientUserId = dm.recipientUserId;
+
+      const label = document.createElement('span');
+      label.className = 'tab-label';
+      label.textContent = '@' + dm.displayName;
+      tab.appendChild(label);
+
+      const closeBtn = document.createElement('span');
+      closeBtn.className = 'tab-close';
+      closeBtn.innerHTML = '&times;';
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeDmTab(dm.recipientUserId);
+      });
+      tab.appendChild(closeBtn);
+
+      tab.addEventListener('click', () => switchToTab({ type: 'dm', recipientUserId: dm.recipientUserId, displayName: dm.displayName }));
+    } else {
       const cv = channelViewTabs.find((t) => t.channelId === entry.id);
       if (!cv) {
         continue;

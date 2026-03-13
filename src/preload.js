@@ -13,6 +13,12 @@ contextBridge.exposeInMainWorld('gimodi', {
     reorder: (fromIndex, toIndex) => ipcRenderer.invoke('servers:reorder', fromIndex, toIndex),
     save: (items) => ipcRenderer.invoke('servers:save', items),
   },
+  friends: {
+    list: () => ipcRenderer.invoke('friends:list'),
+    add: (friend) => ipcRenderer.invoke('friends:add', friend),
+    remove: (userId) => ipcRenderer.invoke('friends:remove', userId),
+    update: (userId, updates) => ipcRenderer.invoke('friends:update', userId, updates),
+  },
   settings: {
     load: () => ipcRenderer.invoke('settings:load'),
     save: (settings) => ipcRenderer.invoke('settings:save', settings),

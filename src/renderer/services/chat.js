@@ -56,6 +56,18 @@ class ChatService extends EventTarget {
     serverService.addEventListener('chat:purged', (e) => {
       this.dispatchEvent(new CustomEvent('purged', { detail: e.detail }));
     });
+
+    serverService.addEventListener('dm:receive', (e) => {
+      this.dispatchEvent(new CustomEvent('dm-message', { detail: e.detail }));
+    });
+
+    serverService.addEventListener('dm:deleted', (e) => {
+      this.dispatchEvent(new CustomEvent('dm-message-deleted', { detail: e.detail }));
+    });
+
+    serverService.addEventListener('dm:link-preview', (e) => {
+      this.dispatchEvent(new CustomEvent('dm-link-preview', { detail: e.detail }));
+    });
   }
 
   /**
@@ -187,6 +199,33 @@ class ChatService extends EventTarget {
    */
   removePreview(messageId) {
     return serverService.request('chat:remove-preview', { messageId });
+  }
+
+  /**
+   * @param {string} recipientUserId
+   * @param {string} content
+   * @param {string} [replyTo]
+   */
+  sendDm(recipientUserId, content, replyTo = null) {
+    serverService.send('dm:send', { recipientUserId, content, replyTo });
+  }
+
+  /**
+   * @param {string} recipientUserId
+   * @param {number} [before]
+   * @param {number} [limit=50]
+   * @returns {Promise<object>}
+   */
+  async fetchDmHistory(recipientUserId, before, limit = 50) {
+    return serverService.request('dm:history', { recipientUserId, before, limit });
+  }
+
+  /**
+   * @param {string} messageId
+   * @returns {Promise<object>}
+   */
+  deleteDmMessage(messageId) {
+    return serverService.request('dm:delete', { messageId });
   }
 }
 

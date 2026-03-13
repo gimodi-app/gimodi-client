@@ -38,6 +38,7 @@ import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoi
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
 import { initSidePanel } from './views/side-panel.js';
+import { initFriendsView, cleanup as cleanupFriends } from './views/friends.js';
 
 const log = (...args) => console.log('[app]', ...args);
 
@@ -415,6 +416,7 @@ function switchToServer(key) {
     cleanupVoice();
   }
   cleanupChat();
+  cleanupFriends();
   cleanupServer();
   if (!voiceActive) {
     stopMicLevelMeter();
@@ -567,6 +569,7 @@ window.addEventListener('gimodi:connected', async (e) => {
 
   log('Initial channel:', channelId, '(lobby)');
   initChatView(channelId);
+  initFriendsView();
   initSidePanel(getViewingChannelId);
   initUnreadState(data.channels, serverService.address);
 
