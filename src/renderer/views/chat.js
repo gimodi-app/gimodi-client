@@ -340,6 +340,9 @@ function onChannelMentionClick(e) {
  * @param {MouseEvent} ev
  */
 function onNickContextMenu(ev) {
+  if (!provider?.supportsTabs) {
+    return;
+  }
   const nickEl = ev.target.closest('.chat-msg-nick, .compact-nick, .chat-msg-nick-group, .admin-badge');
   if (!nickEl) {
     return;
