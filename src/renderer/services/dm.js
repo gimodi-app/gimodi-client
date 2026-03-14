@@ -289,6 +289,8 @@ export class DmService extends EventTarget {
         ...participants,
       ];
       encryptedKeys = await window.gimodi.identity.encryptSessionKey(sessionKey, allParticipants);
+      console.log('[DmService] createConversation encryptedKeys fingerprints:', Object.keys(encryptedKeys));
+      console.log('[DmService] createConversation allParticipants:', allParticipants.map((p) => ({ fp: p.fingerprint, hasKey: !!p.publicKeyArmored })));
     }
 
     const participantFingerprints = fingerprints;
@@ -353,7 +355,11 @@ export class DmService extends EventTarget {
         if (conv.type === 'group' && conv.encryptedSessionKey) {
           try {
             conv.sessionKey = await window.gimodi.identity.decryptSessionKey(conv.encryptedSessionKey);
-          } catch {}
+          } catch (err) {
+            console.error('[DmService] Failed to decrypt session key on fetch for', conv.id, err);
+          }
+        } else if (conv.type === 'group') {
+          console.warn('[DmService] Group conversation fetched without encryptedSessionKey', conv.id);
         }
         this._conversations.set(conv.id, conv);
       } else {
@@ -732,7 +738,11 @@ export class DmService extends EventTarget {
     if (type === 'group' && encryptedKey) {
       try {
         sessionKey = await window.gimodi.identity.decryptSessionKey(encryptedKey);
-      } catch {}
+      } catch (err) {
+        console.error('[DmService] Failed to decrypt session key for conversation', conversationId, err);
+      }
+    } else if (type === 'group') {
+      console.warn('[DmService] Group conversation invite received without encryptedKey', conversationId);
     }
 
     const conv = {
