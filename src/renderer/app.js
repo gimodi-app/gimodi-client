@@ -1961,7 +1961,9 @@ window.gimodiDebug = {
       localStorage.removeItem(key);
     }
     if (dmService) {
-      dmService._messages = [];
+      dmService._conversations.clear();
+      dmService._saveConversationsToStorage();
+      dmService.fetchConversations().catch(() => {});
     }
     if (friendsService) {
       friendsService._pendingRequests.clear();

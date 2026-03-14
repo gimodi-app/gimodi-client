@@ -293,11 +293,21 @@ export class DmService extends EventTarget {
 
     const participantFingerprints = fingerprints;
 
-    const result = await server.conn.request('conversation:create', {
-      participants: participantFingerprints,
-      encryptedKeys,
-      name: isGroup ? name : null,
-    });
+    let result;
+    try {
+      result = await server.conn.request('conversation:create', {
+        participants: participantFingerprints,
+        encryptedKeys,
+        name: isGroup ? name : null,
+      });
+    } catch (err) {
+      if (err.code === 'CONVERSATION_EXISTS' && err.conversationId) {
+        await this.fetchConversations();
+        const existing = this._conversations.get(err.conversationId);
+        if (existing) return existing;
+      }
+      throw err;
+    }
 
     const conv = {
       id: result.id,
