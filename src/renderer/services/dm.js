@@ -289,8 +289,6 @@ export class DmService extends EventTarget {
         ...participants,
       ];
       encryptedKeys = await window.gimodi.identity.encryptSessionKey(sessionKey, allParticipants);
-      console.log('[DmService] createConversation encryptedKeys fingerprints:', Object.keys(encryptedKeys));
-      console.log('[DmService] createConversation allParticipants:', allParticipants.map((p) => ({ fp: p.fingerprint, hasKey: !!p.publicKeyArmored })));
     }
 
     const participantFingerprints = fingerprints;

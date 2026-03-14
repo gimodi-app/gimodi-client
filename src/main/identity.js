@@ -270,30 +270,28 @@ async function encryptMessage(recipientPublicKeys, plaintext) {
 }
 
 /**
- * Decrypt an armored PGP message using the current default identity's private key.
+ * Decrypt an armored PGP message using all available identities' private keys.
+ * @param {string} armoredMessage
+ * @returns {Promise<string>}
  */
 async function decryptMessage(armoredMessage) {
   const pgp = await getOpenpgp();
-  const identities = loadIdentities();
-  const defaultIdentity = identities.find((i) => i.isDefault) || identities[0];
-  if (!defaultIdentity) {
+
+  const rawIdentities = JSON.parse(require('fs').readFileSync(getIdentitiesPath(), 'utf-8'));
+  const keyed = rawIdentities.filter((i) => i.privateKeyArmored);
+  if (keyed.length === 0) {
     throw new Error('No identity available for decryption.');
   }
 
-  // We need the full private key, but loadIdentities() strips it.
-  // Load raw from file.
-  const rawIdentities = JSON.parse(require('fs').readFileSync(getIdentitiesPath(), 'utf-8'));
-  const raw = rawIdentities.find((i) => i.fingerprint === defaultIdentity.fingerprint);
-  if (!raw || !raw.privateKeyArmored) {
-    throw new Error('Private key not found.');
-  }
+  const decryptionKeys = await Promise.all(
+    keyed.map((i) => pgp.readPrivateKey({ armoredKey: i.privateKeyArmored })),
+  );
 
-  const privateKey = await pgp.readPrivateKey({ armoredKey: raw.privateKeyArmored });
   const message = await pgp.readMessage({ armoredMessage });
 
   const { data } = await pgp.decrypt({
     message,
-    decryptionKeys: privateKey,
+    decryptionKeys,
   });
 
   return data;
