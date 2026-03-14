@@ -1505,6 +1505,11 @@ connectionManager.addEventListener('background-connected', (e) => {
   const { key, data, server } = e.detail;
   log('Background connected:', key, data.serverName);
 
+  const fpIdx = key.indexOf('\0');
+  if (fpIdx >= 0) {
+    ensureDmServices(key.slice(fpIdx + 1));
+  }
+
   if (data.serverName && data.serverName !== server.name) {
     server.name = data.serverName;
     window.gimodi.servers.add(server);
