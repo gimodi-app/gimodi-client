@@ -154,7 +154,33 @@ class DmChatProvider {
       this._seenMessageIds.add(m.id);
     }
     const formatted = messages.map((m) => this._toMessageFormat(m));
+
+    this._fetchFromServer();
+
     return { messages: formatted.reverse() };
+  }
+
+  /**
+   * Fetches history from the server and emits any new messages not already seen.
+   * @private
+   */
+  async _fetchFromServer() {
+    try {
+      const connectionManager = (await import('../connectionManager.js')).default;
+      const activeKey = connectionManager.activeKey;
+      if (!activeKey) return;
+
+      await this._dmService.fetchHistory(this._conversationId, activeKey);
+
+      const messages = this._dmService.getConversation(this._conversationId);
+      for (const m of messages) {
+        if (!this._seenMessageIds.has(m.id)) {
+          this._seenMessageIds.add(m.id);
+          const msg = this._toMessageFormat(m);
+          this.events.dispatchEvent(new CustomEvent('message', { detail: msg }));
+        }
+      }
+    } catch {}
   }
 
   /**

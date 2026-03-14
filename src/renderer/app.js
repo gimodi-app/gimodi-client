@@ -1949,7 +1949,7 @@ window.gimodiDebug = {
    * Wipes all friends and DM data from localStorage and resets in-memory state.
    */
   clearAllFriends() {
-    const prefixes = ['dm_friends_', 'dm_ignored_', 'dm_blocked_', 'dm_messages_', 'dm_purged_', 'dm_conversations_', 'dm_reactions_', 'dm_migrated_v2_'];
+    const prefixes = ['dm_friends_', 'dm_ignored_', 'dm_blocked_', 'dm_messages_', 'dm_purged_', 'dm_conversations_', 'dm_reactions_'];
     const keys = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
