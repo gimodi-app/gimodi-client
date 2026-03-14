@@ -3005,6 +3005,10 @@ label:has(input[type='checkbox']) {
   position: relative;
 }
 
+.chat-input-wrapper-server {
+  margin-bottom: 10px;
+}
+
 .chat-input-wrapper textarea {
   width: 100%;
   box-sizing: border-box;
