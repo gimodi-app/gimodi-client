@@ -106,10 +106,24 @@ class DmChatProvider {
 
   /**
    * @param {string} content
-   * @param {{ id: string, nickname: string, content: string }|null} [replyTo]
+   * @param {string|null} [replyTo] - message UUID of the replied-to message
    */
   async sendMessage(content, replyTo = null) {
-    await this._dmService.sendDm(this._peerFingerprint, content, replyTo);
+    let replyToObj = null;
+    if (replyTo) {
+      const msgs = this._dmService.getConversation(this._peerFingerprint);
+      const orig = msgs.find((m) => m.id === replyTo);
+      if (orig) {
+        replyToObj = {
+          id: replyTo,
+          nickname: orig.direction === 'sent' ? this._ownNickname : this._peerNickname,
+          content: orig.content,
+        };
+      } else {
+        replyToObj = { id: replyTo };
+      }
+    }
+    await this._dmService.sendDm(this._peerFingerprint, content, replyToObj);
   }
 
   /**

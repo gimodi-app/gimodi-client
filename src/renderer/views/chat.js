@@ -3598,7 +3598,7 @@ function renderReplyPreview() {
     return;
   }
 
-  const inputRow = document.querySelector('.chat-input-row');
+  const inputRow = chatInput?.closest('.chat-input-row');
   if (!previewEl) {
     previewEl = document.createElement('div');
     previewEl.id = 'reply-preview';
