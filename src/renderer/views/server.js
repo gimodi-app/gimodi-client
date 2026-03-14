@@ -3112,12 +3112,8 @@ export function showUserContextMenu(e, user, options = {}) {
 
   if (isOther) {
     if (user.fingerprint) {
-      addItem('Add Friend', async () => {
-        const nickname = await customPrompt(`Nickname for ${user.nickname}:`, user.nickname);
-        if (nickname === null) {
-          return;
-        }
-        window.dispatchEvent(new CustomEvent('gimodi:add-friend', { detail: { fingerprint: user.fingerprint, nickname: nickname.trim() || user.nickname } }));
+      addItem('Send Friend Request', async () => {
+        window.dispatchEvent(new CustomEvent('gimodi:add-friend', { detail: { fingerprint: user.fingerprint, nickname: user.nickname } }));
       });
     }
 

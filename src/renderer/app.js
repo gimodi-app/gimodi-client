@@ -1839,13 +1839,17 @@ window.addEventListener('gimodi:show-server-view', () => {
   }
 });
 
-window.addEventListener('gimodi:add-friend', (e) => {
+window.addEventListener('gimodi:add-friend', async (e) => {
   const { fingerprint, nickname } = e.detail;
   if (!friendsService) {
     customAlert('Connect with an identity to add friends.');
     return;
   }
-  friendsService.addFriend(fingerprint, nickname);
+  try {
+    await friendsService.sendRequest(fingerprint);
+  } catch {
+    friendsService.addFriend(fingerprint, nickname);
+  }
 });
 
 window.addEventListener('gimodi:connected', (e) => {
