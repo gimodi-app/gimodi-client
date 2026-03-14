@@ -2405,7 +2405,6 @@ function buildMessageEl(msg, prevEl) {
     el.classList.add('chat-msg-grouped');
     el.innerHTML = `
       ${compactHtml}
-      <span class="chat-msg-hover-time">${time}</span>
       ${replyRefHtml}
       <div class="chat-msg-body${emojiOnly ? ' emoji-only' : ''}">${bodyHtml}</div>
       ${editedLabel}
@@ -2413,7 +2412,6 @@ function buildMessageEl(msg, prevEl) {
   } else {
     el.innerHTML = `
       ${compactHtml}
-      <span class="chat-msg-hover-time">${time}</span>
       <div class="chat-msg-header">
         <span class="chat-msg-nick-group"><span class="chat-msg-nick" style="color:${nickColor}">${escapeHtml(displayNickname)}</span>${badgeHtml}</span>
         <span class="chat-msg-time">${headerTime}</span>${editedLabel}
@@ -2673,12 +2671,8 @@ function refreshNodeTimestamps(el) {
       compactTimeEl.title = formatDateTime(ts);
     }
     const timeEl = el.querySelector('.chat-msg-time');
-    const hoverEl = el.querySelector('.chat-msg-hover-time');
     if (timeEl) {
       timeEl.textContent = formatRelativeTime(ts);
-    }
-    if (hoverEl) {
-      hoverEl.textContent = formatTime(ts);
     }
     el.title = formatDateTime(ts);
   }

@@ -2689,7 +2689,7 @@ label:has(input[type='checkbox']) {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  margin-top: 20px;
+  margin-top: 4px;
 }
 
 .chat-msg-nick-group {
