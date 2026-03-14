@@ -5580,6 +5580,7 @@ input.is-invalid {
 .server-sidebar-dm {
   border-bottom: 1px solid var(--border);
   margin-bottom: 4px;
+  background-color: var(--bg-input);
 }
 
 #view-dm {
@@ -5606,6 +5607,10 @@ input.is-invalid {
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
+}
+
+.server-sidebar-dm:before {
+  display: none;
 }
 
 .dm-sidebar-header {

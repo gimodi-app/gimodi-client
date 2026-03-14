@@ -399,6 +399,9 @@ function showView(id) {
   viewServer.classList.remove('active');
   viewDm.classList.remove('active');
   document.getElementById(id).classList.add('active');
+  if (id !== 'view-dm') {
+    document.getElementById('btn-dm-view').classList.remove('active');
+  }
 }
 
 // --- Multi-server helpers ---
@@ -419,6 +422,11 @@ async function switchToServer(key, options) {
 
   const prevKey = connectionManager.activeKey;
   if (prevKey === key) {
+    if (viewDm.classList.contains('active')) {
+      setActiveServer(key);
+      rerenderSidebar();
+      showView('view-server');
+    }
     return;
   }
 
@@ -1829,23 +1837,24 @@ document.getElementById('btn-dm-view').addEventListener('click', () => {
   }
   refreshDmView();
   showView('view-dm');
+  document.getElementById('btn-dm-view').classList.add('active');
+  setActiveServer(null);
+  rerenderSidebar();
 });
 
-window.addEventListener('gimodi:show-server-view', () => {
-  if (connectionManager.activeKey) {
-    showView('view-server');
-  } else {
-    showView('view-connect');
-  }
-});
-
-window.addEventListener('gimodi:add-friend', (e) => {
+window.addEventListener('gimodi:add-friend', async (e) => {
   const { fingerprint, nickname } = e.detail;
   if (!friendsService) {
     customAlert('Connect with an identity to add friends.');
     return;
   }
-  friendsService.addFriend(fingerprint, nickname);
+  try {
+    await friendsService.sendRequest(fingerprint);
+    console.log('[app] Friend request sent successfully to', fingerprint);
+  } catch (err) {
+    console.warn('[app] Friend request failed, falling back to local add:', err);
+    friendsService.addFriend(fingerprint, nickname);
+  }
 });
 
 window.addEventListener('gimodi:connected', (e) => {
@@ -1861,3 +1870,32 @@ window.addEventListener('gimodi:connected', (e) => {
     ensureDmServices(identityFingerprint);
   }
 }, true);
+
+/**
+ * DevTools utilities. Callable via gimodiDebug.clearAllFriends() in the console.
+ */
+window.gimodiDebug = {
+  /**
+   * Wipes all friends and DM data from localStorage and resets in-memory state.
+   */
+  clearAllFriends() {
+    const prefixes = ['dm_friends_', 'dm_ignored_', 'dm_blocked_', 'dm_messages_', 'dm_purged_'];
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (prefixes.some((p) => key.startsWith(p))) {
+        keys.push(key);
+      }
+    }
+    for (const key of keys) {
+      localStorage.removeItem(key);
+    }
+    if (dmService) {
+      dmService._messages = [];
+    }
+    if (friendsService) {
+      friendsService._pendingRequests.clear();
+    }
+    console.log(`[gimodi] Cleared ${keys.length} friend/DM entries from localStorage.`);
+  },
+};

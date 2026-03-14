@@ -227,6 +227,62 @@ function buildRequestItem(peer) {
 }
 
 /**
+ * Builds a friend request item element with Accept and Reject buttons.
+ * @param {{requestId: string, senderFingerprint: string, senderNickname: string, createdAt: number}} req
+ * @returns {HTMLElement}
+ */
+function buildFriendRequestItem(req) {
+  const item = document.createElement('div');
+  item.className = 'dm-conv-item dm-request-item';
+  item.dataset.requestId = req.requestId;
+
+  const top = document.createElement('div');
+  top.className = 'dm-conv-name';
+  top.innerHTML = `${escapeHtml(req.senderNickname)} <span class="dm-conv-time">${formatTime(req.createdAt)}</span>`;
+
+  const previewEl = document.createElement('div');
+  previewEl.className = 'dm-conv-preview';
+  previewEl.textContent = 'Wants to be your friend';
+
+  const actions = document.createElement('div');
+  actions.className = 'dm-request-actions';
+
+  const acceptBtn = document.createElement('button');
+  acceptBtn.className = 'dm-request-accept';
+  acceptBtn.textContent = 'Accept';
+  acceptBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      await friendsService.acceptRequest(req.requestId);
+      renderConversationList();
+    } catch (err) {
+      customAlert('Failed to accept friend request: ' + err.message);
+    }
+  });
+
+  const rejectBtn = document.createElement('button');
+  rejectBtn.className = 'dm-request-ignore';
+  rejectBtn.textContent = 'Reject';
+  rejectBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      await friendsService.rejectRequest(req.requestId);
+      renderConversationList();
+    } catch (err) {
+      customAlert('Failed to reject friend request: ' + err.message);
+    }
+  });
+
+  actions.appendChild(acceptBtn);
+  actions.appendChild(rejectBtn);
+
+  item.appendChild(top);
+  item.appendChild(previewEl);
+  item.appendChild(actions);
+  return item;
+}
+
+/**
  * Renders the conversation list in the left panel.
  */
 function renderConversationList() {
@@ -258,11 +314,24 @@ function renderConversationList() {
     }
   }
 
+  const friendRequests = friendsService?.getPendingRequests() ?? [];
+
   list.innerHTML = '';
 
-  if (knownPeers.size === 0 && requests.length === 0) {
-    list.innerHTML = '<div class="dm-empty-hint">No conversations yet.<br>Right-click a user to add them as a friend.</div>';
+  if (knownPeers.size === 0 && requests.length === 0 && friendRequests.length === 0) {
+    list.innerHTML = '<div class="dm-empty-hint">No conversations yet.<br>Right-click a user to send them a friend request.</div>';
     return;
+  }
+
+  if (friendRequests.length > 0) {
+    const header = document.createElement('div');
+    header.className = 'dm-section-header';
+    header.textContent = `Friend Requests (${friendRequests.length})`;
+    list.appendChild(header);
+
+    for (const req of friendRequests) {
+      list.appendChild(buildFriendRequestItem(req));
+    }
   }
 
   if (requests.length > 0) {
@@ -430,6 +499,10 @@ async function handleSend() {
 export function updateDmServices(dm, friends) {
   dmService = dm;
   friendsService = friends;
+  friendsService.addEventListener('friend:request-received', () => renderConversationList());
+  friendsService.addEventListener('friend:accepted', () => renderConversationList());
+  friendsService.addEventListener('friend:rejected', () => renderConversationList());
+  friendsService.addEventListener('friend:removed', () => renderConversationList());
   activePeer = null;
   renderConversationList();
   renderMessages();
@@ -466,9 +539,13 @@ export function initDmView(dm, friends) {
     }
   });
 
+  friendsService.addEventListener('friend:request-received', () => renderConversationList());
+  friendsService.addEventListener('friend:accepted', () => renderConversationList());
+  friendsService.addEventListener('friend:rejected', () => renderConversationList());
+  friendsService.addEventListener('friend:removed', () => renderConversationList());
+
   const sendBtn = el('btn-dm-send');
   const input = el('dm-input');
-  const backBtn = el('btn-dm-back');
 
   if (sendBtn) sendBtn.addEventListener('click', handleSend);
 
@@ -484,12 +561,6 @@ export function initDmView(dm, friends) {
       input.style.height = Math.min(input.scrollHeight, 120) + 'px';
     });
     input.disabled = true;
-  }
-
-  if (backBtn) {
-    backBtn.addEventListener('click', () => {
-      window.dispatchEvent(new CustomEvent('gimodi:show-server-view'));
-    });
   }
 
   renderConversationList();
