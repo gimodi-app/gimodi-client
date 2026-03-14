@@ -728,6 +728,14 @@ export class DmService extends EventTarget {
       const existing = this._conversations.get(conversationId);
       existing.participants = participants;
       existing.name = name;
+      if (!existing.sessionKey && existing.type === 'group' && encryptedKey) {
+        try {
+          existing.sessionKey = await window.gimodi.identity.decryptSessionKey(encryptedKey);
+          existing.encryptedSessionKey = encryptedKey;
+        } catch (err) {
+          console.error('[DmService] Failed to decrypt session key for conversation', conversationId, err);
+        }
+      }
       this._saveConversationsToStorage();
       return;
     }

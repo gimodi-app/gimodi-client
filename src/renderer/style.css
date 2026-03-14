@@ -570,8 +570,13 @@ body {
   z-index: 1;
 }
 
-/* Observe mode indicator (gray dot) */
-.server-sidebar-btn.observe::after {
+/* Offline server indicator (greyscale icon + red dot) */
+.server-sidebar-btn.offline img {
+  filter: grayscale(100%);
+  opacity: 0.5;
+}
+
+.server-sidebar-btn.offline::after {
   content: '';
   position: absolute;
   bottom: 2px;
@@ -579,7 +584,7 @@ body {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #6b7280;
+  background: #ef4444;
   border: 2px solid var(--bg-primary);
   z-index: 1;
 }

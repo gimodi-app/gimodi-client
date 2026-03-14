@@ -282,8 +282,8 @@ function createServerButton(server, pathStr) {
   if (isReconnecting) {
     btn.classList.add('reconnecting');
   }
-  if (isObserve) {
-    btn.classList.add('observe');
+  if (!isConnected && !isReconnecting && !isObserve) {
+    btn.classList.add('offline');
   }
   if (isVoice) {
     btn.classList.add('voice-active');
