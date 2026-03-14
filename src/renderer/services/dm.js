@@ -210,7 +210,7 @@ export class DmService extends EventTarget {
 
     const onReceive = (e) => this._handleReceived(e.detail);
     const onDelivered = (e) => this._handleDelivered(e.detail);
-    const onInvite = (e) => this._handleConversationInvite(e.detail);
+    const onInvite = (e) => this._handleConversationInvite(e.detail, key);
     const onParticipantJoined = (e) => this._handleParticipantJoined(e.detail);
     const onParticipantLeft = (e) => this._handleParticipantLeft(e.detail);
     const onKeyUpdate = (e) => this._handleKeyUpdate(e.detail);
@@ -271,6 +271,19 @@ export class DmService extends EventTarget {
       }
     }
     return fallback;
+  }
+
+  /**
+   * @private
+   * @param {Conversation} conv
+   * @returns {{key: string, conn: object}|null}
+   */
+  _getServerForConversation(conv) {
+    if (conv.serverKey) {
+      const conn = connectionManager.getConnection(conv.serverKey);
+      if (conn?.connected) return { key: conv.serverKey, conn };
+    }
+    return this._pickServer();
   }
 
   // ── Conversation Management ─────────────────────────────────────────────
@@ -334,6 +347,7 @@ export class DmService extends EventTarget {
       participants: result.participants,
       encryptedSessionKey: result.encryptedSessionKey ?? null,
       sessionKey: null,
+      serverKey: server.key,
       createdAt: result.createdAt,
     };
 
@@ -365,6 +379,7 @@ export class DmService extends EventTarget {
           participants: raw.participants,
           encryptedSessionKey: raw.encryptedSessionKey ?? null,
           sessionKey: null,
+          serverKey: server.key,
           createdAt: raw.createdAt,
         };
         if (conv.type === 'group' && conv.encryptedSessionKey) {
@@ -381,6 +396,7 @@ export class DmService extends EventTarget {
         const existing = this._conversations.get(raw.id);
         existing.participants = raw.participants;
         existing.name = raw.name;
+        if (!existing.serverKey) existing.serverKey = server.key;
         if (!existing.sessionKey && existing.type === 'group' && raw.encryptedSessionKey) {
           try {
             existing.sessionKey = await window.gimodi.identity.decryptSessionKey(raw.encryptedSessionKey);
@@ -521,7 +537,7 @@ export class DmService extends EventTarget {
     const conv = this._conversations.get(conversationId);
     if (!conv) throw new Error('Conversation not found');
 
-    const server = this._pickServer();
+    const server = this._getServerForConversation(conv);
     if (!server) throw new Error('No server connected');
 
     const id = crypto.randomUUID();
@@ -748,13 +764,14 @@ export class DmService extends EventTarget {
    * @private
    * @param {object} detail
    */
-  async _handleConversationInvite(detail) {
+  async _handleConversationInvite(detail, serverKey) {
     const { conversationId, name, type, creatorFingerprint, participants, encryptedKey } = detail;
 
     if (this._conversations.has(conversationId)) {
       const existing = this._conversations.get(conversationId);
       existing.participants = participants;
       existing.name = name;
+      if (serverKey) existing.serverKey = serverKey;
       if (!existing.sessionKey && existing.type === 'group' && encryptedKey) {
         try {
           existing.sessionKey = await window.gimodi.identity.decryptSessionKey(encryptedKey);
@@ -787,15 +804,16 @@ export class DmService extends EventTarget {
       participants,
       encryptedSessionKey: encryptedKey,
       sessionKey,
+      serverKey: serverKey || null,
       createdAt: Date.now(),
     };
 
     this._conversations.set(conversationId, conv);
     this._saveConversationsToStorage();
 
-    const server = this._pickServer();
-    if (server) {
-      server.conn.send('conversation:joined', { conversationId });
+    const connObj = serverKey ? connectionManager.getConnection(serverKey) : null;
+    if (connObj?.connected) {
+      connObj.send('conversation:joined', { conversationId });
     }
 
     this.dispatchEvent(new CustomEvent('conversation-invite', { detail: conv }));

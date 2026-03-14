@@ -175,11 +175,12 @@ class DmChatProvider {
    */
   async _fetchFromServer() {
     try {
+      const conv = this._dmService.getConversationMeta(this._conversationId);
       const connectionManager = (await import('../connectionManager.js')).default;
-      const activeKey = connectionManager.activeKey;
-      if (!activeKey) return;
+      const serverKey = conv?.serverKey || connectionManager.activeKey;
+      if (!serverKey) return;
 
-      await this._dmService.fetchHistory(this._conversationId, activeKey);
+      await this._dmService.fetchHistory(this._conversationId, serverKey);
 
       const messages = this._dmService.getConversation(this._conversationId);
       for (const m of messages) {
