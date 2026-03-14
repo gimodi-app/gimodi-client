@@ -1,6 +1,7 @@
 const HEARTBEAT_SEND_INTERVAL = 10_000;
 const HEARTBEAT_TIMEOUT = 20_000;
 const CONNECT_TIMEOUT = 5_000;
+const RECONNECT_MAX_DELAY = 30_000;
 
 export class ServerService extends EventTarget {
   constructor() {
@@ -31,6 +32,16 @@ export class ServerService extends EventTarget {
     this._heartbeatInterval = null;
     /** @type {number|null} */
     this._inactivityTimeout = null;
+    /** @type {boolean} */
+    this._reconnecting = false;
+    /** @type {number} */
+    this._reconnectAttempts = 0;
+    /** @type {number|null} */
+    this._reconnectTimer = null;
+    /** @type {boolean} */
+    this._intentionalDisconnect = false;
+    /** @type {{address: string, nickname: string, password?: string, publicKey?: string}|null} */
+    this._connectParams = null;
   }
 
   /** @private */
@@ -66,9 +77,18 @@ export class ServerService extends EventTarget {
    * @param {string} nickname
    * @param {string} [password]
    * @param {string} [publicKey]
+   * @param {{mode?: 'observe'|'full'}} [options]
    * @returns {Promise<object>}
    */
-  connect(address, nickname, password, publicKey) {
+  connect(address, nickname, password, publicKey, options) {
+    const mode = options?.mode || 'full';
+    this._mode = mode;
+    this._connectParams = { address, nickname, password, publicKey, mode };
+    this._intentionalDisconnect = false;
+    this._reconnecting = false;
+    this._reconnectAttempts = 0;
+    this.stopReconnect();
+
     return new Promise((resolve, reject) => {
       let url = address;
       if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
@@ -111,6 +131,7 @@ export class ServerService extends EventTarget {
             password: password || undefined,
             clientVersion,
             publicKey: publicKey || undefined,
+            mode: mode || undefined,
           });
           this.clientId = data.clientId;
           this.userId = data.userId || null;
@@ -142,8 +163,15 @@ export class ServerService extends EventTarget {
         this._rejectPendingRequests('Connection closed');
         const reason = this._disconnectReason;
         this._disconnectReason = null;
+
+        const disconnectType = this._classifyDisconnect(reason);
         this._resetState();
-        this.dispatchEvent(new CustomEvent('disconnected', { detail: { reason } }));
+
+        this.dispatchEvent(new CustomEvent('disconnected', { detail: { reason, disconnectType } }));
+
+        if (disconnectType === 'connection-lost' || disconnectType === 'shutdown') {
+          this._attemptReconnect();
+        }
       };
 
       this.ws.onerror = () => {
@@ -153,9 +181,153 @@ export class ServerService extends EventTarget {
   }
 
   /**
+   * @param {string|null} reason
+   * @returns {string}
+   */
+  _classifyDisconnect(reason) {
+    if (this._intentionalDisconnect) {
+      return 'intentional';
+    }
+    if (!reason) {
+      return 'connection-lost';
+    }
+    if (reason.startsWith('Kicked:')) {
+      return 'kicked';
+    }
+    if (reason.startsWith('Banned:')) {
+      return 'banned';
+    }
+    if (reason.startsWith('Server shut down:')) {
+      return 'shutdown';
+    }
+    return 'connection-lost';
+  }
+
+  /** @private */
+  _attemptReconnect() {
+    if (!this._connectParams) {
+      return;
+    }
+    this._reconnecting = true;
+    this._reconnectAttempts++;
+    const delay = Math.min(1000 * Math.pow(2, this._reconnectAttempts - 1), RECONNECT_MAX_DELAY);
+
+    this.dispatchEvent(new CustomEvent('reconnecting', { detail: { attempt: this._reconnectAttempts } }));
+
+    this._reconnectTimer = setTimeout(async () => {
+      if (!this._reconnecting) {
+        return;
+      }
+
+      const { address, nickname, password, publicKey, mode: reconnectMode } = this._connectParams;
+      let url = address;
+      if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
+        url = `wss://${url}`;
+      }
+
+      try {
+        this.ws = new WebSocket(url);
+
+        await new Promise((resolve, reject) => {
+          const ws = this.ws;
+          const timer = setTimeout(() => {
+            ws.onopen = null;
+            ws.onmessage = null;
+            ws.onclose = null;
+            ws.onerror = null;
+            ws.close();
+            reject(new Error('timeout'));
+          }, CONNECT_TIMEOUT);
+
+          ws.onopen = async () => {
+            clearTimeout(timer);
+            try {
+              const clientVersion = await window.gimodi.getVersion().catch(() => null);
+              const data = await this.request('server:connect', {
+                nickname,
+                password: password || undefined,
+                clientVersion,
+                publicKey: publicKey || undefined,
+                mode: reconnectMode || undefined,
+              });
+              this.clientId = data.clientId;
+              this.userId = data.userId || null;
+              this.permissions = new Set(data.permissions || []);
+              this.serverName = data.serverName;
+              this.serverVersion = data.serverVersion || null;
+              this.maxFileSize = data.maxFileSize || null;
+              this.tempChannelDeleteDelay = data.tempChannelDeleteDelay || 180;
+              this.address = address;
+              this._startHeartbeat();
+              this._reconnecting = false;
+              this._reconnectAttempts = 0;
+              this._intentionalDisconnect = false;
+
+              // Rebind onclose to trigger auto-reconnect on future disconnects
+              ws.onclose = () => {
+                this._stopHeartbeat();
+                this._rejectPendingRequests('Connection closed');
+                const closeReason = this._disconnectReason;
+                this._disconnectReason = null;
+                const closeType = this._classifyDisconnect(closeReason);
+                this._resetState();
+                this.dispatchEvent(new CustomEvent('disconnected', { detail: { reason: closeReason, disconnectType: closeType } }));
+                if (closeType === 'connection-lost' || closeType === 'shutdown') {
+                  this._attemptReconnect();
+                }
+              };
+
+              this.dispatchEvent(new CustomEvent('reconnected', { detail: data }));
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          };
+
+          ws.onmessage = (event) => {
+            let msg;
+            try {
+              msg = JSON.parse(event.data);
+            } catch {
+              return;
+            }
+            this._handleMessage(msg);
+          };
+
+          ws.onclose = () => {
+            clearTimeout(timer);
+            this._stopHeartbeat();
+            this._rejectPendingRequests('Connection closed');
+            reject(new Error('connection closed'));
+          };
+
+          ws.onerror = () => {
+            clearTimeout(timer);
+            reject(new Error('connection error'));
+          };
+        });
+      } catch {
+        if (this._reconnecting) {
+          this._attemptReconnect();
+        }
+      }
+    }, delay);
+  }
+
+  /** @returns {void} */
+  stopReconnect() {
+    this._reconnecting = false;
+    this._reconnectAttempts = 0;
+    clearTimeout(this._reconnectTimer);
+    this._reconnectTimer = null;
+  }
+
+  /**
    * @returns {void}
    */
   disconnect() {
+    this._intentionalDisconnect = true;
+    this.stopReconnect();
     this._stopHeartbeat();
     this._rejectPendingRequests('Disconnected');
     if (this.ws) {
@@ -168,6 +340,31 @@ export class ServerService extends EventTarget {
       ws.close();
     }
     this._resetState();
+  }
+
+  /**
+   * Upgrades from observe to full mode over the existing WebSocket.
+   * @returns {Promise<object>}
+   */
+  async upgrade() {
+    const data = await this.request('server:upgrade', {});
+    this._mode = 'full';
+    if (this._connectParams) {
+      this._connectParams.mode = 'full';
+    }
+    this.clientId = data.clientId;
+    this.userId = data.userId || null;
+    this.permissions = new Set(data.permissions || []);
+    this.serverName = data.serverName;
+    this.serverVersion = data.serverVersion || null;
+    this.maxFileSize = data.maxFileSize || null;
+    this.tempChannelDeleteDelay = data.tempChannelDeleteDelay || 180;
+    return data;
+  }
+
+  /** @returns {string} */
+  get mode() {
+    return this._mode || 'full';
   }
 
   /** @private */
@@ -249,6 +446,9 @@ export class ServerService extends EventTarget {
       if (type === 'server:error') {
         const err = new Error(data.message || data.code);
         err.code = data.code;
+        for (const [k, v] of Object.entries(data)) {
+          if (k !== 'message' && k !== 'code') err[k] = v;
+        }
         reject(err);
       } else {
         resolve(data);
@@ -271,5 +471,10 @@ export class ServerService extends EventTarget {
   /** @returns {boolean} */
   get connected() {
     return this.ws && this.ws.readyState === WebSocket.OPEN && this.clientId;
+  }
+
+  /** @returns {boolean} */
+  get reconnecting() {
+    return this._reconnecting;
   }
 }

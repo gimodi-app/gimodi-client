@@ -269,12 +269,21 @@ function createServerButton(server, pathStr) {
   const isActive = activeServerKey && key === activeServerKey;
   const isConnected = connectionManager.isConnected(key);
   const isVoice = connectionManager.voiceKey === key;
+  const status = connectionManager.getStatus(key);
+  const isReconnecting = status === 'reconnecting';
 
   if (isActive) {
     btn.classList.add('active');
   }
   if (isConnected) {
     btn.classList.add('connected');
+  }
+  const isObserve = connectionManager.getMode(key) === 'observe';
+  if (isReconnecting) {
+    btn.classList.add('reconnecting');
+  }
+  if (!isConnected && !isReconnecting && !isObserve) {
+    btn.classList.add('offline');
   }
   if (isVoice) {
     btn.classList.add('voice-active');
@@ -313,13 +322,13 @@ function createServerButton(server, pathStr) {
     }
     clickTimer = setTimeout(() => {
       clickTimer = null;
-      if (isConnected && !isActive) {
+      if ((isConnected || isObserve) && !isActive) {
         window.dispatchEvent(
           new CustomEvent('gimodi:switch-server', {
             detail: { connKey: connKey(server.address, server.identityFingerprint) },
           }),
         );
-      } else if (!isConnected) {
+      } else if (!isConnected && !isReconnecting && !isObserve) {
         _connectCallback(server);
       }
     }, 250);
@@ -329,9 +338,15 @@ function createServerButton(server, pathStr) {
       clearTimeout(clickTimer);
       clickTimer = null;
     }
-    if (!isConnected) {
+    if (!isConnected && !isReconnecting && !isObserve) {
       _connectCallback(server, { autoJoin: true });
-    } else {
+    } else if (isObserve) {
+      window.dispatchEvent(
+        new CustomEvent('gimodi:switch-server', {
+          detail: { connKey: connKey(server.address, server.identityFingerprint), autoJoin: true },
+        }),
+      );
+    } else if (isConnected) {
       if (!isActive) {
         window.dispatchEvent(
           new CustomEvent('gimodi:switch-server', {
@@ -347,7 +362,7 @@ function createServerButton(server, pathStr) {
     e.preventDefault();
     e.stopPropagation();
     hideTooltip();
-    showServerContextMenu(e, server, isConnected);
+    showServerContextMenu(e, server);
   });
 
   btn._server = server;
@@ -718,8 +733,11 @@ function showTooltip(e, server) {
   tooltipEl.appendChild(name);
   const addr = document.createElement('div');
   addr.className = 'tooltip-addr';
-  const isConnected = connectionManager.isConnected(connKey(server.address, server.identityFingerprint));
-  addr.textContent = `${server.address} · ${server.nickname}${isConnected ? ' · Connected' : ''}`;
+  const sKey = connKey(server.address, server.identityFingerprint);
+  const sStatus = connectionManager.getStatus(sKey);
+  const sMode = connectionManager.getMode(sKey);
+  const statusLabel = sStatus === 'connected' && sMode === 'observe' ? ' · Observing' : sStatus === 'connected' ? ' · Connected' : sStatus === 'reconnecting' ? ' · Reconnecting...' : sStatus === 'connecting' ? ' · Connecting...' : '';
+  addr.textContent = `${server.address} · ${server.nickname}${statusLabel}`;
   tooltipEl.appendChild(addr);
   document.body.appendChild(tooltipEl);
 
@@ -761,40 +779,16 @@ function hideTooltip() {
  * @param {Object} server
  * @param {boolean} isConnected
  */
-function showServerContextMenu(e, server, isConnected) {
+function showServerContextMenu(e, server) {
   dismissContextMenu();
+  const key = connKey(server.address, server.identityFingerprint);
+  const isConnected = connectionManager.isConnected(key);
   contextMenuEl = document.createElement('div');
   contextMenuEl.className = 'context-menu';
   contextMenuEl.style.position = 'fixed';
   contextMenuEl.style.left = e.clientX + 'px';
   contextMenuEl.style.top = e.clientY + 'px';
   contextMenuEl.style.zIndex = '10000';
-
-  if (isConnected) {
-    const disconnectItem = document.createElement('div');
-    disconnectItem.className = 'context-menu-item';
-    disconnectItem.textContent = 'Disconnect';
-    disconnectItem.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      dismissContextMenu();
-      window.dispatchEvent(
-        new CustomEvent('gimodi:disconnect-server', {
-          detail: { connKey: connKey(server.address, server.identityFingerprint) },
-        }),
-      );
-    });
-    contextMenuEl.appendChild(disconnectItem);
-  } else {
-    const openItem = document.createElement('div');
-    openItem.className = 'context-menu-item';
-    openItem.textContent = 'Connect';
-    openItem.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      dismissContextMenu();
-      _connectCallback(server);
-    });
-    contextMenuEl.appendChild(openItem);
-  }
 
   const parentGroup = servers.find((item) => item.type === 'group' && item.servers.includes(server));
   if (parentGroup) {
@@ -836,17 +830,11 @@ function showServerContextMenu(e, server, isConnected) {
   removeItemEl.addEventListener('click', async (ev) => {
     ev.stopPropagation();
     dismissContextMenu();
-    if (isConnected) {
-      window.dispatchEvent(
-        new CustomEvent('gimodi:disconnect-server', {
-          detail: { connKey: connKey(server.address, server.identityFingerprint) },
-        }),
-      );
-    }
-    await window.gimodi.servers.remove(server.address, server.nickname, server.identityFingerprint);
-    removeServerByIdentity(server.address, server.nickname, server.identityFingerprint);
-    cleanupGroups();
-    renderSidebar();
+    window.dispatchEvent(
+      new CustomEvent('gimodi:remove-server', {
+        detail: { connKey: key, server },
+      }),
+    );
   });
   contextMenuEl.appendChild(removeItemEl);
 

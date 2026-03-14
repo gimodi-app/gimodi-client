@@ -39,7 +39,7 @@ class NotificationService extends EventTarget {
   }
 
   /**
-   * @param {{ type: 'channel', channelId: string } | { type: 'dm', userId: string }} action
+   * @param {{ type: 'channel', channelId: string }} action
    */
   clearByAction(action) {
     if (!action) {
@@ -52,9 +52,6 @@ class NotificationService extends EventTarget {
       }
       if (action.type === 'channel') {
         return !(e.action.type === 'channel' && e.action.channelId === action.channelId);
-      }
-      if (action.type === 'dm') {
-        return !(e.action.type === 'dm' && e.action.userId === action.userId);
       }
       return true;
     });
@@ -76,13 +73,13 @@ class NotificationService extends EventTarget {
 
   /**
    * @param {object} opts
-   * @param {'mention'|'message'|'dm'} opts.type
+   * @param {'mention'|'message'} opts.type
    * @param {string} opts.title
    * @param {string} opts.body
    * @param {object} [opts.action]
    */
   show({ type, title, body, action }) {
-    if (type === 'mention' || type === 'dm') {
+    if (type === 'mention') {
       this._addEntry({ type, title, body, action });
       const clone = sndNotification.cloneNode();
       clone.volume = 0.4;
@@ -97,10 +94,7 @@ class NotificationService extends EventTarget {
     if (mode === 'none') {
       return;
     }
-    if (mode === 'dms' && type !== 'dm') {
-      return;
-    }
-    if (mode === 'mentions' && type !== 'mention' && type !== 'dm') {
+    if (mode === 'mentions' && type !== 'mention') {
       return;
     }
 

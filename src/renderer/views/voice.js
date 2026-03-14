@@ -326,7 +326,8 @@ export function cleanup() {
 }
 
 function onClientJoined(e) {
-  const { clientId, userId } = e.detail;
+  const { clientId, userId, observe } = e.detail;
+  if (observe) return;
   if (userId) {
     clientUserMap.set(clientId, userId);
   }

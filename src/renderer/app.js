@@ -2,7 +2,7 @@ import serverService from './services/server.js';
 import connectionManager, { connKey, addressFromKey } from './services/connectionManager.js';
 import voiceService from './services/voice.js';
 import notificationService from './services/notifications.js';
-import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects } from './views/connect.js';
+import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects, removeServerByIdentity } from './views/connect.js';
 import {
   initServerView,
   cleanup as cleanupServer,
@@ -38,6 +38,10 @@ import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoi
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
 import { initSidePanel } from './views/side-panel.js';
+import { initDmView, updateDmServices, refreshDmView, openDmConversation } from './views/dm.js';
+import { DmService } from './services/dm.js';
+import { FriendsService } from './services/friends.js';
+import ServerChatProvider from './services/chat-providers/server.js';
 
 const log = (...args) => console.log('[app]', ...args);
 
@@ -166,6 +170,32 @@ document.addEventListener('click', (e) => {
 // Views
 const viewConnect = document.getElementById('view-connect');
 const viewServer = document.getElementById('view-server');
+const viewDm = document.getElementById('view-dm');
+
+/** @type {DmService|null} */
+let dmService = null;
+/** @type {FriendsService|null} */
+let friendsService = null;
+let dmViewInitialized = false;
+const dmButton = document.getElementById('btn-dm-view');
+
+/**
+ * Shows or hides the unread indicator on the DM button.
+ * Skips showing it when the DM view is already active.
+ */
+function setDmUnread() {
+  if (viewDm.classList.contains('active')) {
+    return;
+  }
+  dmButton.classList.add('has-unread');
+}
+
+/**
+ * Clears the unread indicator on the DM button.
+ */
+function clearDmUnread() {
+  dmButton.classList.remove('has-unread');
+}
 
 // Create channel modal
 const modalCreateChannel = document.getElementById('modal-create-channel');
@@ -361,7 +391,14 @@ initConnectView();
 initSidebar();
 loadSettings();
 
-// Menu: Disconnect (disconnects the currently viewed server)
+// Auto-connect to all saved servers on startup
+(async () => {
+  const servers = (await window.gimodi.servers.list()) || [];
+  const identities = (await window.gimodi.identity.loadAll()) || [];
+  connectionManager.connectAll(servers.flatMap((s) => (s.type === 'group' ? s.servers : [s])), identities);
+})();
+
+// Menu: Disconnect (leave voice on the currently viewed server)
 window.gimodi.onDisconnect(() => {
   const key = connectionManager.activeKey;
   log('Menu disconnect clicked, active:', key);
@@ -380,7 +417,11 @@ window.gimodi.onOpenUnifiedSettings(() => {
 function showView(id) {
   viewConnect.classList.remove('active');
   viewServer.classList.remove('active');
+  viewDm.classList.remove('active');
   document.getElementById(id).classList.add('active');
+  if (id !== 'view-dm') {
+    dmButton.classList.remove('active');
+  }
 }
 
 // --- Multi-server helpers ---
@@ -394,13 +435,40 @@ function saveCurrentViewState(key) {
   connectionManager.saveServerState(key, { server: serverState, chat: chatState });
 }
 
-function switchToServer(key) {
+async function switchToServer(key, options) {
   if (!connectionManager.isConnected(key)) {
     return;
   }
 
   const prevKey = connectionManager.activeKey;
   if (prevKey === key) {
+    if (viewDm.classList.contains('active')) {
+      cleanupChat();
+      const saved = connectionManager.getServerState(key);
+      if (saved?.chat) {
+        restoreChatState(saved.chat, new ServerChatProvider(saved.chat.currentChannelId || null));
+      } else {
+        initChatView(null, new ServerChatProvider(null));
+      }
+      setActiveServer(key);
+      rerenderSidebar();
+      showView('view-server');
+    }
+    return;
+  }
+
+  if (connectionManager.getMode(key) === 'observe') {
+    try {
+      const data = await connectionManager.upgrade(key);
+      data._connKey = key;
+      if (options?.autoJoin) {
+        data.autoJoin = true;
+      }
+      window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: data }));
+      rerenderSidebar();
+    } catch (err) {
+      appendSystemMessage(`Upgrade failed: ${err.message}`);
+    }
     return;
   }
 
@@ -426,41 +494,74 @@ function switchToServer(key) {
   connectionManager._rebindProxyListeners(oldConn, newConn);
   connectionManager.activeKey = key;
 
-  // Restore saved state or re-init
+  // Restore saved state or fetch fresh data
   const saved = connectionManager.getServerState(key);
   if (saved) {
     restoreServerState(saved.server);
-    restoreChatState(saved.chat);
+    restoreChatState(saved.chat, new ServerChatProvider(saved.chat?.currentChannelId || null));
     if (!voiceActive) {
       initVoiceView([]);
     }
+
+    setActiveServer(key);
+    rerenderSidebar();
+    showView('view-server');
+
+    window.gimodi.setAdminStatus(serverService.hasPermission('server.admin_menu'), true);
+    updateAdminIconVisibility();
+
+    setVoiceControlsVisible(!!connectionManager.voiceKey);
+    if (connectionManager.voiceKey) {
+      syncVoiceControlsUI();
+      syncLocalVoiceIndicators();
+    }
+
+    log('Switched view to', key);
+  } else {
+    // No saved state (e.g. background-connected server clicked for first time)
+    // Use cached connect data from background connection
+    const connectData = connectionManager.getConnectData(key);
+    if (connectData) {
+      connectData._connKey = key;
+      window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: connectData }));
+    } else {
+      // Fallback: init with minimal data, request channels separately
+      const data = {
+        _connKey: key,
+        serverName: newConn.serverName,
+        serverVersion: newConn.serverVersion,
+        clientId: newConn.clientId,
+        userId: newConn.userId,
+        permissions: [...newConn.permissions],
+        maxFileSize: newConn.maxFileSize,
+        tempChannelDeleteDelay: newConn.tempChannelDeleteDelay,
+        channels: [],
+        clients: [],
+      };
+      window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: data }));
+    }
   }
-
-  setActiveServer(key);
-  rerenderSidebar();
-  showView('view-server');
-
-  // Update admin icon
-  window.gimodi.setAdminStatus(serverService.hasPermission('server.admin_menu'), true);
-  updateAdminIconVisibility();
-
-  // Show voice controls only when connected to a voice channel
-  setVoiceControlsVisible(!!connectionManager.voiceKey);
-  if (connectionManager.voiceKey) {
-    syncVoiceControlsUI();
-    syncLocalVoiceIndicators();
-  }
-
-  log('Switched view to', key);
 }
 
 // Listen for view-switch requests from sidebar
 window.addEventListener('gimodi:switch-server', (e) => {
-  switchToServer(e.detail.connKey);
+  switchToServer(e.detail.connKey, { autoJoin: e.detail.autoJoin });
 });
 
 window.addEventListener('gimodi:disconnect-server', (e) => {
   disconnectServer(e.detail.connKey);
+});
+
+window.addEventListener('gimodi:remove-server', async (e) => {
+  const { connKey: key, server } = e.detail;
+  const conn = connectionManager.getConnection(key);
+  if (conn) {
+    conn.stopReconnect();
+    disconnectServer(key);
+  }
+  await window.gimodi.servers.remove(server.address, server.nickname, server.identityFingerprint);
+  removeServerByIdentity(server.address, server.nickname, server.identityFingerprint);
+  rerenderSidebar();
 });
 
 window.addEventListener('gimodi:auto-join-voice', () => {
@@ -566,15 +667,23 @@ window.addEventListener('gimodi:connected', async (e) => {
   const channelId = null;
 
   log('Initial channel:', channelId, '(lobby)');
-  initChatView(channelId);
+  const serverChatProvider = new ServerChatProvider(channelId);
+  initChatView(channelId, serverChatProvider);
   initSidePanel(getViewingChannelId);
   initUnreadState(data.channels, serverService.address);
 
-  // Auto-join first channel when connecting via double-click
+  // Auto-join channel: string = specific channel ID (reconnect rejoin), true = default channel (double-click)
   if (data.autoJoin) {
-    const defaultChannel = data.channels.find((c) => c.isDefault && c.type !== 'group') || data.channels.find((c) => c.type !== 'group');
-    if (defaultChannel) {
-      switchChannel(defaultChannel.id);
+    if (typeof data.autoJoin === 'string') {
+      const targetChannel = data.channels.find((c) => c.id === data.autoJoin);
+      if (targetChannel) {
+        switchChannel(targetChannel.id);
+      }
+    } else {
+      const defaultChannel = data.channels.find((c) => c.isDefault && c.type !== 'group') || data.channels.find((c) => c.type !== 'group');
+      if (defaultChannel) {
+        switchChannel(defaultChannel.id);
+      }
     }
   }
 
@@ -588,12 +697,10 @@ window.addEventListener('gimodi:connected', async (e) => {
       .filter((t) => validChannelIds.has(t.channelId))
       .map((t) => ({ channelId: t.channelId, channelName: channelNameMap.get(t.channelId) || t.channelName, ...(t.password !== null && t.password !== undefined && { password: t.password }) }));
     const activeChannelId = saved.activeChannelId && validChannelIds.has(saved.activeChannelId) ? saved.activeChannelId : null;
-    const savedDmTabs = saved.dmTabs || [];
     const savedTabOrder = saved.tabOrder || [];
-    const activeDmUserId = saved.activeDmUserId || null;
 
-    if (cvTabs.length > 0 || savedDmTabs.length > 0 || activeChannelId || activeDmUserId) {
-      restoreTabs({ cvTabs, dmTabs: savedDmTabs, savedTabOrder, activeChannelId, activeDmUserId });
+    if (cvTabs.length > 0 || activeChannelId) {
+      restoreTabs({ cvTabs, savedTabOrder, activeChannelId });
     }
   }
   suppressTabSave = false;
@@ -1339,9 +1446,6 @@ window.gimodi.onNotificationClicked((action) => {
   if (action.type === 'channel') {
     // Navigate to channel (trigger join via chat view)
     window.dispatchEvent(new CustomEvent('gimodi:navigate-channel', { detail: { channelId: action.channelId } }));
-  } else if (action.type === 'dm') {
-    // Open DM tab
-    window.dispatchEvent(new CustomEvent('gimodi:open-dm', { detail: action }));
   }
 });
 
@@ -1377,108 +1481,98 @@ connectionManager.addEventListener('voice-server-changed', () => {
   setVoiceControlsVisible(!!connectionManager.voiceKey);
 });
 
+/** @type {Map<string, string>} Stores the voice channel ID per connection key for rejoin after reconnect. */
+const _pendingVoiceRejoin = new Map();
+
 // Handle unexpected connection loss from connectionManager
-let _reconnectAbort = null;
-
 connectionManager.addEventListener('connection-lost', (e) => {
-  const { key, reason, hadVoice } = e.detail;
-  log('Connection lost:', key, reason);
+  const { key, reason, hadVoice, willReconnect } = e.detail;
+  log('Connection lost:', key, reason, 'willReconnect:', willReconnect);
 
-  // Auto-reconnect on server shutdown (not kick/ban)
-  // Capture channel state before disconnect cleanup clears it
-  const creds = connectionManager.getCredentials(key);
-  const previousChannelId = reason && reason.startsWith('Server shut down:') && creds && hadVoice ? getCurrentChannelId() : null;
+  if (willReconnect) {
+    if (hadVoice && connectionManager.activeKey === key) {
+      const channelId = getCurrentChannelId();
+      if (channelId) {
+        _pendingVoiceRejoin.set(key, channelId);
+      }
+      voiceService.cleanup();
+      connectionManager.clearVoiceServer();
+      setVoiceChannel(null);
+      stopMicLevelMeter();
+    }
+    appendSystemMessage(`Connection lost. Reconnecting...`);
+    rerenderSidebar();
+    return;
+  }
 
+  // Kick/ban/intentional - dispatch full disconnected event
   window.dispatchEvent(
     new CustomEvent('gimodi:disconnected', {
       detail: { connKey: key, reason },
     }),
   );
 
-  if (reason && reason.startsWith('Server shut down:') && creds) {
-    attemptReconnect(key, creds, previousChannelId);
-    return;
-  }
-
-  // Clean up stored credentials since we won't reconnect
-  connectionManager._credentials.delete(key);
-
   if (reason) {
-    const errorEl = document.getElementById('connect-error');
-    if (errorEl) {
-      errorEl.textContent = reason;
-    }
+    appendSystemMessage(reason);
   }
 });
 
-const modalReconnect = document.getElementById('modal-reconnect');
-const reconnectStatus = document.getElementById('reconnect-status');
-const btnCancelReconnect = document.getElementById('btn-cancel-reconnect');
+// Handle successful reconnection
+connectionManager.addEventListener('reconnected', (e) => {
+  const { key, data } = e.detail;
+  log('Reconnected to', key);
+  rerenderSidebar();
 
-btnCancelReconnect.addEventListener('click', () => {
-  if (_reconnectAbort) {
-    _reconnectAbort.abort();
-    _reconnectAbort = null;
+  const rejoinChannelId = _pendingVoiceRejoin.get(key);
+  _pendingVoiceRejoin.delete(key);
+
+  if (connectionManager.activeKey === key) {
+    if (rejoinChannelId) {
+      data.autoJoin = rejoinChannelId;
+    }
+    data._connKey = key;
+    window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: data }));
   }
-  modalReconnect.classList.add('hidden');
+  appendSystemMessage('Reconnected to server.');
 });
 
-async function attemptReconnect(key, creds, previousChannelId) {
-  const controller = new AbortController();
-  _reconnectAbort = controller;
+// Handle background connections (auto-connect on startup)
+connectionManager.addEventListener('background-connected', (e) => {
+  const { key, data, server } = e.detail;
+  log('Background connected:', key, data.serverName);
 
-  reconnectStatus.textContent = 'Server shut down. Reconnecting...';
-  modalReconnect.classList.remove('hidden');
-
-  const MAX_ATTEMPTS = 10;
-  for (let i = 1; i <= MAX_ATTEMPTS; i++) {
-    if (controller.signal.aborted) {
-      break;
-    }
-
-    reconnectStatus.textContent = `Reconnecting... (attempt ${i}/${MAX_ATTEMPTS})`;
-
-    await new Promise((r) => setTimeout(r, 1000));
-    if (controller.signal.aborted) {
-      break;
-    }
-
-    try {
-      const address = addressFromKey(key);
-      const data = await connectionManager.connect(key, address, creds.nickname, creds.password, creds.publicKey);
-      // Success
-      _reconnectAbort = null;
-      modalReconnect.classList.add('hidden');
-      data._connKey = key;
-      window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: data }));
-      log('Reconnected to', key);
-
-      // Rejoin previous channel (which also sets up voice)
-      if (previousChannelId) {
-        const channelStillExists = data.channels?.some((c) => c.id === previousChannelId);
-        if (channelStillExists) {
-          log('Rejoining channel', previousChannelId);
-          await switchChannel(previousChannelId);
-        }
-      }
-      return;
-    } catch (err) {
-      log(`Reconnect attempt ${i} failed:`, err.message);
-    }
+  const fpIdx = key.indexOf('\0');
+  if (fpIdx >= 0 && !dmService) {
+    ensureDmServices(key.slice(fpIdx + 1));
   }
 
-  // All attempts failed or cancelled
-  _reconnectAbort = null;
-  modalReconnect.classList.add('hidden');
-  connectionManager._credentials.delete(key);
-
-  if (!controller.signal.aborted) {
-    const errorEl = document.getElementById('connect-error');
-    if (errorEl) {
-      errorEl.textContent = 'Failed to reconnect to server.';
-    }
+  if (data.serverName && data.serverName !== server.name) {
+    server.name = data.serverName;
+    window.gimodi.servers.add(server);
   }
-}
+
+  const conn = connectionManager.getConnection(key);
+  if (conn && data.mode === 'observe') {
+    conn.addEventListener('notify:mention', (ev) => {
+      const d = ev.detail;
+      const sName = conn.serverName || server.name || server.address;
+      notificationService.show(`Mention in ${sName}`, `${d.nickname} in #${d.channelName}: ${d.content}`);
+      rerenderSidebar();
+    });
+    conn.addEventListener('server:poked', (ev) => {
+      const d = ev.detail;
+      const sName = conn.serverName || server.name || server.address;
+      notificationService.show(`Poke from ${sName}`, d.message || 'You were poked.');
+    });
+  }
+
+  rerenderSidebar();
+});
+
+// Update sidebar when connection status changes
+connectionManager.addEventListener('connection-status-changed', () => {
+  rerenderSidebar();
+});
 
 // --- Menu: connect to server from history ---
 
@@ -1743,3 +1837,137 @@ async function populateDeviceSelectors() {
     });
   }
 }
+
+// --- Direct Messages ---
+
+/**
+ * Initializes or reinitializes the DM and Friends services for the given fingerprint.
+ * @param {string} fingerprint
+ */
+async function ensureDmServices(fingerprint) {
+  if (dmService?._fingerprint === fingerprint) {
+    return;
+  }
+
+  const migrationKey = `dm_migrated_v2_${fingerprint}`;
+  if (!localStorage.getItem(migrationKey)) {
+    const msgKey = `dm_messages_${fingerprint}`;
+    if (localStorage.getItem(msgKey)) {
+      localStorage.removeItem(msgKey);
+      localStorage.removeItem(`dm_purged_${fingerprint}`);
+      localStorage.removeItem(`dm_reactions_${fingerprint}`);
+    }
+    localStorage.setItem(migrationKey, '1');
+  }
+
+  const allIdentities = await window.gimodi.identity.loadAll();
+  const identity = allIdentities.find((i) => i.fingerprint === fingerprint);
+  const publicKey = identity?.publicKeyArmored ?? '';
+  dmService = new DmService(fingerprint, publicKey);
+  friendsService = new FriendsService(fingerprint);
+  dmService.addEventListener('message-received', setDmUnread);
+  dmService.addEventListener('conversation-invite', setDmUnread);
+  friendsService.addEventListener('friend:request-received', setDmUnread);
+  if (!dmViewInitialized) {
+    initDmView(dmService, friendsService);
+    dmViewInitialized = true;
+  } else {
+    updateDmServices(dmService, friendsService);
+  }
+  dmService.fetchConversations().catch(() => {});
+}
+
+dmButton.addEventListener('click', () => {
+  if (!dmService) {
+    customAlert('Connect to a server with an identity to use Direct Messages.');
+    return;
+  }
+  const activeKey = connectionManager.activeKey;
+  if (activeKey) {
+    saveCurrentViewState(activeKey);
+  }
+  clearDmUnread();
+  refreshDmView();
+  showView('view-dm');
+  dmButton.classList.add('active');
+  setActiveServer(null);
+  rerenderSidebar();
+});
+
+window.addEventListener('gimodi:open-dm', (e) => {
+  const { fingerprint } = e.detail;
+  if (!dmService) {
+    customAlert('Connect to a server with an identity to use Direct Messages.');
+    return;
+  }
+  const activeKey = connectionManager.activeKey;
+  if (activeKey) {
+    saveCurrentViewState(activeKey);
+  }
+  clearDmUnread();
+  showView('view-dm');
+  dmButton.classList.add('active');
+  setActiveServer(null);
+  rerenderSidebar();
+  openDmConversation(fingerprint);
+});
+
+window.addEventListener('gimodi:add-friend', async (e) => {
+  const { fingerprint, nickname } = e.detail;
+  if (!friendsService) {
+    customAlert('Connect with an identity to add friends.');
+    return;
+  }
+  try {
+    await friendsService.sendRequest(fingerprint);
+    console.log('[app] Friend request sent successfully to', fingerprint);
+  } catch (err) {
+    console.warn('[app] Friend request failed, falling back to local add:', err);
+    friendsService.addFriend(fingerprint, nickname);
+  }
+});
+
+window.addEventListener('gimodi:connected', (e) => {
+  let identityFingerprint = e.detail.identityFingerprint;
+  if (!identityFingerprint) {
+    const key = e.detail._connKey;
+    if (key) {
+      const idx = key.indexOf('\0');
+      identityFingerprint = idx >= 0 ? key.slice(idx + 1) : null;
+    }
+  }
+  if (identityFingerprint) {
+    ensureDmServices(identityFingerprint);
+  }
+}, true);
+
+/**
+ * DevTools utilities. Callable via gimodiDebug.clearAllFriends() in the console.
+ */
+window.gimodiDebug = {
+  /**
+   * Wipes all friends and DM data from localStorage and resets in-memory state.
+   */
+  clearAllFriends() {
+    const prefixes = ['dm_friends_', 'dm_ignored_', 'dm_blocked_', 'dm_messages_', 'dm_purged_', 'dm_conversations_', 'dm_reactions_'];
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (prefixes.some((p) => key.startsWith(p))) {
+        keys.push(key);
+      }
+    }
+    for (const key of keys) {
+      localStorage.removeItem(key);
+    }
+    if (dmService) {
+      dmService._conversations.clear();
+      dmService._saveConversationsToStorage();
+      dmService.fetchConversations().catch(() => {});
+    }
+    if (friendsService) {
+      friendsService._pendingRequests.clear();
+    }
+    console.log(`[gimodi] Cleared ${keys.length} friend/DM entries from localStorage.`);
+  },
+};

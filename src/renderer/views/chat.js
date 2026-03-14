@@ -1,5 +1,3 @@
-import serverService from '../services/server.js';
-import chatService from '../services/chat.js';
 import notificationService from '../services/notifications.js';
 import { tryHandleCommand, isSlashCommand } from '../services/commands.js';
 import { showEmojiPicker, closeEmojiPicker, isPickerOpen } from './emoji-picker.js';
@@ -7,7 +5,7 @@ import { setNickname, invalidateNickname, getCachedNickname, resolveNicknames } 
 import { formatTime, formatTimeShort, formatDateTime, formatRelativeTime } from '../services/timeFormat.js';
 import { customConfirm } from '../services/dialogs.js';
 import { renderMarkdown, escapeHtml, replaceEmoticons, isEmojiOnly } from './chat-markdown.js';
-import { renderReactions, showQuickReactionPicker, onReactionUpdate } from './chat-reactions.js';
+import { renderReactions, showQuickReactionPicker, onReactionUpdate, setReactionProvider } from './chat-reactions.js';
 import { searchEmoji, getEmoji } from '../services/emoji-shortcodes.js';
 
 const MAX_MESSAGE_LENGTH = 4000;
@@ -15,17 +13,21 @@ const MAX_MESSAGE_LENGTH = 4000;
 let compactMode = false;
 let mediaEmbedPrivacy = true;
 
-const chatMessages = document.getElementById('chat-messages');
-const pinnedMessages = document.getElementById('pinned-messages');
-const chatInput = document.getElementById('chat-input');
-const chatCharCount = document.getElementById('chat-char-count');
-const btnSend = document.getElementById('btn-send');
-const btnAttach = document.getElementById('btn-attach');
-const btnEmoji = document.getElementById('btn-emoji');
-const fileInput = document.getElementById('file-input');
-const btnNotifications = document.getElementById('btn-notifications');
-const notificationBadge = document.getElementById('notification-badge');
-const notificationDropdown = document.getElementById('notification-dropdown');
+/** @type {import('../services/chat-providers/server.js').default|import('../services/chat-providers/dm.js').default|null} */
+let provider = null;
+
+// DOM element references — resolved per-container in initChatView
+let chatMessages = document.getElementById('chat-messages');
+let pinnedMessages = document.getElementById('pinned-messages');
+let chatInput = document.getElementById('chat-input');
+let chatCharCount = document.getElementById('chat-char-count');
+let btnSend = document.getElementById('btn-send');
+let btnAttach = document.getElementById('btn-attach');
+let btnEmoji = document.getElementById('btn-emoji');
+let fileInput = document.getElementById('file-input');
+let btnNotifications = document.getElementById('btn-notifications');
+let notificationBadge = document.getElementById('notification-badge');
+let notificationDropdown = document.getElementById('notification-dropdown');
 
 let currentChannelId = null;
 let currentChannelName = 'Lobby';
@@ -58,11 +60,9 @@ const TYPING_EXPIRE_TIMEOUT = 3000;
 let replyToMessage = null; // { id, nickname, content, channelId } | null
 
 // --- Tab state ---
-let activeTab = { type: 'channel' }; // { type: 'channel' } | { type: 'dm', userId, persistentUserId, nickname } | { type: 'channel-view', channelId, channelName }
-const dmTabs = []; // [{ userId, persistentUserId, nickname }]
-const dmMessages = new Map(); // userId (clientId) → message[]
+let activeTab = { type: 'channel' }; // { type: 'channel' } | { type: 'channel-view', channelId, channelName }
 const channelViewTabs = []; // [{ channelId, channelName }]
-const tabOrder = []; // unified visual order: [{ type: 'dm'|'channel-view', id: string }, ...]
+const tabOrder = []; // unified visual order: [{ type: 'channel-view', id: string }, ...]
 let draggedTab = null; // { index } for drag-and-drop reordering
 const channelViewMessagesCache = new Map(); // channelId → DOM nodes[]
 const channelViewMessagesPending = new Map(); // channelId → message[] (buffered while tab inactive)
@@ -76,16 +76,12 @@ let voiceChannelId = null; // channelId of the active voice channel (rendered as
 const HISTORY_PAGE_SIZE = 50;
 const paginationState = {
   channel: { oldestTs: null, allLoaded: false, loading: false },
-  dm: new Map(), // userId → { oldestTs, allLoaded, loading }
   channelView: new Map(), // channelId → { oldestTs, allLoaded, loading }
 };
 
 function getPaginationForTab() {
   if (activeTab.type === 'channel') {
     return paginationState.channel;
-  }
-  if (activeTab.type === 'dm') {
-    return paginationState.dm.get(activeTab.userId) || null;
   }
   if (activeTab.type === 'channel-view') {
     return paginationState.channelView.get(activeTab.channelId) || null;
@@ -214,7 +210,7 @@ function onChatInputForMentions() {
   mentionTriggerChar = triggerChar;
 
   if (triggerChar === '@') {
-    const channelUsers = window.gimodiClients || [];
+    const channelUsers = provider ? provider.getMentionCandidates() : (window.gimodiClients || []);
     const matches = channelUsers.filter((c) => c.nickname.toLowerCase().startsWith(searchText.toLowerCase())).slice(0, 10);
 
     if (matches.length === 0) {
@@ -223,6 +219,10 @@ function onChatInputForMentions() {
     }
     showMentionAutocomplete(matches);
   } else if (triggerChar === '#') {
+    if (!provider?.supportsChannelMentions) {
+      hideMentionAutocomplete();
+      return;
+    }
     const allChannels = (window.gimodiChannels || []).filter((c) => c.type !== 'group');
     const matches = allChannels.filter((c) => c.name.toLowerCase().startsWith(searchText.toLowerCase())).slice(0, 10);
 
@@ -340,6 +340,9 @@ function onChannelMentionClick(e) {
  * @param {MouseEvent} ev
  */
 function onNickContextMenu(ev) {
+  if (!provider?.supportsTabs) {
+    return;
+  }
   const nickEl = ev.target.closest('.chat-msg-nick, .compact-nick, .chat-msg-nick-group, .admin-badge');
   if (!nickEl) {
     return;
@@ -350,7 +353,7 @@ function onNickContextMenu(ev) {
   }
   const clientId = msgEl.dataset.clientId;
   const userId = msgEl.dataset.userId;
-  if (clientId === serverService.clientId || userId === serverService.userId) {
+  if (clientId === provider.clientId || userId === provider.userId) {
     return;
   }
   const nickname = msgEl.dataset.nickname;
@@ -552,7 +555,7 @@ function onChatInputForTyping() {
     return;
   }
   typingSendAllowed = false;
-  chatService.sendTyping(typingChannelId);
+  provider.sendTyping(typingChannelId);
   typingSendTimer = setTimeout(() => {
     typingSendAllowed = true;
   }, TYPING_SEND_INTERVAL);
@@ -676,7 +679,7 @@ function renderNotificationDropdown() {
       item.dataset.type = entry.type;
 
       const icon = document.createElement('i');
-      icon.className = entry.type === 'dm' ? 'bi bi-envelope notif-icon' : 'bi bi-at notif-icon';
+      icon.className = 'bi bi-at notif-icon';
       item.appendChild(icon);
 
       const text = document.createElement('div');
@@ -699,9 +702,7 @@ function renderNotificationDropdown() {
         item.style.cursor = 'pointer';
         item.addEventListener('click', () => {
           closeNotificationDropdown();
-          if (entry.action.type === 'dm') {
-            switchToTab({ type: 'dm', userId: entry.action.userId, persistentUserId: entry.action.persistentUserId, nickname: entry.action.nickname });
-          } else if (entry.action.type === 'channel') {
+          if (entry.action.type === 'channel') {
             switchToTab({ type: 'channel' });
           }
         });
@@ -741,6 +742,7 @@ function openNotificationDropdown() {
 }
 
 function closeNotificationDropdown() {
+  if (!notificationDropdown) return;
   notificationDropdown.classList.add('hidden');
   if (_onClickOutsideDropdown) {
     document.removeEventListener('click', _onClickOutsideDropdown);
@@ -756,19 +758,51 @@ function toggleNotificationDropdown() {
   }
 }
 
-export function initChatView(channelId) {
-  console.log('[chat] initChatView channelId=', channelId);
+/**
+ * @param {string|null} channelId
+ * @param {object} chatProvider - a ChatProvider (ServerChatProvider or DmChatProvider)
+ * @param {HTMLElement} [container] - optional DOM container to resolve child elements from
+ */
+export function initChatView(channelId, chatProvider, container) {
+  console.log('[chat] initChatView channelId=', channelId, 'provider:', chatProvider?.constructor?.name, 'container:', !!container);
+  provider = chatProvider;
   currentChannelId = channelId;
 
+  // Resolve DOM elements from container or fallback to document-level IDs
+  if (container) {
+    chatMessages = container.querySelector('.chat-messages') || container.querySelector('#chat-messages');
+    pinnedMessages = container.querySelector('.pinned-messages') || container.querySelector('#pinned-messages');
+    chatInput = container.querySelector('.chat-input') || container.querySelector('#chat-input');
+    chatCharCount = container.querySelector('.chat-char-count') || container.querySelector('#chat-char-count');
+    btnSend = container.querySelector('.btn-send') || container.querySelector('#btn-send');
+    btnAttach = container.querySelector('.btn-attach') || container.querySelector('#btn-attach');
+    btnEmoji = container.querySelector('.btn-emoji') || container.querySelector('#btn-emoji');
+    fileInput = container.querySelector('#file-input') || container.querySelector('.file-input');
+    btnNotifications = container.querySelector('.notification-bell') || container.querySelector('#btn-notifications');
+    notificationBadge = container.querySelector('.notification-badge') || container.querySelector('#notification-badge');
+    notificationDropdown = container.querySelector('.notif-dropdown') || container.querySelector('#notification-dropdown');
+  } else {
+    chatMessages = document.getElementById('chat-messages');
+    pinnedMessages = document.getElementById('pinned-messages');
+    chatInput = document.getElementById('chat-input');
+    chatCharCount = document.getElementById('chat-char-count');
+    btnSend = document.getElementById('btn-send');
+    btnAttach = document.getElementById('btn-attach');
+    btnEmoji = document.getElementById('btn-emoji');
+    fileInput = document.getElementById('file-input');
+    btnNotifications = document.getElementById('btn-notifications');
+    notificationBadge = document.getElementById('notification-badge');
+    notificationDropdown = document.getElementById('notification-dropdown');
+  }
+
+  if (chatMessages && compactMode) chatMessages.classList.add('compact-mode');
+
   activeTab = { type: 'channel' };
-  dmTabs.length = 0;
-  dmMessages.clear();
   tabOrder.length = 0;
   channelMessagesCache.length = 0;
   channelMessagesPending.length = 0;
   channelTabUnread = false;
   resetChannelPagination();
-  paginationState.dm.clear();
   paginationState.channelView.clear();
   clientNicknameMap.clear();
   cancelReply();
@@ -776,60 +810,105 @@ export function initChatView(channelId) {
   // Remove any previously attached DOM listeners to avoid duplicates on reconnect
   cleanup();
 
-  notificationService.clearAll();
-  notificationService.addEventListener('change', updateNotificationBell);
-  btnNotifications.addEventListener('click', toggleNotificationDropdown);
-  updateNotificationBell();
+  if (provider.supportsNotifications) {
+    notificationService.clearAll();
+    notificationService.addEventListener('change', updateNotificationBell);
+    if (btnNotifications) {
+      btnNotifications.addEventListener('click', toggleNotificationDropdown);
+    }
+    updateNotificationBell();
+  }
 
   btnSend.addEventListener('click', sendMessage);
   chatInput.addEventListener('keydown', onKeydown);
-  btnEmoji.addEventListener('click', onEmojiClick);
-  btnAttach.addEventListener('click', onAttachClick);
-  fileInput.addEventListener('change', onFileChange);
-  chatMessages.addEventListener('dragover', onDragOver);
-  chatMessages.addEventListener('dragleave', onDragLeave);
-  chatMessages.addEventListener('drop', onDrop);
+  if (btnEmoji) {
+    btnEmoji.addEventListener('click', onEmojiClick);
+  }
+  if (provider.supportsFileUpload && btnAttach) {
+    btnAttach.addEventListener('click', onAttachClick);
+  }
+  if (fileInput) {
+    fileInput.addEventListener('change', onFileChange);
+  }
+  if (provider.supportsFileUpload) {
+    chatMessages.addEventListener('dragover', onDragOver);
+    chatMessages.addEventListener('dragleave', onDragLeave);
+    chatMessages.addEventListener('drop', onDrop);
+  }
   chatMessages.addEventListener('scroll', onChatScroll);
-  chatMessages.addEventListener('click', onChannelMentionClick);
+  if (provider.supportsChannelMentions) {
+    chatMessages.addEventListener('click', onChannelMentionClick);
+  }
   chatMessages.addEventListener('contextmenu', onNickContextMenu);
-  chatInput.addEventListener('paste', onPaste);
-  chatInput.addEventListener('input', onChatInputForTyping);
+  if (provider.supportsFileUpload) {
+    chatInput.addEventListener('paste', onPaste);
+  }
+  if (provider.supportsTyping) {
+    chatInput.addEventListener('input', onChatInputForTyping);
+  }
   chatInput.addEventListener('input', onChatInputForMentions);
   chatInput.addEventListener('input', onChatInputForCharCount);
 
-  chatService.addEventListener('message', onMessage);
-  chatService.addEventListener('link-preview', onLinkPreview);
-  chatService.addEventListener('preview-removed', onPreviewRemoved);
-  chatService.addEventListener('message-deleted', onMessageDeleted);
-  chatService.addEventListener('dm-message', onDmMessage);
-  chatService.addEventListener('cleared', onChatCleared);
-  chatService.addEventListener('purged', onChatPurged);
-  chatService.addEventListener('typing', onTypingEvent);
-  chatService.addEventListener('reaction-update', onReactionUpdate);
-  chatService.addEventListener('message-edited', onMessageEdited);
-  chatService.addEventListener('subscribed', onChatSubscribed);
-  serverService.addEventListener('chat:message-pinned', onMessagePinned);
-  serverService.addEventListener('chat:message-unpinned', onMessageUnpinned);
-  serverService.addEventListener('channel:updated', onChannelUpdatedForReadRoles);
-  window.addEventListener('gimodi:open-dm', onOpenDm);
-  window.addEventListener('gimodi:navigate-channel', onNavigateChannel);
-  serverService.addEventListener('server:client-joined', onClientJoinedForCache);
-  serverService.addEventListener('server:client-left', onClientLeftForCache);
+  provider.events.addEventListener('message', onMessage);
+  if (provider.supportsLinkPreviews) {
+    provider.events.addEventListener('link-preview', onLinkPreview);
+    provider.events.addEventListener('preview-removed', onPreviewRemoved);
+  }
+  provider.events.addEventListener('message-deleted', onMessageDeleted);
+  provider.events.addEventListener('cleared', onChatCleared);
+  provider.events.addEventListener('purged', onChatPurged);
+  if (provider.supportsTyping) {
+    provider.events.addEventListener('typing', onTypingEvent);
+  }
+  if (provider.supportsReactions) {
+    provider.events.addEventListener('reaction-update', onReactionUpdate);
+    setReactionProvider(provider);
+  }
+  if (provider.supportsEdit) {
+    provider.events.addEventListener('message-edited', onMessageEdited);
+  }
+  if (provider.supportsTabs) {
+    provider.events.addEventListener('subscribed', onChatSubscribed);
+  }
+  if (provider.addServerEventListener) {
+    if (provider.supportsPinning) {
+      provider.addServerEventListener('chat:message-pinned', onMessagePinned);
+      provider.addServerEventListener('chat:message-unpinned', onMessageUnpinned);
+    }
+    provider.addServerEventListener('channel:updated', onChannelUpdatedForReadRoles);
+    window.addEventListener('gimodi:navigate-channel', onNavigateChannel);
+    provider.addServerEventListener('server:client-joined', onClientJoinedForCache);
+    provider.addServerEventListener('server:client-left', onClientLeftForCache);
+  }
 
   // Seed clientNicknameMap from current client list
-  for (const c of window.gimodiClients || []) {
-    clientNicknameMap.set(c.id, c.nickname);
+  for (const c of provider.getMentionCandidates()) {
+    if (c.id) {
+      clientNicknameMap.set(c.id, c.nickname);
+    }
   }
 
-  const tabBar = document.querySelector('.tab-bar');
-  if (tabBar) {
-    tabBar.addEventListener('wheel', onTabBarWheel, { passive: false });
+  if (provider.supportsTabs) {
+    const tabBar = container ? container.querySelector('.tab-bar') : document.querySelector('.tab-bar');
+    if (tabBar) {
+      tabBar.addEventListener('wheel', onTabBarWheel, { passive: false });
+    }
+    renderTabs();
   }
-
-  renderTabs();
   updateInputForTab();
 
-  if (channelId) {
+  // Hide unsupported UI elements
+  if (!provider.supportsFileUpload && btnAttach) {
+    btnAttach.style.display = 'none';
+  }
+  if (!provider.supportsNotifications && btnNotifications) {
+    btnNotifications.style.display = 'none';
+  }
+  if (pinnedMessages && !provider.supportsPinning) {
+    pinnedMessages.classList.add('hidden');
+  }
+
+  if (channelId || !provider.supportsTabs) {
     loadHistory(channelId);
   }
 }
@@ -843,61 +922,88 @@ export function cleanup() {
     'cvTabs:',
     channelViewTabs.map((t) => t.channelId),
   );
+  closeEmojiPicker();
   notificationService.removeEventListener('change', updateNotificationBell);
-  btnNotifications.removeEventListener('click', toggleNotificationDropdown);
+  if (btnNotifications) {
+    btnNotifications.removeEventListener('click', toggleNotificationDropdown);
+  }
   closeNotificationDropdown();
   notificationService.clearAll();
 
-  btnSend.removeEventListener('click', sendMessage);
-  chatInput.removeEventListener('keydown', onKeydown);
-  btnEmoji.removeEventListener('click', onEmojiClick);
-  btnAttach.removeEventListener('click', onAttachClick);
-  fileInput.removeEventListener('change', onFileChange);
-  chatMessages.removeEventListener('dragover', onDragOver);
-  chatMessages.removeEventListener('dragleave', onDragLeave);
-  chatMessages.removeEventListener('drop', onDrop);
-  chatMessages.removeEventListener('scroll', onChatScroll);
-  chatMessages.removeEventListener('click', onChannelMentionClick);
-  chatMessages.removeEventListener('contextmenu', onNickContextMenu);
-  chatInput.removeEventListener('paste', onPaste);
-  chatInput.removeEventListener('input', onChatInputForTyping);
-  chatInput.removeEventListener('input', onChatInputForMentions);
-  chatInput.removeEventListener('input', onChatInputForCharCount);
+  if (btnSend) {
+    btnSend.removeEventListener('click', sendMessage);
+  }
+  if (chatInput) {
+    chatInput.removeEventListener('keydown', onKeydown);
+    chatInput.removeEventListener('paste', onPaste);
+    chatInput.removeEventListener('input', onChatInputForTyping);
+    chatInput.removeEventListener('input', onChatInputForMentions);
+    chatInput.removeEventListener('input', onChatInputForCharCount);
+  }
+  if (btnEmoji) {
+    btnEmoji.removeEventListener('click', onEmojiClick);
+  }
+  if (btnAttach) {
+    btnAttach.removeEventListener('click', onAttachClick);
+  }
+  if (fileInput) {
+    fileInput.removeEventListener('change', onFileChange);
+  }
+  if (chatMessages) {
+    chatMessages.removeEventListener('dragover', onDragOver);
+    chatMessages.removeEventListener('dragleave', onDragLeave);
+    chatMessages.removeEventListener('drop', onDrop);
+    chatMessages.removeEventListener('scroll', onChatScroll);
+    chatMessages.removeEventListener('click', onChannelMentionClick);
+    chatMessages.removeEventListener('contextmenu', onNickContextMenu);
+  }
   const tabBar = document.querySelector('.tab-bar');
   if (tabBar) {
     tabBar.removeEventListener('wheel', onTabBarWheel);
   }
-  chatService.removeEventListener('message', onMessage);
-  chatService.removeEventListener('link-preview', onLinkPreview);
-  chatService.removeEventListener('preview-removed', onPreviewRemoved);
-  chatService.removeEventListener('message-deleted', onMessageDeleted);
-  chatService.removeEventListener('dm-message', onDmMessage);
-  chatService.removeEventListener('cleared', onChatCleared);
-  chatService.removeEventListener('purged', onChatPurged);
-  chatService.removeEventListener('typing', onTypingEvent);
-  chatService.removeEventListener('reaction-update', onReactionUpdate);
-  chatService.removeEventListener('message-edited', onMessageEdited);
-  window.removeEventListener('gimodi:open-dm', onOpenDm);
+  if (provider) {
+    provider.events.removeEventListener('message', onMessage);
+    provider.events.removeEventListener('link-preview', onLinkPreview);
+    provider.events.removeEventListener('preview-removed', onPreviewRemoved);
+    provider.events.removeEventListener('message-deleted', onMessageDeleted);
+    provider.events.removeEventListener('cleared', onChatCleared);
+    provider.events.removeEventListener('purged', onChatPurged);
+    provider.events.removeEventListener('typing', onTypingEvent);
+    provider.events.removeEventListener('reaction-update', onReactionUpdate);
+    setReactionProvider(null);
+    provider.events.removeEventListener('message-edited', onMessageEdited);
+    provider.events.removeEventListener('subscribed', onChatSubscribed);
+    if (provider.removeServerEventListener) {
+      provider.removeServerEventListener('server:client-joined', onClientJoinedForCache);
+      provider.removeServerEventListener('server:client-left', onClientLeftForCache);
+      provider.removeServerEventListener('chat:message-pinned', onMessagePinned);
+      provider.removeServerEventListener('chat:message-unpinned', onMessageUnpinned);
+      provider.removeServerEventListener('channel:updated', onChannelUpdatedForReadRoles);
+    }
+  }
   window.removeEventListener('gimodi:navigate-channel', onNavigateChannel);
-  serverService.removeEventListener('server:client-joined', onClientJoinedForCache);
-  serverService.removeEventListener('server:client-left', onClientLeftForCache);
-  serverService.removeEventListener('chat:message-pinned', onMessagePinned);
-  serverService.removeEventListener('chat:message-unpinned', onMessageUnpinned);
-  serverService.removeEventListener('channel:updated', onChannelUpdatedForReadRoles);
   clearTypingState();
   selectedMentions.clear();
   selectedChannelMentions.clear();
-  chatMessages.innerHTML = '';
-  chatInput.value = '';
-  chatInput.style.height = '';
-  chatInput.disabled = false;
-  chatInput.placeholder = 'Type a message…';
-  chatCharCount.textContent = '';
-  chatCharCount.className = 'chat-char-count';
+  if (chatMessages) {
+    chatMessages.innerHTML = '';
+  }
+  if (chatInput) {
+    chatInput.value = '';
+    chatInput.style.height = '';
+    chatInput.disabled = false;
+    chatInput.placeholder = 'Type a message…';
+  }
+  if (chatCharCount) {
+    chatCharCount.textContent = '';
+    chatCharCount.className = 'chat-char-count';
+  }
   currentChannelName = 'Lobby';
   // Clear channel-view tabs (unsubscribe all)
   for (const cv of channelViewTabs) {
-    chatService.unsubscribeChannel(cv.channelId);
+    if (provider?.unsubscribeChannel) {
+      provider.unsubscribeChannel(cv.channelId);
+    }
   }
   channelViewTabs.length = 0;
   tabOrder.length = 0;
@@ -914,49 +1020,35 @@ export function saveState() {
     currentChannelName,
     activeTab: { ...activeTab },
     channelViewTabs: channelViewTabs.map((t) => ({ ...t })),
-    dmTabs: dmTabs.map((t) => ({ ...t })),
     tabOrder: tabOrder.map((t) => ({ ...t })),
   };
 }
 
-export function restoreState(state) {
+/**
+ * @param {object} state
+ * @param {object} [chatProvider] - provider to pass to initChatView; if omitted, reuses existing provider
+ */
+export function restoreState(state, chatProvider) {
   if (!state) {
     return;
   }
-  console.log('[chat] restoreState', { currentChannelId: state.currentChannelId, activeTab: state.activeTab, cvTabs: state.channelViewTabs?.length, dmTabs: state.dmTabs?.length });
+  console.log('[chat] restoreState', { currentChannelId: state.currentChannelId, activeTab: state.activeTab, cvTabs: state.channelViewTabs?.length });
 
-  initChatView(state.currentChannelId);
-
-  for (const dt of state.dmTabs || []) {
-    dmTabs.push({ ...dt });
-    if (!dmMessages.has(dt.userId)) {
-      dmMessages.set(dt.userId, []);
-    }
-  }
+  initChatView(state.currentChannelId, chatProvider || provider);
 
   for (const cv of state.channelViewTabs || []) {
     channelViewTabs.push({ channelId: cv.channelId, channelName: cv.channelName, ...(cv.password !== null && cv.password !== undefined && { password: cv.password }) });
-    chatService.subscribeChannel(cv.channelId, cv.password);
+    provider.subscribeChannel(cv.channelId, cv.password);
   }
 
   if (state.tabOrder?.length) {
-    tabOrder.push(...state.tabOrder);
+    tabOrder.push(...state.tabOrder.filter((t) => t.type !== 'dm'));
   } else {
-    for (const dt of dmTabs) {
-      tabOrder.push({ type: 'dm', id: dt.userId });
-    }
     for (const cv of channelViewTabs) {
       tabOrder.push({ type: 'channel-view', id: cv.channelId });
     }
   }
 
-  if (state.activeTab?.type === 'dm') {
-    const dt = dmTabs.find((t) => t.userId === state.activeTab.userId);
-    if (dt) {
-      switchToTab({ type: 'dm', userId: dt.userId, persistentUserId: dt.persistentUserId, nickname: dt.nickname });
-      return;
-    }
-  }
   if (state.activeTab?.type === 'channel-view') {
     const cv = channelViewTabs.find((t) => t.channelId === state.activeTab.channelId);
     if (cv) {
@@ -977,7 +1069,7 @@ export function switchChannel(channelId) {
   if (unreadChannels.delete(channelId)) {
     window.dispatchEvent(new CustomEvent('gimodi:channel-unread-changed'));
   }
-  markChannelRead(channelId, serverService.address);
+  markChannelRead(channelId, provider.address);
 
   // If a channel-view tab for this channel already exists (opened before this call),
   // the tab and its history are already being handled - just update currentChannelId and re-render.
@@ -1041,13 +1133,17 @@ function sendMessage() {
   }
 
   if (content.length > MAX_MESSAGE_LENGTH) {
-    const activeChannelId = activeTab.type === 'channel' ? currentChannelId : activeTab.type === 'channel-view' ? activeTab.channelId : null;
-    offerSendAsFile(content, activeChannelId);
+    if (provider.supportsFileUpload) {
+      const activeChannelId = activeTab.type === 'channel' ? currentChannelId : activeTab.type === 'channel-view' ? activeTab.channelId : null;
+      offerSendAsFile(content, activeChannelId);
+    } else {
+      appendSystemMessage(`Message is too long (${content.length} of ${MAX_MESSAGE_LENGTH} characters maximum).`);
+    }
     return;
   }
 
   const activeChannelId = activeTab.type === 'channel' ? currentChannelId : activeTab.type === 'channel-view' ? activeTab.channelId : null;
-  if (activeChannelId && isSlashCommand(content)) {
+  if (provider.supportsCommands && activeChannelId && isSlashCommand(content)) {
     const handled = tryHandleCommand(content, { channelId: activeChannelId });
     if (handled) {
       chatInput.value = '';
@@ -1066,17 +1162,19 @@ function sendMessage() {
 
   const resolved = resolveStructuredMentions(content);
 
-  const replyTo = replyToMessage?.id || null;
+  const replyTo = provider.supportsReplies ? (replyToMessage?.id || null) : null;
 
-  if (activeTab.type === 'dm') {
-    chatService.sendDm(activeTab.userId, resolved);
-  } else if (activeTab.type === 'channel-view') {
-    chatService.sendMessage(activeTab.channelId, resolved, replyTo);
+  if (activeTab.type === 'channel-view' && provider.sendMessageToChannel) {
+    provider.sendMessageToChannel(activeTab.channelId, resolved, replyTo);
   } else {
-    if (!currentChannelId) {
+    if (!currentChannelId && !provider.sendMessage) {
       return;
     }
-    chatService.sendMessage(currentChannelId, resolved, replyTo);
+    if (provider.sendMessageToChannel && currentChannelId) {
+      provider.sendMessageToChannel(currentChannelId, resolved, replyTo);
+    } else {
+      provider.sendMessage(resolved, replyTo);
+    }
   }
   chatInput.value = '';
   cancelReply();
@@ -1123,7 +1221,7 @@ function updateCharCount() {
 }
 
 function updateInputForTab() {
-  const isAttachSupported = activeTab.type === 'channel';
+  const isAttachSupported = provider?.supportsFileUpload && activeTab.type === 'channel';
 
   // Check read/write restriction for channel-view tabs and joined channel tab
   const cvChannelId = activeTab.type === 'channel-view' ? activeTab.channelId : activeTab.type === 'channel' ? currentChannelId : null;
@@ -1137,19 +1235,16 @@ function updateInputForTab() {
   if (cvTab?.readRestricted) {
     chatInput.disabled = true;
     chatInput.placeholder = 'You do not have permission to read this channel';
-    btnAttach.style.display = 'none';
+    if (btnAttach) btnAttach.style.display = 'none';
     btnSend.disabled = true;
     return;
   }
 
   if (cvTab?.writeRestricted) {
-    console.log('Write restricted for channel-view tab:', cvTab);
-    console.log('Channel:', cvTab.channelId);
-    console.log('chatInput.classList', chatInput.classList);
     chatInput.readOnly = true;
     chatInput.classList.add('input-write-restricted');
     chatInput.placeholder = 'You do not have permission to write in this channel';
-    btnAttach.style.display = 'none';
+    if (btnAttach) btnAttach.style.display = 'none';
     btnSend.disabled = true;
     return;
   }
@@ -1157,13 +1252,13 @@ function updateInputForTab() {
   btnSend.disabled = false;
   chatInput.disabled = false;
   chatInput.placeholder = 'Type a message…';
-  btnAttach.style.display = isAttachSupported ? '' : 'none';
+  if (btnAttach) btnAttach.style.display = isAttachSupported ? '' : 'none';
 }
 
 async function loadHistory(channelId) {
   try {
     resetChannelPagination();
-    const result = await chatService.fetchHistory(channelId, undefined, HISTORY_PAGE_SIZE);
+    const result = await provider.fetchHistory(channelId, undefined, HISTORY_PAGE_SIZE);
     if (result && result.messages && channelId === currentChannelId && activeTab.type === 'channel') {
       // Store pinned message IDs
       if (result.pinnedMessageIds && result.pinnedMessageIds.length > 0) {
@@ -1187,52 +1282,8 @@ async function loadHistory(channelId) {
       scrollToBottom();
       renderPinnedMessages();
     }
-  } catch {
-    // History may not be available
-  }
-}
-
-async function loadDmHistory(tabUserId, targetUserId) {
-  try {
-    const pg = { oldestTs: null, allLoaded: false, loading: false };
-    paginationState.dm.set(tabUserId, pg);
-
-    const result = await chatService.fetchDmHistory(targetUserId, undefined, HISTORY_PAGE_SIZE);
-    if (!result || !result.messages) {
-      return;
-    }
-    // Only render if this tab is still active
-    if (activeTab.type !== 'dm' || activeTab.userId !== tabUserId) {
-      return;
-    }
-
-    updatePaginationFromMessages(pg, result.messages);
-
-    chatMessages.innerHTML = '';
-    showDmEncryptionNotice(true);
-    const sorted = [...result.messages].reverse();
-    // Pre-resolve nicknames for DM senders
-    const userIds = sorted.map((m) => m.fromUserId).filter(Boolean);
-    if (userIds.length > 0) {
-      await resolveNicknames(userIds);
-    }
-    for (const msg of sorted) {
-      const decrypted = await tryDecryptDmMessage(msg);
-      appendDmMessage(decrypted, false);
-    }
-
-    // Append only in-session messages that arrived after the last history message
-    const lastHistoryTs = sorted.length > 0 ? sorted[sorted.length - 1].timestamp : 0;
-    const sessionMsgs = dmMessages.get(tabUserId) || [];
-    const pendingMsgs = sessionMsgs.filter((m) => m.timestamp > lastHistoryTs);
-    for (const msg of pendingMsgs) {
-      appendDmMessage(msg, false);
-    }
-    dmMessages.set(tabUserId, pendingMsgs);
-
-    scrollToBottom();
-  } catch {
-    // History unavailable
+  } catch (err) {
+    console.error('[chat] loadHistory failed:', err);
   }
 }
 
@@ -1253,7 +1304,7 @@ async function loadChannelViewHistory(channelId) {
 
     let result;
     try {
-      result = await chatService.fetchHistory(channelId, undefined, HISTORY_PAGE_SIZE, tab?.password);
+      result = await provider.fetchHistory(channelId, undefined, HISTORY_PAGE_SIZE, tab?.password);
     } catch (err) {
       if (err?.message?.includes('READ_RESTRICTED') || err?.code === 'READ_RESTRICTED') {
         if (tab) {
@@ -1330,7 +1381,7 @@ export function openChannelViewTab(channelId, channelName, password, readRestric
     if (channelId !== voiceChannelId) {
       tabOrder.push({ type: 'channel-view', id: channelId });
     }
-    chatService.subscribeChannel(channelId, password);
+    provider.subscribeChannel(channelId, password);
     window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
   } else {
     tab.readRestricted = readRestricted;
@@ -1362,7 +1413,7 @@ function closeChannelViewTab(channelId) {
   if (channelId !== currentChannelId) {
     channelPinnedMessages.delete(channelId);
   }
-  chatService.unsubscribeChannel(channelId);
+  provider.unsubscribeChannel(channelId);
   // If closing the current channel's view tab, clear stale cache so channel tab reloads fresh
   if (channelId === currentChannelId) {
     channelMessagesCache.length = 0;
@@ -1402,7 +1453,6 @@ export function setVoiceChannel(channelId) {
 
 export function getChannelViewTabsState() {
   const activeChannelId = activeTab.type === 'channel-view' ? activeTab.channelId : null;
-  const activeDmUserId = activeTab.type === 'dm' ? activeTab.persistentUserId : null;
   return {
     tabs: tabOrder
       .filter((o) => o.type === 'channel-view')
@@ -1412,22 +1462,9 @@ export function getChannelViewTabsState() {
       })
       .filter(Boolean),
     activeChannelId,
-    dmTabs: dmTabs
-      .filter((t) => t.persistentUserId)
-      .map((t) => ({
-        persistentUserId: t.persistentUserId,
-        nickname: t.nickname,
-      })),
     tabOrder: tabOrder
-      .map((entry) => {
-        if (entry.type === 'dm') {
-          const dt = dmTabs.find((t) => t.userId === entry.id);
-          return dt?.persistentUserId ? { type: 'dm', id: dt.persistentUserId } : null;
-        }
-        return { type: entry.type, id: entry.id };
-      })
+      .map((entry) => ({ type: entry.type, id: entry.id }))
       .filter(Boolean),
-    activeDmUserId,
   };
 }
 
@@ -1436,7 +1473,7 @@ export function restoreChannelViewTabs(tabs, activeChannelId) {
     if (!channelViewTabs.find((t) => t.channelId === channelId)) {
       channelViewTabs.push({ channelId, channelName, ...(password !== null && password !== undefined && { password }) });
       tabOrder.push({ type: 'channel-view', id: channelId });
-      chatService.subscribeChannel(channelId, password);
+      provider.subscribeChannel(channelId, password);
     }
   }
   // Switch to the previously active tab if it exists and isn't already active
@@ -1453,25 +1490,14 @@ export function restoreChannelViewTabs(tabs, activeChannelId) {
 /**
  * @param {Object} saved
  * @param {Array} saved.cvTabs
- * @param {Array} saved.dmTabs
  * @param {Array} saved.savedTabOrder
  * @param {string|null} saved.activeChannelId
- * @param {string|null} saved.activeDmUserId
  */
-export function restoreTabs({ cvTabs, dmTabs: savedDmTabs, savedTabOrder, activeChannelId, activeDmUserId }) {
+export function restoreTabs({ cvTabs, savedTabOrder, activeChannelId }) {
   for (const { channelId, channelName, password } of cvTabs || []) {
     if (!channelViewTabs.find((t) => t.channelId === channelId)) {
       channelViewTabs.push({ channelId, channelName, ...(password !== null && password !== undefined && { password }) });
-      chatService.subscribeChannel(channelId, password);
-    }
-  }
-
-  for (const { persistentUserId, nickname } of savedDmTabs || []) {
-    if (!dmTabs.find((t) => t.persistentUserId === persistentUserId)) {
-      dmTabs.push({ userId: persistentUserId, persistentUserId, nickname });
-      if (!dmMessages.has(persistentUserId)) {
-        dmMessages.set(persistentUserId, []);
-      }
+      provider.subscribeChannel(channelId, password);
     }
   }
 
@@ -1480,11 +1506,6 @@ export function restoreTabs({ cvTabs, dmTabs: savedDmTabs, savedTabOrder, active
     for (const entry of savedTabOrder) {
       if (entry.type === 'channel-view' && channelViewTabs.find((t) => t.channelId === entry.id)) {
         tabOrder.push({ type: 'channel-view', id: entry.id });
-      } else if (entry.type === 'dm') {
-        const dt = dmTabs.find((t) => t.persistentUserId === entry.id);
-        if (dt) {
-          tabOrder.push({ type: 'dm', id: dt.userId });
-        }
       }
     }
   }
@@ -1493,19 +1514,7 @@ export function restoreTabs({ cvTabs, dmTabs: savedDmTabs, savedTabOrder, active
       tabOrder.push({ type: 'channel-view', id: cv.channelId });
     }
   }
-  for (const dt of dmTabs) {
-    if (!tabOrder.find((t) => t.type === 'dm' && t.id === dt.userId)) {
-      tabOrder.push({ type: 'dm', id: dt.userId });
-    }
-  }
 
-  if (activeDmUserId) {
-    const dt = dmTabs.find((t) => t.persistentUserId === activeDmUserId);
-    if (dt) {
-      switchToTab({ type: 'dm', userId: dt.userId, persistentUserId: dt.persistentUserId, nickname: dt.nickname });
-      return;
-    }
-  }
   if (activeChannelId) {
     const cvTab = channelViewTabs.find((t) => t.channelId === activeChannelId);
     if (cvTab && (activeTab.type !== 'channel-view' || activeTab.channelId !== activeChannelId)) {
@@ -1514,18 +1523,6 @@ export function restoreTabs({ cvTabs, dmTabs: savedDmTabs, savedTabOrder, active
     }
   }
   renderTabs();
-}
-
-async function tryDecryptDmMessage(msg) {
-  if (!msg.content || !msg.content.startsWith('-----BEGIN PGP MESSAGE-----')) {
-    return msg;
-  }
-  try {
-    const plaintext = await window.gimodi.identity.decrypt(msg.content);
-    return { ...msg, content: plaintext };
-  } catch {
-    return { ...msg, content: '[Encrypted message - unable to decrypt]' };
-  }
 }
 
 function onClientJoinedForCache(e) {
@@ -1537,29 +1534,6 @@ function onClientJoinedForCache(e) {
     invalidateNickname(userId);
     setNickname(userId, nickname);
     updateVisibleNicknames(userId, nickname);
-  }
-  if (userId && clientId) {
-    const dmTab = dmTabs.find((t) => t.persistentUserId === userId && t.userId !== clientId);
-    if (dmTab) {
-      const oldId = dmTab.userId;
-      dmTab.userId = clientId;
-      if (nickname) {
-        dmTab.nickname = nickname;
-      }
-      const orderEntry = tabOrder.find((t) => t.type === 'dm' && t.id === oldId);
-      if (orderEntry) {
-        orderEntry.id = clientId;
-      }
-      if (activeTab.type === 'dm' && activeTab.userId === oldId) {
-        activeTab.userId = clientId;
-      }
-      const msgs = dmMessages.get(oldId);
-      if (msgs) {
-        dmMessages.delete(oldId);
-        dmMessages.set(clientId, msgs);
-      }
-      renderTabs();
-    }
   }
 }
 
@@ -1634,7 +1608,7 @@ export function updateChatNickColors(userId, roleColor) {
   if (!userId) {
     return;
   }
-  const color = roleColor || nicknameColor();
+  const color = roleColor || nicknameColor(userId);
 
   const applyColor = (msgEl) => {
     if (!msgEl.classList?.contains('chat-msg') || msgEl.dataset.userId !== userId) {
@@ -1698,8 +1672,8 @@ function resolveMentionsText(text) {
 }
 
 function checkMentionInMessage(content) {
-  const myUserId = serverService.userId;
-  const myClientId = serverService.clientId;
+  const myUserId = provider.userId;
+  const myClientId = provider.clientId;
   if (myUserId && content.includes(`@u(${myUserId})`)) {
     return true;
   }
@@ -1726,11 +1700,19 @@ function onMessage(e) {
     setNickname(msg.userId, msg.nickname);
   }
 
+  const isSelf = msg.clientId === provider.clientId;
+
+  // For providers without tabs/channels (e.g. DMs), append directly
+  if (!provider.supportsTabs) {
+    appendMessage(msg);
+    scrollToBottom();
+    return;
+  }
+
   // Check for mention and show notification
   const isMention = checkMentionInMessage(msg.content);
-  const isSelf = msg.clientId === serverService.clientId;
 
-  if (!isSelf) {
+  if (!isSelf && provider.supportsNotifications) {
     const channelName = msg.channelName || '#Channel';
     // Suppress mention notification if user has this channel open (regardless of focus)
     const viewingThisChannel = getViewingChannelId() === msg.channelId;
@@ -1898,7 +1880,7 @@ function onMessageDeleted(e) {
         }
       }
       const badgeHtml = badge ? `<span class="admin-badge">${escapeHtml(badge)}</span>` : '';
-      const promoteNickColor = promoteRoleColor || nicknameColor();
+      const promoteNickColor = promoteRoleColor || nicknameColor(nickname);
 
       const header = document.createElement('div');
       header.className = 'chat-msg-header';
@@ -1993,7 +1975,7 @@ function renderPreviewCard(preview) {
 function appendPreviewCards(bodyEl, previews) {
   const msgEl = bodyEl.closest('[data-msg-id]');
   const messageId = msgEl?.dataset.msgId;
-  const isOwner = msgEl?.dataset.userId === serverService.userId;
+  const isOwner = msgEl?.dataset.userId === provider.userId;
 
   const container = document.createElement('div');
   container.className = 'link-previews';
@@ -2037,7 +2019,7 @@ function appendPreviewCards(bodyEl, previews) {
     e.stopPropagation();
     if (isOwner && messageId) {
       try {
-        await chatService.removePreview(messageId);
+        await provider.removePreview(messageId);
       } catch {
         container.remove();
       }
@@ -2221,7 +2203,7 @@ function renderFileCard(fileData) {
 
 function getHttpBaseUrl() {
   // Derive HTTP base URL from the server address
-  const addr = serverService.address;
+  const addr = provider.address;
   if (!addr) {
     return '';
   }
@@ -2236,12 +2218,12 @@ function getHttpBaseUrl() {
 
 function uploadFile(file, channelId) {
   const uploadChannelId = channelId || currentChannelId;
-  if (!uploadChannelId || !serverService.clientId) {
+  if (!uploadChannelId || !provider.clientId) {
     return;
   }
 
-  if (serverService.maxFileSize && file.size > serverService.maxFileSize) {
-    appendSystemMessage(`Upload failed: File is too large (${formatFileSize(file.size)}). Maximum allowed size is ${formatFileSize(serverService.maxFileSize)}.`);
+  if (provider.maxFileSize && file.size > provider.maxFileSize) {
+    appendSystemMessage(`Upload failed: File is too large (${formatFileSize(file.size)}). Maximum allowed size is ${formatFileSize(provider.maxFileSize)}.`);
     return;
   }
 
@@ -2309,7 +2291,7 @@ function uploadFile(file, channelId) {
 
   xhr.open('POST', `${baseUrl}/files`);
   xhr.setRequestHeader('X-Channel-Id', uploadChannelId);
-  xhr.setRequestHeader('X-Client-Id', serverService.clientId);
+  xhr.setRequestHeader('X-Client-Id', provider.clientId);
   xhr.setRequestHeader('X-Filename', file.name);
   xhr.send(file);
 }
@@ -2350,8 +2332,22 @@ function maybeInsertDaySeparator(timestamp) {
   chatMessages.appendChild(sep);
 }
 
-function nicknameColor() {
-  return '#FFD700';
+/**
+ * Returns a deterministic HSL color for a nickname string.
+ * The hue is derived from a hash of the string, saturation and lightness are
+ * fixed at values that ensure visibility on both dark and light themes.
+ * @param {string} [str]
+ * @returns {string}
+ */
+function nicknameColor(str) {
+  if (!str) return '#FFD700';
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
+    hash = hash >>> 0;
+  }
+  const hue = hash % 260;
+  return `hsl(${hue}, 70%, 62%)`;
 }
 
 function buildMessageEl(msg, prevEl) {
@@ -2401,7 +2397,7 @@ function buildMessageEl(msg, prevEl) {
       roleColor = liveClient.roleColor || null;
     }
   }
-  const nickColor = roleColor || nicknameColor();
+  const nickColor = roleColor || nicknameColor(displayNickname);
 
   const badgeHtml = badge ? `<span class="admin-badge">${escapeHtml(badge)}</span>` : '';
 
@@ -2429,7 +2425,6 @@ function buildMessageEl(msg, prevEl) {
     el.classList.add('chat-msg-grouped');
     el.innerHTML = `
       ${compactHtml}
-      <span class="chat-msg-hover-time">${time}</span>
       ${replyRefHtml}
       <div class="chat-msg-body${emojiOnly ? ' emoji-only' : ''}">${bodyHtml}</div>
       ${editedLabel}
@@ -2437,7 +2432,6 @@ function buildMessageEl(msg, prevEl) {
   } else {
     el.innerHTML = `
       ${compactHtml}
-      <span class="chat-msg-hover-time">${time}</span>
       <div class="chat-msg-header">
         <span class="chat-msg-nick-group"><span class="chat-msg-nick" style="color:${nickColor}">${escapeHtml(displayNickname)}</span>${badgeHtml}</span>
         <span class="chat-msg-time">${headerTime}</span>${editedLabel}
@@ -2461,20 +2455,6 @@ function buildMessageEl(msg, prevEl) {
         setTimeout(() => targetEl.classList.remove('chat-msg-highlight'), 2000);
       }
     });
-  }
-
-  // Click on nickname → open DM tab (only for identified users, not self)
-  if (msg.userId && msg.userId !== serverService.userId) {
-    for (const nEl of el.querySelectorAll('.chat-msg-nick, .compact-nick')) {
-      nEl.addEventListener('click', () => {
-        const onlineClient = window.gimodiClients?.find((c) => c.userId === msg.userId);
-        if (onlineClient) {
-          openDmTab(onlineClient.id, displayNickname, msg.userId);
-        } else {
-          openDmTab(msg.userId, displayNickname, msg.userId);
-        }
-      });
-    }
   }
 
   // Add copy button to code blocks
@@ -2601,13 +2581,14 @@ function buildMessageEl(msg, prevEl) {
   }
 
   // Hover action toolbar (Discord-style) - reaction + delete in one bar
-  const canDelete = (msg.userId && msg.userId === serverService.userId) || serverService.hasPermission('chat.delete_any');
-  if (serverService.userId || canDelete) {
+  const canDelete = provider.supportsDelete && ((msg.userId && msg.userId === provider.userId) || provider.hasPermission('chat.delete_any'));
+  const showActions = (provider.supportsReactions && provider.userId) || canDelete;
+  if (showActions) {
     const hoverActions = document.createElement('div');
     hoverActions.className = 'chat-msg-actions';
 
     // Add Reaction button
-    if (serverService.userId) {
+    if (provider.supportsReactions && provider.userId) {
       const addReactionBtn = document.createElement('button');
       addReactionBtn.className = 'chat-msg-action-btn';
       addReactionBtn.title = 'Add Reaction';
@@ -2618,8 +2599,10 @@ function buildMessageEl(msg, prevEl) {
         showQuickReactionPicker(rect.left, rect.bottom + 4, msg.id);
       });
       hoverActions.appendChild(addReactionBtn);
+    }
 
-      // Reply button
+    // Reply button
+    if (provider.supportsReplies && provider.userId) {
       const replyBtn = document.createElement('button');
       replyBtn.className = 'chat-msg-action-btn';
       replyBtn.title = 'Reply';
@@ -2632,23 +2615,25 @@ function buildMessageEl(msg, prevEl) {
     }
 
     // Edit button (own messages, non-file, requires identity)
-    const canEdit = msg.userId && msg.userId === serverService.userId && !isFileMessage(msg.content);
-    if (canEdit) {
-      const editBtn = document.createElement('button');
-      editBtn.className = 'chat-msg-action-btn';
-      editBtn.title = 'Edit message';
-      editBtn.innerHTML = '<i class="bi bi-pencil"></i>';
-      editBtn.addEventListener('click', () => {
-        const msgEl = document.querySelector(`.chat-msg[data-msg-id="${msg.id}"]`);
-        if (msgEl) {
-          enterEditMode(msgEl, msg.id);
-        }
-      });
-      hoverActions.appendChild(editBtn);
+    if (provider.supportsEdit) {
+      const canEdit = msg.userId && msg.userId === provider.userId && !isFileMessage(msg.content);
+      if (canEdit) {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'chat-msg-action-btn';
+        editBtn.title = 'Edit message';
+        editBtn.innerHTML = '<i class="bi bi-pencil"></i>';
+        editBtn.addEventListener('click', () => {
+          const msgEl = document.querySelector(`.chat-msg[data-msg-id="${msg.id}"]`);
+          if (msgEl) {
+            enterEditMode(msgEl, msg.id);
+          }
+        });
+        hoverActions.appendChild(editBtn);
+      }
     }
 
     // Pin/Unpin button (requires chat.pin permission)
-    if (serverService.hasPermission('chat.pin')) {
+    if (provider.supportsPinning && provider.hasPermission('chat.pin')) {
       const viewingChannelId = getViewingChannelId();
       const pinnedSet = (viewingChannelId ? channelPinnedMessages.get(viewingChannelId) : null) || new Set();
       const isPinned = pinnedSet.has(msg.id);
@@ -2659,9 +2644,9 @@ function buildMessageEl(msg, prevEl) {
       pinBtn.innerHTML = isPinned ? '<i class="bi bi-pin-angle-fill"></i>' : '<i class="bi bi-pin-angle"></i>';
       pinBtn.addEventListener('click', () => {
         if (isPinned) {
-          chatService.unpinMessage(msg.id);
+          provider.unpinMessage(msg.id);
         } else {
-          chatService.pinMessage(msg.id);
+          provider.pinMessage(msg.id);
         }
       });
       hoverActions.appendChild(pinBtn);
@@ -2674,7 +2659,7 @@ function buildMessageEl(msg, prevEl) {
       deleteBtn.title = 'Delete message';
       deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
       deleteBtn.addEventListener('click', () => {
-        chatService.deleteMessage(msg.id).catch((err) => {
+        provider.deleteMessage(msg.id).catch((err) => {
           appendSystemMessage(`Delete failed: ${err.message}`);
         });
       });
@@ -2706,12 +2691,8 @@ function refreshNodeTimestamps(el) {
       compactTimeEl.title = formatDateTime(ts);
     }
     const timeEl = el.querySelector('.chat-msg-time');
-    const hoverEl = el.querySelector('.chat-msg-hover-time');
     if (timeEl) {
       timeEl.textContent = formatRelativeTime(ts);
-    }
-    if (hoverEl) {
-      hoverEl.textContent = formatTime(ts);
     }
     el.title = formatDateTime(ts);
   }
@@ -2719,7 +2700,9 @@ function refreshNodeTimestamps(el) {
 
 export function setChatDisplayMode(mode) {
   compactMode = mode === 'compact';
-  chatMessages.classList.toggle('compact-mode', compactMode);
+  for (const el of document.querySelectorAll('.chat-messages')) {
+    el.classList.toggle('compact-mode', compactMode);
+  }
 }
 
 /**
@@ -2731,6 +2714,7 @@ export function setMediaEmbedPrivacy(enabled) {
 }
 
 export function refreshTimestamps() {
+  if (!chatMessages) return;
   // Live DOM children
   for (const el of chatMessages.children) {
     refreshNodeTimestamps(el);
@@ -2738,13 +2722,6 @@ export function refreshTimestamps() {
   // Cached DOM nodes (individual elements, not containers)
   for (const el of channelMessagesCache) {
     refreshNodeTimestamps(el);
-  }
-}
-
-function showDmEncryptionNotice(show = true) {
-  const el = document.getElementById('dm-encryption-notice');
-  if (el) {
-    el.classList.toggle('hidden', !show);
   }
 }
 
@@ -2809,6 +2786,7 @@ function showReadRestrictionBanner() {
 }
 
 export function appendSystemMessage(text) {
+  if (!chatMessages) return;
   const el = document.createElement('div');
   el.className = 'chat-system';
   el.textContent = text;
@@ -2817,6 +2795,7 @@ export function appendSystemMessage(text) {
 }
 
 function scrollToBottom() {
+  if (!chatMessages) return;
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
@@ -2868,8 +2847,6 @@ async function loadOlderMessages() {
   try {
     if (activeTab.type === 'channel') {
       await loadOlderChannelMessages(pg);
-    } else if (activeTab.type === 'dm') {
-      await loadOlderDmMessages(pg);
     } else if (activeTab.type === 'channel-view') {
       await loadOlderChannelViewMessages(pg);
     }
@@ -2881,7 +2858,7 @@ async function loadOlderMessages() {
 }
 
 async function loadOlderChannelMessages(pg) {
-  const result = await chatService.fetchHistory(currentChannelId, pg.oldestTs, HISTORY_PAGE_SIZE);
+  const result = await provider.fetchHistory(currentChannelId, pg.oldestTs, HISTORY_PAGE_SIZE);
   if (!result?.messages || activeTab.type !== 'channel') {
     return;
   }
@@ -2901,40 +2878,10 @@ async function loadOlderChannelMessages(pg) {
   chatMessages.prepend(frag);
 }
 
-async function loadOlderDmMessages(pg) {
-  const { userId: tabUserId } = activeTab;
-  const targetUserId = activeTab.persistentUserId;
-  const result = await chatService.fetchDmHistory(targetUserId, pg.oldestTs, HISTORY_PAGE_SIZE);
-  if (!result?.messages || activeTab.type !== 'dm' || activeTab.userId !== tabUserId) {
-    return;
-  }
-  const sorted = [...result.messages].reverse();
-  updatePaginationFromMessages(pg, result.messages);
-  const userIds = sorted.map((m) => m.fromUserId).filter(Boolean);
-  if (userIds.length > 0) {
-    await resolveNicknames(userIds);
-  }
-  const frag = document.createDocumentFragment();
-  for (const msg of sorted) {
-    const decrypted = await tryDecryptDmMessage(msg);
-    const el = buildDmMessageEl(decrypted);
-    if (el) {
-      frag.appendChild(el);
-    }
-  }
-  // Prepend after the encryption notice if present
-  const notice = chatMessages.querySelector('.dm-encryption-notice');
-  if (notice && notice.nextSibling) {
-    chatMessages.insertBefore(frag, notice.nextSibling);
-  } else {
-    chatMessages.prepend(frag);
-  }
-}
-
 async function loadOlderChannelViewMessages(pg) {
   const { channelId } = activeTab;
   const tab = channelViewTabs.find((t) => t.channelId === channelId);
-  const result = await chatService.fetchHistory(channelId, pg.oldestTs, HISTORY_PAGE_SIZE, tab?.password);
+  const result = await provider.fetchHistory(channelId, pg.oldestTs, HISTORY_PAGE_SIZE, tab?.password);
   if (!result?.messages || activeTab.type !== 'channel-view' || activeTab.channelId !== channelId) {
     return;
   }
@@ -2980,73 +2927,17 @@ function openLightbox(src, alt, meta) {
 
 // --- Tab management ---
 
-function onOpenDm(e) {
-  const { userId, persistentUserId, nickname } = e.detail;
-  openDmTab(userId, nickname, persistentUserId || null);
-}
-
 function onNavigateChannel(e) {
   const { channelId } = e.detail;
   if (channelId) {
-    serverService.send('channel:join', { channelId });
-  }
-}
-
-function openDmTab(userId, nickname, persistentUserId = null) {
-  let tab = dmTabs.find((t) => t.userId === userId);
-  let changed = false;
-  if (!tab && persistentUserId) {
-    tab = dmTabs.find((t) => t.persistentUserId === persistentUserId);
-    if (tab) {
-      const oldId = tab.userId;
-      tab.userId = userId;
-      tab.nickname = nickname;
-      const orderEntry = tabOrder.find((t) => t.type === 'dm' && t.id === oldId);
-      if (orderEntry) {
-        orderEntry.id = userId;
-      }
-      changed = true;
-    }
-  }
-  if (!tab) {
-    tab = { userId, persistentUserId, nickname };
-    dmTabs.push(tab);
-    tabOrder.push({ type: 'dm', id: userId });
-    if (!dmMessages.has(userId)) {
-      dmMessages.set(userId, []);
-    }
-    changed = true;
-  }
-  switchToTab({ type: 'dm', userId: tab.userId, persistentUserId: tab.persistentUserId, nickname: tab.nickname });
-  if (changed) {
-    window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
-  }
-}
-
-function closeDmTab(userId) {
-  const idx = dmTabs.findIndex((t) => t.userId === userId);
-  if (idx === -1) {
-    return;
-  }
-  dmTabs.splice(idx, 1);
-  const orderIdx = tabOrder.findIndex((t) => t.type === 'dm' && t.id === userId);
-  if (orderIdx !== -1) {
-    tabOrder.splice(orderIdx, 1);
-  }
-  dmMessages.delete(userId);
-  window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
-
-  if (activeTab.type === 'dm' && activeTab.userId === userId) {
-    switchToTab({ type: 'channel' });
-  } else {
-    renderTabs();
+    provider.send('channel:join', { channelId });
   }
 }
 
 function switchToTab(tab) {
-  console.log('[chat] switchToTab', tab.type, tab.channelId || tab.userId || '', 'from', activeTab.type, activeTab.channelId || activeTab.userId || '');
+  console.log('[chat] switchToTab', tab.type, tab.channelId || '', 'from', activeTab.type, activeTab.channelId || '');
   const isSameTab =
-    activeTab.type === tab.type && (tab.type === 'channel' || (tab.type === 'dm' && activeTab.userId === tab.userId) || (tab.type === 'channel-view' && activeTab.channelId === tab.channelId));
+    activeTab.type === tab.type && (tab.type === 'channel' || (tab.type === 'channel-view' && activeTab.channelId === tab.channelId));
   if (isSameTab) {
     renderTabs();
     return;
@@ -3072,7 +2963,6 @@ function switchToTab(tab) {
 
   activeTab = tab;
   chatMessages.innerHTML = '';
-  showDmEncryptionNotice(tab.type === 'dm');
   updateInputForTab();
   cancelReply();
   renderTypingIndicator();
@@ -3080,8 +2970,6 @@ function switchToTab(tab) {
   // Clear in-app notification entries for the destination tab
   if (tab.type === 'channel') {
     notificationService.clearByAction({ type: 'channel', channelId: currentChannelId });
-  } else if (tab.type === 'dm') {
-    notificationService.clearByAction({ type: 'dm', userId: tab.userId });
   }
 
   if (tab.type === 'channel') {
@@ -3090,7 +2978,7 @@ function switchToTab(tab) {
       window.dispatchEvent(new CustomEvent('gimodi:channel-unread-changed'));
     }
     if (currentChannelId) {
-      markChannelRead(currentChannelId, serverService.address);
+      markChannelRead(currentChannelId, provider.address);
     }
     // Restore channel messages from cache if available, otherwise reload history
     if (channelMessagesCache.length > 0) {
@@ -3117,7 +3005,7 @@ function switchToTab(tab) {
     if (unreadChannels.delete(tab.channelId)) {
       window.dispatchEvent(new CustomEvent('gimodi:channel-unread-changed'));
     }
-    markChannelRead(tab.channelId, serverService.address);
+    markChannelRead(tab.channelId, provider.address);
     const cached = channelViewMessagesCache.get(tab.channelId);
     if (cached && cached.length > 0) {
       for (const node of cached) {
@@ -3134,156 +3022,10 @@ function switchToTab(tab) {
     } else {
       loadChannelViewHistory(tab.channelId);
     }
-  } else {
-    // Load DM history first if we have a persistentUserId, then render in-session messages on top
-    const dmTab = dmTabs.find((t) => t.userId === tab.userId);
-    if (dmTab) {
-      dmTab.unread = false;
-    }
-    renderPinnedMessages();
-
-    if (tab.persistentUserId) {
-      loadDmHistory(tab.userId, tab.persistentUserId);
-    } else {
-      // No persistent history available, just show in-session messages
-      showDmEncryptionNotice(true);
-      const msgs = dmMessages.get(tab.userId) || [];
-      for (const msg of msgs) {
-        appendDmMessage(msg, false);
-      }
-      scrollToBottom();
-    }
   }
 
   renderTabs();
   window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
-}
-
-async function onDmMessage(e) {
-  const msg = e.detail;
-  // Cache the sender's nickname
-  if (msg.fromUserId && msg.fromNickname) {
-    setNickname(msg.fromUserId, msg.fromNickname);
-  }
-  // Determine the "other" user in this DM
-  const isSelf = msg.fromId === serverService.clientId;
-  const otherUserId = isSelf ? msg.targetId : msg.fromId;
-  const otherNickname = isSelf ? null : msg.fromNickname;
-  const otherPersistentUserId = isSelf ? null : msg.fromUserId || null;
-
-  // Decrypt content
-  const decrypted = await tryDecryptDmMessage(msg);
-
-  let tab = dmTabs.find((t) => t.userId === otherUserId);
-  if (!tab && otherPersistentUserId) {
-    tab = dmTabs.find((t) => t.persistentUserId === otherPersistentUserId);
-    if (tab) {
-      const oldId = tab.userId;
-      tab.userId = otherUserId;
-      const orderEntry = tabOrder.find((t) => t.type === 'dm' && t.id === oldId);
-      if (orderEntry) {
-        orderEntry.id = otherUserId;
-      }
-    }
-  }
-  if (!tab) {
-    const nickname = otherNickname || otherUserId;
-    tab = { userId: otherUserId, persistentUserId: otherPersistentUserId, nickname };
-    dmTabs.push(tab);
-    tabOrder.push({ type: 'dm', id: otherUserId });
-    if (!dmMessages.has(otherUserId)) {
-      dmMessages.set(otherUserId, []);
-    }
-  }
-
-  // Store the decrypted message
-  const msgs = dmMessages.get(otherUserId) || [];
-  msgs.push(decrypted);
-  dmMessages.set(otherUserId, msgs);
-
-  // If this DM tab is active, append to DOM
-  if (activeTab.type === 'dm' && activeTab.userId === otherUserId) {
-    appendDmMessage(decrypted, true);
-  } else {
-    // Mark tab as unread
-    tab.unread = true;
-
-    // Show desktop notification for incoming DMs
-    if (!isSelf) {
-      const nickname = otherNickname || 'Someone';
-      const preview = decrypted.content.length > 100 ? decrypted.content.substring(0, 100) + '...' : decrypted.content;
-      notificationService.show({
-        type: 'dm',
-        title: `DM from ${nickname}`,
-        body: preview,
-        action: { type: 'dm', userId: otherUserId, persistentUserId: otherPersistentUserId, nickname: tab.nickname },
-      });
-    }
-  }
-
-  renderTabs();
-}
-
-function buildDmMessageEl(msg) {
-  const el = document.createElement('div');
-  el.className = 'chat-msg';
-  el.dataset.userId = msg.fromUserId || '';
-  const headerTime = formatRelativeTime(msg.timestamp);
-  const nickname = (msg.fromUserId && getCachedNickname(msg.fromUserId)) || msg.fromNickname || '[Anonymous]';
-
-  let badge = msg.badge || null;
-  let dmRoleColor = null;
-  if (window.gimodiClients) {
-    const liveClient = (msg.fromUserId && window.gimodiClients.find((c) => c.userId === msg.fromUserId)) || (msg.fromId && window.gimodiClients.find((c) => c.id === msg.fromId));
-    if (liveClient) {
-      badge = liveClient.badge || null;
-      dmRoleColor = liveClient.roleColor || null;
-    }
-  }
-  const badgeHtml = badge ? `<span class="admin-badge">${escapeHtml(badge)}</span>` : '';
-  const dmNickColor = dmRoleColor || '#FFD700';
-
-  const fullTime = formatDateTime(msg.timestamp);
-  const compactTime = formatTimeShort(msg.timestamp);
-  const compactHtml = `<span class="compact-row"><span class="compact-time" title="${escapeHtml(fullTime)}">${compactTime}</span> <span class="compact-nick" style="color:${dmNickColor}" title="${badge ? escapeHtml(badge) : ''}">${escapeHtml(nickname)}:</span></span>`;
-  el.innerHTML = `
-    ${compactHtml}
-    <div class="chat-msg-header">
-      <span class="chat-msg-nick-group"><span class="chat-msg-nick" style="color:${dmNickColor}">${escapeHtml(nickname)}</span>${badgeHtml}</span>
-      <span class="chat-msg-time">${headerTime}</span>
-    </div>
-    <div class="chat-msg-body">${renderMarkdown(msg.content)}</div>
-  `;
-
-  // Open links in system browser
-  for (const a of el.querySelectorAll('.chat-msg-body a')) {
-    a.addEventListener('click', (e) => {
-      e.preventDefault();
-      const href = a.getAttribute('href');
-      if (href) {
-        window.gimodi.openExternal(href);
-      }
-    });
-    a.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const href = a.getAttribute('href');
-      if (href) {
-        showLinkContextMenu(e.clientX, e.clientY, href);
-      }
-    });
-  }
-
-  return el;
-}
-
-function appendDmMessage(msg, doScroll) {
-  const el = buildDmMessageEl(msg);
-  maybeInsertDaySeparator(msg.timestamp);
-  chatMessages.appendChild(el);
-  if (doScroll) {
-    scrollToBottom();
-  }
 }
 
 function renderTabs() {
@@ -3332,32 +3074,7 @@ function renderTabs() {
     tab.draggable = true;
     addTabDragListeners(tab, i);
 
-    if (entry.type === 'dm') {
-      const dt = dmTabs.find((t) => t.userId === entry.id);
-      if (!dt) {
-        continue;
-      }
-      tab.className = `tab${activeTab.type === 'dm' && activeTab.userId === dt.userId ? ' active' : ''}${dt.unread ? ' unread' : ''}`;
-      tab.dataset.type = 'dm';
-      tab.dataset.userId = dt.userId;
-
-      const label = document.createElement('span');
-      label.className = 'tab-label';
-      label.textContent = dt.nickname;
-      tab.appendChild(label);
-
-      const closeBtn = document.createElement('span');
-      closeBtn.className = 'tab-close';
-      closeBtn.innerHTML = '&times;';
-      closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeDmTab(dt.userId);
-      });
-      tab.appendChild(closeBtn);
-
-      tab.addEventListener('click', () => switchToTab({ type: 'dm', userId: dt.userId, persistentUserId: dt.persistentUserId, nickname: dt.nickname }));
-      tab.addEventListener('contextmenu', (e) => showTabContextMenu(e, { type: 'dm', userId: dt.userId }));
-    } else {
+    {
       const cv = channelViewTabs.find((t) => t.channelId === entry.id);
       if (!cv) {
         continue;
@@ -3508,11 +3225,7 @@ function showTabContextMenu(e, tabInfo) {
   closeItem.textContent = 'Close Tab';
   closeItem.addEventListener('click', () => {
     menu.remove();
-    if (tabInfo.type === 'dm') {
-      closeDmTab(tabInfo.userId);
-    } else {
-      closeChannelViewTab(tabInfo.channelId);
-    }
+    closeChannelViewTab(tabInfo.channelId);
   });
   menu.appendChild(closeItem);
 
@@ -3521,9 +3234,6 @@ function showTabContextMenu(e, tabInfo) {
   closeAllItem.textContent = 'Close All Tabs';
   closeAllItem.addEventListener('click', () => {
     menu.remove();
-    for (const t of [...dmTabs]) {
-      closeDmTab(t.userId);
-    }
     for (const t of [...channelViewTabs]) {
       closeChannelViewTab(t.channelId);
     }
@@ -3535,23 +3245,9 @@ function showTabContextMenu(e, tabInfo) {
   closeOthersItem.textContent = 'Close Other Tabs';
   closeOthersItem.addEventListener('click', () => {
     menu.remove();
-    if (tabInfo.type === 'dm') {
-      for (const t of [...dmTabs]) {
-        if (t.userId !== tabInfo.userId) {
-          closeDmTab(t.userId);
-        }
-      }
-      for (const t of [...channelViewTabs]) {
+    for (const t of [...channelViewTabs]) {
+      if (t.channelId !== tabInfo.channelId) {
         closeChannelViewTab(t.channelId);
-      }
-    } else {
-      for (const t of [...dmTabs]) {
-        closeDmTab(t.userId);
-      }
-      for (const t of [...channelViewTabs]) {
-        if (t.channelId !== tabInfo.channelId) {
-          closeChannelViewTab(t.channelId);
-        }
       }
     }
   });
@@ -3704,7 +3400,7 @@ export async function scrollToMessage(messageId, timestamp) {
   }
 
   try {
-    const result = await chatService.fetchContext(currentChannelId, timestamp);
+    const result = await provider.fetchContext(currentChannelId, timestamp);
     if (!result?.messages?.length) {
       return;
     }
@@ -3856,7 +3552,7 @@ function enterEditMode(msgEl, messageId) {
       return;
     }
     try {
-      await chatService.editMessage(messageId, newContent);
+      await provider.editMessage(messageId, newContent);
       exitEditMode();
     } catch (err) {
       appendSystemMessage(`Edit failed: ${err.message}`);
@@ -3902,7 +3598,7 @@ function renderReplyPreview() {
     return;
   }
 
-  const inputRow = document.querySelector('.chat-input-row');
+  const inputRow = chatInput?.closest('.chat-input-row');
   if (!previewEl) {
     previewEl = document.createElement('div');
     previewEl.id = 'reply-preview';
@@ -3994,6 +3690,9 @@ function onMessageEdited(e) {
 }
 
 function renderPinnedMessages() {
+  if (!provider?.supportsPinning || !pinnedMessages) {
+    return;
+  }
   const viewingChannelId = getViewingChannelId();
   const pinnedSet = viewingChannelId ? channelPinnedMessages.get(viewingChannelId) : null;
   if (!pinnedSet || pinnedSet.size === 0) {
@@ -4060,14 +3759,14 @@ function renderPinnedMessages() {
       }
 
       // Add unpin button
-      if (serverService.hasPermission('chat.pin')) {
+      if (provider.hasPermission('chat.pin')) {
         const unpinBtn = document.createElement('button');
         unpinBtn.className = 'pinned-message-unpin';
         unpinBtn.title = 'Unpin';
         unpinBtn.innerHTML = '&times;';
         unpinBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          chatService.unpinMessage(messageId);
+          provider.unpinMessage(messageId);
         });
         clone.appendChild(unpinBtn);
       }
@@ -4086,8 +3785,8 @@ function renderPinnedMessages() {
     } else {
       // Message was deleted - auto-unpin the orphaned pin
       pinnedSet.delete(messageId);
-      if (serverService.hasPermission('chat.pin')) {
-        chatService.unpinMessage(messageId);
+      if (provider.hasPermission('chat.pin')) {
+        provider.unpinMessage(messageId);
       }
     }
   }

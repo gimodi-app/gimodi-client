@@ -67,7 +67,7 @@ channelTree.addEventListener('drop', (e) => {
 });
 
 const serverNameEl = document.getElementById('server-name');
-const btnDisconnect = document.getElementById('btn-disconnect');
+const btnLeaveVoice = document.getElementById('btn-leave-voice');
 const btnCreateChannel = document.getElementById('btn-create-channel');
 
 let channels = [];
@@ -179,8 +179,9 @@ export function initServerView(data) {
 
   renderChannelTree();
 
-  btnDisconnect.addEventListener('click', handleDisconnect);
-  window.gimodi.onTrayDisconnect(handleDisconnect);
+  btnLeaveVoice.addEventListener('click', handleLeaveVoice);
+  window.gimodi.onTrayDisconnect(handleLeaveVoice);
+  btnLeaveVoice.classList.add('hidden');
   const canCreate = serverService.hasPermission('channel.create');
   const canCreateTemp = serverService.hasPermission('channel.create_temporary');
   const canCreateGroup = serverService.hasPermission('channel.group_create');
@@ -287,7 +288,7 @@ export function cleanup() {
   window.removeEventListener('gimodi:channel-access-error', onChannelAccessError);
   window.removeEventListener('gimodi:channel-unread-changed', onChannelUnreadChanged);
   window.removeEventListener('gimodi:user-context-menu', onUserContextMenuEvent);
-  btnDisconnect.removeEventListener('click', handleDisconnect);
+  btnLeaveVoice.removeEventListener('click', handleLeaveVoice);
   btnCreateChannel.removeEventListener('click', onCreateChannelClick);
   document.getElementById('create-dropdown').classList.add('hidden');
   window.gimodi.removeMenuListeners();
@@ -408,7 +409,7 @@ export function restoreState(state) {
   serverService.addEventListener('server:permissions-changed', onPermissionsChanged);
   window.addEventListener('gimodi:channel-access-error', onChannelAccessError);
   window.addEventListener('gimodi:channel-unread-changed', onChannelUnreadChanged);
-  btnDisconnect.addEventListener('click', handleDisconnect);
+  btnLeaveVoice.addEventListener('click', handleLeaveVoice);
   btnCreateChannel.addEventListener('click', onCreateChannelClick);
   window.gimodi.onMenuAction(onMenuAction);
 
@@ -473,18 +474,12 @@ function getChannelName(id) {
   return channels.find((c) => c.id === id)?.name || 'Unknown';
 }
 
-function handleDisconnect() {
-  playSound(sndDisconnect);
-  if (currentChannelId && connectionManager.voiceKey === connectionManager.activeKey) {
-    leaveVoiceChannel();
-  } else {
-    const targetKey = connectionManager.voiceKey || connectionManager.activeKey;
-    window.dispatchEvent(
-      new CustomEvent('gimodi:disconnect-server', {
-        detail: { connKey: targetKey },
-      }),
-    );
+function handleLeaveVoice() {
+  if (!currentChannelId) {
+    return;
   }
+  playSound(sndDisconnect);
+  leaveVoiceChannel();
 }
 
 /**
@@ -501,6 +496,7 @@ function leaveVoiceChannel() {
     self.channelId = null;
   }
   currentChannelId = null;
+  btnLeaveVoice.classList.add('hidden');
   connectionManager.clearVoiceServer();
   setVoiceChannel(null);
   renderChannelTree();
@@ -737,6 +733,7 @@ export async function switchChannel(channelId) {
     voiceService.cleanup();
     const data = await serverService.request('channel:join', { channelId, password });
     currentChannelId = channelId;
+    btnLeaveVoice.classList.remove('hidden');
     updateChannelTabLabel(channelId);
 
     if (data.moderated && data.voiceGranted) {
@@ -799,6 +796,7 @@ function onForceJoined(e) {
   }
 
   currentChannelId = channelId;
+  btnLeaveVoice.classList.remove('hidden');
   updateChannelTabLabel(channelId);
 
   const self = clients.find((c) => c.id === serverService.clientId);
@@ -818,8 +816,9 @@ function onForceJoined(e) {
 }
 
 function onClientJoined(e) {
-  const { clientId, userId, nickname, channelId, badge, roleColor, rolePosition } = e.detail;
-  const newClient = { id: clientId, userId: userId || null, nickname, channelId, badge: badge || null, roleColor: roleColor || null, rolePosition: rolePosition ?? Infinity };
+  const { clientId, userId, nickname, channelId, badge, roleColor, rolePosition, fingerprint, observe } = e.detail;
+  if (observe) return;
+  const newClient = { id: clientId, userId: userId || null, nickname, channelId, badge: badge || null, roleColor: roleColor || null, rolePosition: rolePosition ?? Infinity, fingerprint: fingerprint || null };
   clients.push(newClient);
   window.gimodiClients = clients;
   renderChannelTree();
@@ -1647,22 +1646,6 @@ function renderChannel(ch, isChild, _groupId) {
       }
 
       userEl.addEventListener('contextmenu', (e) => showUserContextMenu(e, u));
-
-      // Double-click to open DM
-      if (u.id !== serverService.clientId) {
-        userEl.style.cursor = 'pointer';
-        userEl.addEventListener('dblclick', () => {
-          window.dispatchEvent(
-            new CustomEvent('gimodi:open-dm', {
-              detail: {
-                userId: u.id,
-                persistentUserId: u.userId || null,
-                nickname: u.nickname,
-              },
-            }),
-          );
-        });
-      }
 
       usersEl.appendChild(userEl);
     }
@@ -3129,9 +3112,11 @@ export function showUserContextMenu(e, user, options = {}) {
   };
 
   if (isOther) {
-    addItem('Send Message', () => {
-      window.dispatchEvent(new CustomEvent('gimodi:open-dm', { detail: { userId: user.id, persistentUserId: user.userId || null, nickname: user.nickname } }));
-    });
+    if (user.fingerprint) {
+      addItem('Send Friend Request', async () => {
+        window.dispatchEvent(new CustomEvent('gimodi:add-friend', { detail: { fingerprint: user.fingerprint, nickname: user.nickname } }));
+      });
+    }
 
     if (!options.fromChat && serverService.hasPermission('user.poke')) {
       addItem('Poke', async () => {
@@ -3244,6 +3229,29 @@ export function showUserContextMenu(e, user, options = {}) {
           }
         });
       }
+    }
+  }
+
+  if (isOther && user.userId) {
+    addSeparator();
+    addItem('Add Friend', async () => {
+      const displayName = await customPrompt('Display name for friend:', user.nickname);
+      if (displayName === null) {
+        return;
+      }
+      await window.gimodi.friends.add({
+        userId: user.userId,
+        displayName: displayName || user.nickname,
+        serverAddress: serverService.address,
+        identityFingerprint: user.userId,
+        addedAt: Date.now(),
+      });
+      window.dispatchEvent(new CustomEvent('gimodi:friends-updated'));
+    });
+    if (user.fingerprint) {
+      addItem('Direct Message', () => {
+        window.dispatchEvent(new CustomEvent('gimodi:open-dm', { detail: { fingerprint: user.fingerprint, displayName: user.nickname } }));
+      });
     }
   }
 
@@ -3650,7 +3658,7 @@ async function renderUsersPanel(container) {
     if (count === 0) {
       return;
     }
-    if (!(await customConfirm(`Are you sure you want to permanently delete ${count} user${count > 1 ? 's' : ''}?\n\nThis will remove their identities, roles, and all DM history.`))) {
+    if (!(await customConfirm(`Are you sure you want to permanently delete ${count} user${count > 1 ? 's' : ''}?\n\nThis will remove their identities and roles.`))) {
       return;
     }
 
@@ -3868,10 +3876,6 @@ function showAdminUserContextMenu(e, user, panelContainer) {
     addSeparator();
     addLabel('Communication');
 
-    addItem('Send Message', () => {
-      window.dispatchEvent(new CustomEvent('gimodi:open-dm', { detail: { userId: user.clientId, persistentUserId: user.userId, nickname: user.nickname } }));
-    });
-
     if (serverService.hasPermission('user.poke')) {
       addItem('Poke', async () => {
         const message = await customPrompt(`Poke message for ${user.nickname} (optional):`);
@@ -3929,7 +3933,7 @@ function showAdminUserContextMenu(e, user, panelContainer) {
       addItem(
         'Delete User',
         async () => {
-          if (!(await customConfirm(`Are you sure you want to permanently delete user "${user.nickname}"?\n\nThis will remove their identity, roles, all registered nicknames, and all DM history.`))) {
+          if (!(await customConfirm(`Are you sure you want to permanently delete user "${user.nickname}"?\n\nThis will remove their identity, roles, and all registered nicknames.`))) {
             return;
           }
           try {
@@ -6389,12 +6393,6 @@ async function renderAnalyticsPanel(container) {
         </div>
         <div class="analytics-card card-compact">
           <div class="analytics-card-body">
-            <div class="analytics-card-value">${live.sessionDmsTotal.toLocaleString()}</div>
-            <div class="analytics-card-label">DMs Sent</div>
-          </div>
-        </div>
-        <div class="analytics-card card-compact">
-          <div class="analytics-card-body">
             <div class="analytics-card-value">${live.sessionFilesTotal.toLocaleString()}</div>
             <div class="analytics-card-label">Files Uploaded</div>
           </div>
@@ -6433,12 +6431,6 @@ async function renderAnalyticsPanel(container) {
           <div class="analytics-card-body">
             <div class="analytics-card-value">${dbData.messages.last30d.toLocaleString()}</div>
             <div class="analytics-card-label">Last 30 Days</div>
-          </div>
-        </div>
-        <div class="analytics-card card-compact">
-          <div class="analytics-card-body">
-            <div class="analytics-card-value">${dbData.dms.total.toLocaleString()}</div>
-            <div class="analytics-card-label">Total DMs</div>
           </div>
         </div>
         <div class="analytics-card card-compact">

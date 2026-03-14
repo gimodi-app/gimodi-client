@@ -32,6 +32,9 @@
     <div class="app-layout">
       <!-- Server Sidebar -->
       <div id="server-sidebar" class="server-sidebar">
+        <button id="btn-dm-view" class="server-sidebar-btn server-sidebar-dm" title="Direct Messages">
+          <i class="bi bi-chat-dots"></i>
+        </button>
         <div id="server-sidebar-list" class="server-sidebar-list"></div>
         <button id="btn-add-server" class="server-sidebar-btn server-sidebar-add" title="Add Server">
           <i class="bi bi-plus-lg"></i>
@@ -97,7 +100,7 @@
                 <div id="channel-tree"></div>
               </div>
               <div class="voice-controls">
-                <button id="btn-disconnect" class="btn-icon" title="Disconnect"><i class="bi bi-x-lg"></i></button>
+                <button id="btn-leave-voice" class="btn-icon hidden" title="Leave Voice"><i class="bi bi-x-lg"></i></button>
                 <button id="btn-mute" class="btn-icon" title="Toggle Mute"><i class="bi bi-mic"></i></button>
                 <button id="btn-deafen" class="btn-icon" title="Deafen"><i class="bi bi-headphones"></i></button>
                 <button id="btn-webcam" class="btn-icon" title="Camera"><i class="bi bi-camera-video"></i></button>
@@ -150,11 +153,11 @@
 
               <!-- Chat area -->
               <div id="pinned-messages" class="pinned-messages hidden"></div>
-              <div id="chat-messages"></div>
+              <div class="chat-messages" id="chat-messages"></div>
               <div class="chat-input-row">
                 <button id="btn-attach" class="btn-icon btn-attach" title="Attach file"><i class="bi bi-paperclip"></i></button>
                 <input type="file" id="file-input" class="hidden" multiple />
-                <div class="chat-input-wrapper">
+                <div class="chat-input-wrapper chat-input-wrapper-server">
                   <textarea id="chat-input" placeholder="Type a message..." rows="1" autocomplete="off"></textarea>
                   <span id="chat-char-count" class="chat-char-count"></span>
                   <div class="chat-input-actions">
@@ -162,9 +165,6 @@
                     <button id="btn-send" class="btn-icon btn-send" title="Send"><i class="bi bi-arrow-right"></i></button>
                   </div>
                 </div>
-              </div>
-              <div id="dm-encryption-notice" class="chat-dm-notice hidden">
-                <i class="bi bi-lock-fill"></i> Messages are end-to-end encrypted with OpenPGP when both parties have an identity configured.
               </div>
             </main>
 
@@ -181,6 +181,35 @@
                 <div id="side-panel-results" class="side-panel-results"></div>
               </div>
             </div>
+          </div>
+        </div>
+        <!-- DM View -->
+        <div id="view-dm" class="view">
+          <div class="dm-layout">
+            <aside class="dm-sidebar">
+              <div class="dm-sidebar-tabs">
+                <button class="dm-tab active" data-tab="conversations">Conversations</button>
+                <button class="dm-tab" data-tab="friends">Friends</button>
+                <button class="dm-sidebar-new-btn" id="dm-new-conversation-btn" title="New Conversation"><i class="bi bi-plus-lg"></i></button>
+              </div>
+              <div id="dm-conversation-list" class="dm-conversation-list"></div>
+              <div id="dm-friends-list" class="dm-conversation-list" style="display:none"></div>
+            </aside>
+            <main class="dm-main" id="dm-chat-container">
+              <div id="dm-chat-header" class="dm-chat-header"></div>
+              <div class="chat-messages dm-messages" id="dm-chat-messages"></div>
+              <div class="chat-input-row">
+                <div class="chat-input-wrapper">
+                  <textarea class="chat-input dm-chat-input" placeholder="Message..." rows="1" autocomplete="off"></textarea>
+                  <span class="chat-char-count dm-char-count"></span>
+                  <div class="chat-input-actions">
+                    <button class="btn-icon btn-emoji dm-btn-emoji" title="Emoji"><i class="bi bi-emoji-laughing"></i></button>
+                    <button class="btn-icon btn-send dm-btn-send" title="Send"><i class="bi bi-arrow-right"></i></button>
+                  </div>
+                </div>
+              </div>
+              <div class="dm-e2e-notice"><i class="bi bi-lock-fill"></i> This chat is end-to-end encrypted</div>
+            </main>
           </div>
         </div>
       </div>
@@ -210,7 +239,7 @@
         </div>
         <div id="add-server-error" class="error-text"></div>
         <div class="modal-buttons">
-          <button id="btn-confirm-add-server" class="btn-primary">Add &amp; Connect</button>
+          <button id="btn-confirm-add-server" class="btn-primary">Add Server</button>
           <button id="btn-cancel-add-server" class="btn-secondary">Cancel</button>
         </div>
       </div>
@@ -274,16 +303,6 @@
         <p id="connect-error-message"></p>
         <div class="modal-buttons">
           <button id="btn-connect-error-ok" class="btn-primary">OK</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="modal-reconnect" class="modal hidden">
-      <div class="modal-content">
-        <h2>Connection Lost</h2>
-        <p id="reconnect-status">Reconnecting...</p>
-        <div class="modal-buttons">
-          <button id="btn-cancel-reconnect" class="btn-secondary">Cancel</button>
         </div>
       </div>
     </div>
@@ -387,8 +406,7 @@
                 <label for="select-notification-mode">Desktop Notifications</label>
                 <select id="select-notification-mode">
                   <option value="all">All messages</option>
-                  <option value="mentions">Mentions and DMs only</option>
-                  <option value="dms">DMs only</option>
+                  <option value="mentions">Mentions only</option>
                   <option value="none">Disabled</option>
                 </select>
                 <small style="color: var(--text-muted)">Show desktop notifications when the app is not focused</small>
