@@ -283,12 +283,12 @@ export class DmService extends EventTarget {
     let encryptedKeys = null;
 
     if (isGroup) {
-      const sessionKey = await window.electronAPI.identity.generateSessionKey();
+      const sessionKey = await window.gimodi.identity.generateSessionKey();
       const allParticipants = [
         { fingerprint: this._fingerprint, publicKeyArmored: this._publicKey },
         ...participants,
       ];
-      encryptedKeys = await window.electronAPI.identity.encryptSessionKey(sessionKey, allParticipants);
+      encryptedKeys = await window.gimodi.identity.encryptSessionKey(sessionKey, allParticipants);
     }
 
     const participantFingerprints = fingerprints;
@@ -321,7 +321,7 @@ export class DmService extends EventTarget {
     };
 
     if (isGroup && conv.encryptedSessionKey) {
-      conv.sessionKey = await window.electronAPI.identity.decryptSessionKey(conv.encryptedSessionKey);
+      conv.sessionKey = await window.gimodi.identity.decryptSessionKey(conv.encryptedSessionKey);
     }
 
     this._conversations.set(conv.id, conv);
@@ -352,7 +352,7 @@ export class DmService extends EventTarget {
         };
         if (conv.type === 'group' && conv.encryptedSessionKey) {
           try {
-            conv.sessionKey = await window.electronAPI.identity.decryptSessionKey(conv.encryptedSessionKey);
+            conv.sessionKey = await window.gimodi.identity.decryptSessionKey(conv.encryptedSessionKey);
           } catch {}
         }
         this._conversations.set(conv.id, conv);
@@ -467,7 +467,7 @@ export class DmService extends EventTarget {
 
     let encryptedKey = null;
     if (conv.sessionKey && participant.publicKeyArmored) {
-      const keys = await window.electronAPI.identity.encryptSessionKey(conv.sessionKey, [participant]);
+      const keys = await window.gimodi.identity.encryptSessionKey(conv.sessionKey, [participant]);
       encryptedKey = keys[participant.fingerprint];
     }
 
@@ -520,10 +520,10 @@ export class DmService extends EventTarget {
       }
 
       recipientPubKeys.push(this._publicKey);
-      encryptedContent = await window.electronAPI.identity.encrypt(recipientPubKeys, content);
+      encryptedContent = await window.gimodi.identity.encrypt(recipientPubKeys, content);
     } else {
       if (!conv.sessionKey) throw new Error('Session key not available');
-      encryptedContent = await window.electronAPI.identity.encryptSymmetric(conv.sessionKey, content);
+      encryptedContent = await window.gimodi.identity.encryptSymmetric(conv.sessionKey, content);
     }
 
     /** @type {DmMessage} */
@@ -593,10 +593,10 @@ export class DmService extends EventTarget {
         }
       }
       recipientPubKeys.push(this._publicKey);
-      encryptedContent = await window.electronAPI.identity.encrypt(recipientPubKeys, msg.content);
+      encryptedContent = await window.gimodi.identity.encrypt(recipientPubKeys, msg.content);
     } else {
       if (!conv.sessionKey) throw new Error('Session key not available');
-      encryptedContent = await window.electronAPI.identity.encryptSymmetric(conv.sessionKey, msg.content);
+      encryptedContent = await window.gimodi.identity.encryptSymmetric(conv.sessionKey, msg.content);
     }
 
     await conn.request('dm:send', { id: msg.id, conversationId: msg.conversationId, content: encryptedContent, keyIndex: msg.keyIndex ?? 0 });
@@ -731,7 +731,7 @@ export class DmService extends EventTarget {
     let sessionKey = null;
     if (type === 'group' && encryptedKey) {
       try {
-        sessionKey = await window.electronAPI.identity.decryptSessionKey(encryptedKey);
+        sessionKey = await window.gimodi.identity.decryptSessionKey(encryptedKey);
       } catch {}
     }
 
@@ -808,7 +808,7 @@ export class DmService extends EventTarget {
     if (!conv) return;
 
     try {
-      conv.sessionKey = await window.electronAPI.identity.decryptSessionKey(encryptedKey);
+      conv.sessionKey = await window.gimodi.identity.decryptSessionKey(encryptedKey);
       conv.encryptedSessionKey = encryptedKey;
       conv.keyIndex = keyIndex ?? 0;
       this._saveConversationsToStorage();
@@ -843,8 +843,8 @@ export class DmService extends EventTarget {
       }
     }
 
-    const newKey = await window.electronAPI.identity.generateSessionKey();
-    const encryptedKeys = await window.electronAPI.identity.encryptSessionKey(newKey, allParticipants);
+    const newKey = await window.gimodi.identity.generateSessionKey();
+    const encryptedKeys = await window.gimodi.identity.encryptSessionKey(newKey, allParticipants);
     const keyIndex = (conv.keyIndex ?? 0) + 1;
 
     await server.conn.request('conversation:key-update', {
@@ -869,10 +869,10 @@ export class DmService extends EventTarget {
    */
   async _decryptContent(conv, encryptedContent) {
     if (conv.type === 'direct') {
-      return window.electronAPI.identity.decrypt(encryptedContent);
+      return window.gimodi.identity.decrypt(encryptedContent);
     }
     if (!conv.sessionKey) throw new Error('No session key');
-    return window.electronAPI.identity.decryptSymmetric(conv.sessionKey, encryptedContent);
+    return window.gimodi.identity.decryptSymmetric(conv.sessionKey, encryptedContent);
   }
 
   // ── Storage helpers ─────────────────────────────────────────────────────
