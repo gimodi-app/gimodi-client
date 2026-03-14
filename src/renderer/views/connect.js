@@ -423,7 +423,7 @@ async function connectToServer(server, { autoJoin = false } = {}) {
     await saveToHistory(server.address, server.nickname, server.password, data.serverName, server.identityFingerprint);
 
     data._connKey = key;
-    window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: { ...data, autoJoin } }));
+    window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: { ...data, autoJoin, identityFingerprint: server.identityFingerprint || null } }));
   } catch (err) {
     console.error('[connect] Failed to connect:', err.message);
     showConnectError(err.message || 'Connection failed.');

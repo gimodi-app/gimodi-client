@@ -38,6 +38,9 @@ import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoi
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
 import { initSidePanel } from './views/side-panel.js';
+import { initDmView, refreshDmView, openDmConversation } from './views/dm.js';
+import { DmService } from './services/dm.js';
+import { FriendsService } from './services/friends.js';
 
 const log = (...args) => console.log('[app]', ...args);
 
@@ -166,6 +169,13 @@ document.addEventListener('click', (e) => {
 // Views
 const viewConnect = document.getElementById('view-connect');
 const viewServer = document.getElementById('view-server');
+const viewDm = document.getElementById('view-dm');
+
+/** @type {DmService|null} */
+let dmService = null;
+/** @type {FriendsService|null} */
+let friendsService = null;
+let dmViewInitialized = false;
 
 // Create channel modal
 const modalCreateChannel = document.getElementById('modal-create-channel');
@@ -387,6 +397,7 @@ window.gimodi.onOpenUnifiedSettings(() => {
 function showView(id) {
   viewConnect.classList.remove('active');
   viewServer.classList.remove('active');
+  viewDm.classList.remove('active');
   document.getElementById(id).classList.add('active');
 }
 
@@ -1785,3 +1796,61 @@ async function populateDeviceSelectors() {
     });
   }
 }
+
+// --- Direct Messages ---
+
+/**
+ * Initializes or reinitializes the DM and Friends services for the given fingerprint.
+ * @param {string} fingerprint
+ */
+function ensureDmServices(fingerprint) {
+  if (dmService?._fingerprint === fingerprint) {
+    return;
+  }
+  dmService = new DmService(fingerprint);
+  friendsService = new FriendsService(fingerprint);
+  if (!dmViewInitialized) {
+    initDmView(dmService, friendsService);
+    dmViewInitialized = true;
+  }
+}
+
+document.getElementById('btn-dm-view').addEventListener('click', () => {
+  if (!dmService) {
+    customAlert('Connect to a server with an identity to use Direct Messages.');
+    return;
+  }
+  refreshDmView();
+  showView('view-dm');
+});
+
+window.addEventListener('gimodi:show-server-view', () => {
+  if (connectionManager.activeKey) {
+    showView('view-server');
+  } else {
+    showView('view-connect');
+  }
+});
+
+window.addEventListener('gimodi:add-friend', (e) => {
+  const { fingerprint, nickname } = e.detail;
+  if (!friendsService) {
+    customAlert('Connect with an identity to add friends.');
+    return;
+  }
+  friendsService.addFriend(fingerprint, nickname);
+});
+
+window.addEventListener('gimodi:connected', (e) => {
+  let identityFingerprint = e.detail.identityFingerprint;
+  if (!identityFingerprint) {
+    const key = e.detail._connKey;
+    if (key) {
+      const idx = key.indexOf('\0');
+      identityFingerprint = idx >= 0 ? key.slice(idx + 1) : null;
+    }
+  }
+  if (identityFingerprint) {
+    ensureDmServices(identityFingerprint);
+  }
+}, true);

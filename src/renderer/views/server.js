@@ -816,8 +816,8 @@ function onForceJoined(e) {
 }
 
 function onClientJoined(e) {
-  const { clientId, userId, nickname, channelId, badge, roleColor, rolePosition } = e.detail;
-  const newClient = { id: clientId, userId: userId || null, nickname, channelId, badge: badge || null, roleColor: roleColor || null, rolePosition: rolePosition ?? Infinity };
+  const { clientId, userId, nickname, channelId, badge, roleColor, rolePosition, fingerprint } = e.detail;
+  const newClient = { id: clientId, userId: userId || null, nickname, channelId, badge: badge || null, roleColor: roleColor || null, rolePosition: rolePosition ?? Infinity, fingerprint: fingerprint || null };
   clients.push(newClient);
   window.gimodiClients = clients;
   renderChannelTree();
@@ -3111,6 +3111,16 @@ export function showUserContextMenu(e, user, options = {}) {
   };
 
   if (isOther) {
+    if (user.fingerprint) {
+      addItem('Add Friend', async () => {
+        const nickname = await customPrompt(`Nickname for ${user.nickname}:`, user.nickname);
+        if (nickname === null) {
+          return;
+        }
+        window.dispatchEvent(new CustomEvent('gimodi:add-friend', { detail: { fingerprint: user.fingerprint, nickname: nickname.trim() || user.nickname } }));
+      });
+    }
+
     if (!options.fromChat && serverService.hasPermission('user.poke')) {
       addItem('Poke', async () => {
         const message = await customPrompt(`Poke message for ${user.nickname} (optional):`);

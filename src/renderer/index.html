@@ -32,6 +32,9 @@
     <div class="app-layout">
       <!-- Server Sidebar -->
       <div id="server-sidebar" class="server-sidebar">
+        <button id="btn-dm-view" class="server-sidebar-btn server-sidebar-dm" title="Direct Messages">
+          <i class="bi bi-chat-dots"></i>
+        </button>
         <div id="server-sidebar-list" class="server-sidebar-list"></div>
         <button id="btn-add-server" class="server-sidebar-btn server-sidebar-add" title="Add Server">
           <i class="bi bi-plus-lg"></i>
@@ -178,6 +181,26 @@
                 <div id="side-panel-results" class="side-panel-results"></div>
               </div>
             </div>
+          </div>
+        </div>
+        <!-- DM View -->
+        <div id="view-dm" class="view">
+          <div class="dm-layout">
+            <aside class="dm-sidebar">
+              <div class="dm-sidebar-header">
+                <button id="btn-dm-back" class="btn-icon" title="Back to Server"><i class="bi bi-arrow-left"></i></button>
+                <span>Direct Messages</span>
+              </div>
+              <div id="dm-conversation-list" class="dm-conversation-list"></div>
+            </aside>
+            <main class="dm-main">
+              <div id="dm-chat-header" class="dm-chat-header"></div>
+              <div id="dm-messages" class="dm-messages"></div>
+              <div class="dm-input-row">
+                <textarea id="dm-input" class="dm-input" placeholder="Send a message..." rows="1" autocomplete="off"></textarea>
+                <button id="btn-dm-send" class="btn-icon btn-send" title="Send"><i class="bi bi-arrow-right"></i></button>
+              </div>
+            </main>
           </div>
         </div>
       </div>
