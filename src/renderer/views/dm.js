@@ -506,7 +506,13 @@ function initDmChat() {
   }
 
   const nickname = peerName(activePeer);
-  dmChatProvider = new DmChatProvider(dmService, activePeer, nickname);
+  const ownNicknameKey = `gimodi:ownNickname:${dmService._fingerprint}`;
+  const serverNickname = connectionManager.getCredentials(connectionManager.activeKey)?.nickname;
+  if (serverNickname) {
+    localStorage.setItem(ownNicknameKey, serverNickname);
+  }
+  const ownNickname = serverNickname || localStorage.getItem(ownNicknameKey);
+  dmChatProvider = new DmChatProvider(dmService, activePeer, nickname, ownNickname);
   initChatView(null, dmChatProvider, container);
 }
 
