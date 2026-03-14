@@ -172,6 +172,23 @@ export class DmService extends EventTarget {
     for (const conv of saved) {
       this._conversations.set(conv.id, { ...conv, sessionKey: null });
     }
+    this._restoreSessionKeys();
+  }
+
+  /**
+   * @private
+   */
+  async _restoreSessionKeys() {
+    for (const conv of this._conversations.values()) {
+      if (conv.type === 'group' && conv.encryptedSessionKey && !conv.sessionKey) {
+        try {
+          conv.sessionKey = await window.gimodi.identity.decryptSessionKey(conv.encryptedSessionKey);
+          this.dispatchEvent(new CustomEvent('session-key-restored', { detail: { conversationId: conv.id } }));
+        } catch (err) {
+          console.error('[DmService] Failed to decrypt stored session key for', conv.id, err);
+        }
+      }
+    }
   }
 
   /**
