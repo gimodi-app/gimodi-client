@@ -5332,6 +5332,19 @@ input.is-invalid {
   display: none;
 }
 
+.server-sidebar-dm.has-unread::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ed4245;
+  border: 2px solid var(--bg-primary);
+  z-index: 1;
+}
+
 .dm-sidebar-header {
   display: flex;
   align-items: center;
