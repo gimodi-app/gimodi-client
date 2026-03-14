@@ -365,10 +365,23 @@ export class DmService extends EventTarget {
    * Fetches all conversations from the server and merges with local state.
    */
   async fetchConversations() {
-    const server = this._pickServer();
-    if (!server) return;
+    for (const [key, conn] of connectionManager.connections) {
+      if (!conn.connected) continue;
+      try {
+        await this._fetchConversationsFrom(key, conn);
+      } catch {}
+    }
+    this._saveConversationsToStorage();
+    this.dispatchEvent(new CustomEvent('conversations-loaded'));
+  }
 
-    const { conversations } = await server.conn.request('conversation:list', {});
+  /**
+   * @private
+   * @param {string} serverKey
+   * @param {object} conn
+   */
+  async _fetchConversationsFrom(serverKey, conn) {
+    const { conversations } = await conn.request('conversation:list', {});
     for (const raw of conversations) {
       if (!this._conversations.has(raw.id)) {
         const conv = {
@@ -379,7 +392,7 @@ export class DmService extends EventTarget {
           participants: raw.participants,
           encryptedSessionKey: raw.encryptedSessionKey ?? null,
           sessionKey: null,
-          serverKey: server.key,
+          serverKey,
           createdAt: raw.createdAt,
         };
         if (conv.type === 'group' && conv.encryptedSessionKey) {
@@ -396,7 +409,7 @@ export class DmService extends EventTarget {
         const existing = this._conversations.get(raw.id);
         existing.participants = raw.participants;
         existing.name = raw.name;
-        if (!existing.serverKey) existing.serverKey = server.key;
+        existing.serverKey = serverKey;
         if (!existing.sessionKey && existing.type === 'group' && raw.encryptedSessionKey) {
           try {
             existing.sessionKey = await window.gimodi.identity.decryptSessionKey(raw.encryptedSessionKey);
@@ -408,8 +421,6 @@ export class DmService extends EventTarget {
         }
       }
     }
-    this._saveConversationsToStorage();
-    this.dispatchEvent(new CustomEvent('conversations-loaded'));
   }
 
   /**
