@@ -264,7 +264,7 @@ function buildFriendRequestItem(req) {
     e.stopPropagation();
     try {
       await friendsService.acceptRequest(req.requestId);
-      renderConversationList();
+      renderFriendsList();
     } catch (err) {
       customAlert('Failed to accept friend request: ' + err.message);
     }
@@ -277,7 +277,7 @@ function buildFriendRequestItem(req) {
     e.stopPropagation();
     try {
       await friendsService.rejectRequest(req.requestId);
-      renderConversationList();
+      renderFriendsList();
     } catch (err) {
       customAlert('Failed to reject friend request: ' + err.message);
     }
