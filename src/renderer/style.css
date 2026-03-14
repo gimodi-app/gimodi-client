@@ -869,6 +869,7 @@ body {
   font-size: 11px;
   color: var(--text-muted);
   padding: 4px 0 0;
+  margin-bottom: 9px;
 }
 
 .dm-e2e-notice i {
@@ -2995,7 +2996,7 @@ label:has(input[type='checkbox']) {
 
 .chat-input-row {
   display: flex;
-  padding: 0;
+  padding: 0 24px;
   gap: 8px;
 }
 
