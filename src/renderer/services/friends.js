@@ -50,6 +50,10 @@ export class FriendsService extends EventTarget {
     this._listeners = new Map();
     /** @type {Map<string, {requestId: string, senderFingerprint: string, senderNickname: string, senderPublicKey: string, createdAt: number}>} */
     this._pendingRequests = new Map();
+    /** @type {Set<string>} */
+    this._onlineFingerprints = new Set();
+    /** @type {Map<string, {presenceStatus: Function, presenceUpdate: Function}>} */
+    this._presenceListeners = new Map();
 
     connectionManager.addEventListener('connection-status-changed', (e) => {
       const { key, status } = e.detail;
@@ -93,6 +97,8 @@ export class FriendsService extends EventTarget {
     conn.addEventListener('friend:removed', onRemoved);
 
     this._listeners.set(key, { requestReceived: onRequestReceived, accepted: onAccepted, rejected: onRejected, removed: onRemoved });
+
+    this._subscribePresence(conn, key);
   }
 
   /**
@@ -112,6 +118,67 @@ export class FriendsService extends EventTarget {
     }
 
     this._listeners.delete(key);
+
+    const presenceHandlers = this._presenceListeners.get(key);
+    if (conn && presenceHandlers) {
+      conn.removeEventListener('presence:status', presenceHandlers.presenceStatus);
+      conn.removeEventListener('presence:update', presenceHandlers.presenceUpdate);
+    }
+    this._presenceListeners.delete(key);
+    this._onlineFingerprints.clear();
+    this.dispatchEvent(new CustomEvent('friend:presence-changed'));
+  }
+
+  /**
+   * Subscribes to presence updates for all current friends on the given connection.
+   * @private
+   * @param {object} conn
+   * @param {string} key
+   */
+  _subscribePresence(conn, key) {
+    if (this._presenceListeners.has(key)) {
+      return;
+    }
+
+    const onPresenceStatus = (e) => {
+      const { statuses } = e.detail;
+      for (const [fp, online] of Object.entries(statuses)) {
+        if (online) {
+          this._onlineFingerprints.add(fp);
+        } else {
+          this._onlineFingerprints.delete(fp);
+        }
+      }
+      this.dispatchEvent(new CustomEvent('friend:presence-changed'));
+    };
+
+    const onPresenceUpdate = (e) => {
+      const { fingerprint, online } = e.detail;
+      if (online) {
+        this._onlineFingerprints.add(fingerprint);
+      } else {
+        this._onlineFingerprints.delete(fingerprint);
+      }
+      this.dispatchEvent(new CustomEvent('friend:presence-changed', { detail: { fingerprint, online } }));
+    };
+
+    conn.addEventListener('presence:status', onPresenceStatus);
+    conn.addEventListener('presence:update', onPresenceUpdate);
+    this._presenceListeners.set(key, { presenceStatus: onPresenceStatus, presenceUpdate: onPresenceUpdate });
+
+    const fingerprints = loadFriends(this._fingerprint).map((f) => f.fingerprint);
+    if (fingerprints.length > 0) {
+      conn.request('presence:subscribe', { fingerprints }).catch(() => {});
+    }
+  }
+
+  /**
+   * Returns true if the given fingerprint is currently online on any connected server.
+   * @param {string} fingerprint
+   * @returns {boolean}
+   */
+  isOnline(fingerprint) {
+    return this._onlineFingerprints.has(fingerprint);
   }
 
   /**
@@ -319,6 +386,12 @@ export class FriendsService extends EventTarget {
    */
   addFriend(fingerprint, nickname) {
     this._addToLocal(fingerprint, nickname);
+    for (const [key] of connectionManager.connections) {
+      const conn = connectionManager.getConnection(key);
+      if (conn?.connected) {
+        conn.request('presence:subscribe', { fingerprints: [fingerprint] }).catch(() => {});
+      }
+    }
   }
 
   /**

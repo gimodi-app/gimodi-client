@@ -447,13 +447,18 @@ function renderFriendsList() {
  */
 function buildFriendItem(friend) {
   const item = document.createElement('div');
-  item.className = 'dm-conv-item';
+  item.className = 'dm-conv-item dm-friend-item';
   item.dataset.fingerprint = friend.fingerprint;
 
+  const online = friendsService?.isOnline(friend.fingerprint) ?? false;
+  const indicator = document.createElement('span');
+  indicator.className = 'dm-conv-indicator ' + (online ? 'online' : 'offline');
+
   const nameEl = document.createElement('div');
-  nameEl.className = 'dm-conv-name';
+  nameEl.className = 'dm-conv-name dm-friend-name';
   nameEl.textContent = friend.nickname;
 
+  item.appendChild(indicator);
   item.appendChild(nameEl);
   item.addEventListener('click', () => {
     switchTab('conversations');
@@ -586,6 +591,11 @@ export function initDmView(dm, friends) {
   friendsService.addEventListener('friend:accepted', renderActiveTab);
   friendsService.addEventListener('friend:rejected', renderActiveTab);
   friendsService.addEventListener('friend:removed', renderActiveTab);
+  friendsService.addEventListener('friend:presence-changed', () => {
+    if (activeTab === 'friends') {
+      renderFriendsList();
+    }
+  });
 
   for (const tab of document.querySelectorAll('.dm-tab')) {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
