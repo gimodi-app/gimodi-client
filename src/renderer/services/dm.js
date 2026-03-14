@@ -146,7 +146,7 @@ export class DmService extends EventTarget {
 
   /**
    * Picks a connected server to route a DM through.
-   * Prefers the active server, falls back to any other connected server.
+   * Prefers the active server, then full-mode connections, then observe-mode.
    * @private
    * @returns {{key: string, conn: object}|null}
    */
@@ -158,12 +158,18 @@ export class DmService extends EventTarget {
         return { key: activeKey, conn };
       }
     }
+    let observeFallback = null;
     for (const [key, conn] of connectionManager.connections) {
       if (conn.connected) {
-        return { key, conn };
+        if (connectionManager.getMode(key) === 'full') {
+          return { key, conn };
+        }
+        if (!observeFallback) {
+          observeFallback = { key, conn };
+        }
       }
     }
-    return null;
+    return observeFallback;
   }
 
   /**

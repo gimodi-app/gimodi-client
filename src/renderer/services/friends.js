@@ -48,6 +48,8 @@ export class FriendsService extends EventTarget {
 
     /** @type {Map<string, {requestReceived: Function, accepted: Function, rejected: Function, removed: Function}>} */
     this._listeners = new Map();
+    /** @type {Map<string, {requestId: string, senderFingerprint: string, senderNickname: string, senderPublicKey: string, createdAt: number}>} */
+    this._pendingRequests = new Map();
 
     connectionManager.addEventListener('connection-status-changed', (e) => {
       const { key, status } = e.detail;
@@ -75,8 +77,10 @@ export class FriendsService extends EventTarget {
 
     const conn = connectionManager.getConnection(key);
     if (!conn) {
+      console.log('[FriendsService] _bindConnection: no conn for key', key);
       return;
     }
+    console.log('[FriendsService] Binding friend event listeners to connection', key);
 
     const onRequestReceived = (e) => this._handleRequestReceived(e.detail);
     const onAccepted = (e) => this._handleAccepted(e.detail);
@@ -116,6 +120,11 @@ export class FriendsService extends EventTarget {
    * @param {object} detail
    */
   _handleRequestReceived(detail) {
+    console.log('[FriendsService] Received friend:request-received', detail);
+    if (this._pendingRequests.has(detail.requestId)) {
+      return;
+    }
+    this._pendingRequests.set(detail.requestId, detail);
     this.dispatchEvent(new CustomEvent('friend:request-received', { detail }));
   }
 
@@ -126,8 +135,12 @@ export class FriendsService extends EventTarget {
    * @param {object} detail
    */
   _handleAccepted(detail) {
-    const { friendFingerprint, friendNickname, friendPublicKey } = detail;
+    console.log('[FriendsService] Received friend:accepted', detail);
+    const { friendFingerprint, friendNickname, friendPublicKey, requestId } = detail;
     this._addToLocal(friendFingerprint, friendNickname, friendPublicKey);
+    if (requestId) {
+      this._pendingRequests.delete(requestId);
+    }
     this.dispatchEvent(new CustomEvent('friend:accepted', { detail }));
   }
 
@@ -157,8 +170,11 @@ export class FriendsService extends EventTarget {
    * @returns {Promise<object>}
    */
   async sendRequest(recipientFingerprint) {
+    console.log('[FriendsService] Sending friend request to', recipientFingerprint);
     const conn = this._getConnection();
-    return conn.request('friend:request', { recipientFingerprint });
+    const result = await conn.request('friend:request', { recipientFingerprint });
+    console.log('[FriendsService] Friend request result', result);
+    return result;
   }
 
   /**
@@ -172,6 +188,7 @@ export class FriendsService extends EventTarget {
     if (result.friendFingerprint) {
       this._addToLocal(result.friendFingerprint, result.friendNickname, result.friendPublicKey);
     }
+    this._pendingRequests.delete(requestId);
     return result;
   }
 
@@ -182,6 +199,7 @@ export class FriendsService extends EventTarget {
    */
   async rejectRequest(requestId) {
     const conn = this._getConnection();
+    this._pendingRequests.delete(requestId);
     return conn.request('friend:reject', { requestId });
   }
 
@@ -209,7 +227,16 @@ export class FriendsService extends EventTarget {
   }
 
   /**
+   * Returns all pending incoming friend requests.
+   * @returns {Array<{requestId: string, senderFingerprint: string, senderNickname: string, senderPublicKey: string, createdAt: number}>}
+   */
+  getPendingRequests() {
+    return [...this._pendingRequests.values()];
+  }
+
+  /**
    * Gets the active server connection or throws.
+   * Prefers the active server, then full-mode connections, then observe-mode.
    * @private
    * @returns {object}
    */
@@ -221,10 +248,19 @@ export class FriendsService extends EventTarget {
         return conn;
       }
     }
-    for (const [, conn] of connectionManager.connections) {
+    let observeFallback = null;
+    for (const [key, conn] of connectionManager.connections) {
       if (conn.connected) {
-        return conn;
+        if (connectionManager.getMode(key) === 'full') {
+          return conn;
+        }
+        if (!observeFallback) {
+          observeFallback = conn;
+        }
       }
+    }
+    if (observeFallback) {
+      return observeFallback;
     }
     throw new Error('No server connected');
   }

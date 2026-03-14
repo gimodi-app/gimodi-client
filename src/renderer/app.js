@@ -399,6 +399,9 @@ function showView(id) {
   viewServer.classList.remove('active');
   viewDm.classList.remove('active');
   document.getElementById(id).classList.add('active');
+  if (id !== 'view-dm') {
+    document.getElementById('btn-dm-view').classList.remove('active');
+  }
 }
 
 // --- Multi-server helpers ---
@@ -419,6 +422,11 @@ async function switchToServer(key, options) {
 
   const prevKey = connectionManager.activeKey;
   if (prevKey === key) {
+    if (viewDm.classList.contains('active')) {
+      setActiveServer(key);
+      rerenderSidebar();
+      showView('view-server');
+    }
     return;
   }
 
@@ -1829,14 +1837,9 @@ document.getElementById('btn-dm-view').addEventListener('click', () => {
   }
   refreshDmView();
   showView('view-dm');
-});
-
-window.addEventListener('gimodi:show-server-view', () => {
-  if (connectionManager.activeKey) {
-    showView('view-server');
-  } else {
-    showView('view-connect');
-  }
+  document.getElementById('btn-dm-view').classList.add('active');
+  setActiveServer(null);
+  rerenderSidebar();
 });
 
 window.addEventListener('gimodi:add-friend', async (e) => {
@@ -1847,7 +1850,9 @@ window.addEventListener('gimodi:add-friend', async (e) => {
   }
   try {
     await friendsService.sendRequest(fingerprint);
-  } catch {
+    console.log('[app] Friend request sent successfully to', fingerprint);
+  } catch (err) {
+    console.warn('[app] Friend request failed, falling back to local add:', err);
     friendsService.addFriend(fingerprint, nickname);
   }
 });
