@@ -1844,13 +1844,29 @@ async function populateDeviceSelectors() {
  * Initializes or reinitializes the DM and Friends services for the given fingerprint.
  * @param {string} fingerprint
  */
-function ensureDmServices(fingerprint) {
+async function ensureDmServices(fingerprint) {
   if (dmService?._fingerprint === fingerprint) {
     return;
   }
-  dmService = new DmService(fingerprint);
+
+  const migrationKey = `dm_migrated_v2_${fingerprint}`;
+  if (!localStorage.getItem(migrationKey)) {
+    const msgKey = `dm_messages_${fingerprint}`;
+    if (localStorage.getItem(msgKey)) {
+      localStorage.removeItem(msgKey);
+      localStorage.removeItem(`dm_purged_${fingerprint}`);
+      localStorage.removeItem(`dm_reactions_${fingerprint}`);
+    }
+    localStorage.setItem(migrationKey, '1');
+  }
+
+  const allIdentities = await window.gimodi.identity.loadAll();
+  const identity = allIdentities.find((i) => i.fingerprint === fingerprint);
+  const publicKey = identity?.publicKeyArmored ?? '';
+  dmService = new DmService(fingerprint, publicKey);
   friendsService = new FriendsService(fingerprint);
   dmService.addEventListener('message-received', setDmUnread);
+  dmService.addEventListener('conversation-invite', setDmUnread);
   friendsService.addEventListener('friend:request-received', setDmUnread);
   if (!dmViewInitialized) {
     initDmView(dmService, friendsService);
@@ -1858,6 +1874,7 @@ function ensureDmServices(fingerprint) {
   } else {
     updateDmServices(dmService, friendsService);
   }
+  dmService.fetchConversations().catch(() => {});
 }
 
 dmButton.addEventListener('click', () => {
@@ -1878,7 +1895,7 @@ dmButton.addEventListener('click', () => {
 });
 
 window.addEventListener('gimodi:open-dm', (e) => {
-  const { userId } = e.detail;
+  const { fingerprint } = e.detail;
   if (!dmService) {
     customAlert('Connect to a server with an identity to use Direct Messages.');
     return;
@@ -1892,7 +1909,7 @@ window.addEventListener('gimodi:open-dm', (e) => {
   dmButton.classList.add('active');
   setActiveServer(null);
   rerenderSidebar();
-  openDmConversation(userId);
+  openDmConversation(fingerprint);
 });
 
 window.addEventListener('gimodi:add-friend', async (e) => {
@@ -1932,7 +1949,7 @@ window.gimodiDebug = {
    * Wipes all friends and DM data from localStorage and resets in-memory state.
    */
   clearAllFriends() {
-    const prefixes = ['dm_friends_', 'dm_ignored_', 'dm_blocked_', 'dm_messages_', 'dm_purged_'];
+    const prefixes = ['dm_friends_', 'dm_ignored_', 'dm_blocked_', 'dm_messages_', 'dm_purged_', 'dm_conversations_', 'dm_reactions_', 'dm_migrated_v2_'];
     const keys = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);

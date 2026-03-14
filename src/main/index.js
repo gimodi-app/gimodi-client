@@ -1031,6 +1031,11 @@ ipcMain.handle('identity:set-default', (event, fingerprint) => identity.setDefau
 ipcMain.handle('identity:get-default', () => identity.getDefaultIdentity());
 ipcMain.handle('identity:encrypt', (event, recipientPublicKeys, plaintext) => identity.encryptMessage(recipientPublicKeys, plaintext));
 ipcMain.handle('identity:decrypt', (event, armoredMessage) => identity.decryptMessage(armoredMessage));
+ipcMain.handle('identity:generate-session-key', () => identity.generateSessionKey());
+ipcMain.handle('identity:encrypt-session-key', (event, base64Key, participants) => identity.encryptSessionKeyForParticipants(base64Key, participants));
+ipcMain.handle('identity:decrypt-session-key', (event, encryptedKey) => identity.decryptSessionKey(encryptedKey));
+ipcMain.handle('identity:encrypt-symmetric', (event, base64Key, plaintext) => identity.encryptWithSessionKey(base64Key, plaintext));
+ipcMain.handle('identity:decrypt-symmetric', (event, base64Key, ciphertext) => identity.decryptWithSessionKey(base64Key, ciphertext));
 
 ipcMain.handle('identity:export', async (event, fingerprint) => {
   const win = BrowserWindow.fromWebContents(event.sender);

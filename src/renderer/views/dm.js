@@ -8,7 +8,7 @@ let dmService = null;
 /** @type {import('../services/friends.js').FriendsService|null} */
 let friendsService = null;
 /** @type {string|null} */
-let activePeer = null;
+let activeConversationId = null;
 /** @type {'conversations'|'friends'} */
 let activeTab = 'conversations';
 /** @type {DmChatProvider|null} */
@@ -28,17 +28,25 @@ function escapeHtml(str) {
 }
 
 /**
- * Renders the DM chat header with peer name, relay server badge, and placeholder action buttons.
+ * Renders the DM chat header for a conversation.
  * @param {HTMLElement} header
- * @param {string} nickname
+ * @param {string} name
+ * @param {import('../services/dm.js').Conversation} conv
  */
-function renderDmHeader(header, nickname) {
+function renderDmHeader(header, name, conv) {
   header.innerHTML = '';
 
   const nameEl = document.createElement('span');
   nameEl.className = 'dm-header-name';
-  nameEl.textContent = nickname;
+  nameEl.textContent = name;
   header.appendChild(nameEl);
+
+  if (conv.type === 'group') {
+    const countBadge = document.createElement('span');
+    countBadge.className = 'dm-header-server-badge';
+    countBadge.textContent = `${conv.participants.length} members`;
+    header.appendChild(countBadge);
+  }
 
   const active = connectionManager.getActive();
   if (active?.serverName) {
@@ -65,16 +73,28 @@ function formatTime(ts) {
 }
 
 /**
- * Returns the display name for a peer fingerprint.
- * Falls back to a truncated fingerprint if not in friends list.
- * @param {string} fingerprint
+ * Returns a display name for a conversation.
+ * @param {import('../services/dm.js').Conversation} conv
  * @returns {string}
  */
-function peerName(fingerprint) {
-  const friend = friendsService?.getFriend(fingerprint);
-  return friend ? friend.nickname : fingerprint.slice(0, 12) + '…';
+function conversationDisplayName(conv) {
+  if (conv.name) return conv.name;
+  if (conv.type === 'direct') {
+    const other = conv.participants.find((p) => p.fingerprint !== dmService._fingerprint);
+    if (other) {
+      const friend = friendsService?.getFriend(other.fingerprint);
+      return friend ? friend.nickname : other.nickname;
+    }
+    return 'Unknown';
+  }
+  return conv.participants
+    .filter((p) => p.fingerprint !== dmService._fingerprint)
+    .map((p) => {
+      const friend = friendsService?.getFriend(p.fingerprint);
+      return friend ? friend.nickname : p.nickname;
+    })
+    .join(', ');
 }
-
 
 /** @type {HTMLElement|null} */
 let _ctxMenu = null;
@@ -92,68 +112,97 @@ function closeContextMenu() {
 /**
  * Shows a context menu for a conversation item.
  * @param {MouseEvent} e
- * @param {string} fingerprint
+ * @param {string} conversationId
  */
-function showConvContextMenu(e, fingerprint) {
+function showConvContextMenu(e, conversationId) {
   e.preventDefault();
   closeContextMenu();
+
+  const conv = dmService?.getConversationMeta(conversationId);
+  if (!conv) return;
 
   const menu = document.createElement('div');
   menu.className = 'dm-context-menu';
   menu.style.left = e.clientX + 'px';
   menu.style.top = e.clientY + 'px';
 
-  const isFriend = friendsService?.isFriend(fingerprint);
-  const isBlocked = friendsService?.isBlocked(fingerprint);
+  if (conv.type === 'direct') {
+    const otherFp = conv.participants.find((p) => p.fingerprint !== dmService._fingerprint)?.fingerprint;
+    if (otherFp) {
+      const isFriend = friendsService?.isFriend(otherFp);
+      const isBlocked = friendsService?.isBlocked(otherFp);
 
-  if (!isFriend) {
-    const addItem = document.createElement('div');
-    addItem.className = 'dm-context-item';
-    addItem.textContent = 'Add Friend';
-    addItem.addEventListener('click', async () => {
-      closeContextMenu();
-      const shortFp = fingerprint.slice(0, 12) + '…';
-      const raw = await customPrompt(`Add as friend — enter a name:`, shortFp);
-      if (raw === null) return;
-      friendsService.addFriend(fingerprint, raw.trim() || shortFp);
-      renderConversationList();
-      if (activePeer === fingerprint) initDmChat();
-    });
-    menu.appendChild(addItem);
+      if (!isFriend) {
+        const addItem = document.createElement('div');
+        addItem.className = 'dm-context-item';
+        addItem.textContent = 'Add Friend';
+        addItem.addEventListener('click', async () => {
+          closeContextMenu();
+          const shortFp = otherFp.slice(0, 12) + '…';
+          const raw = await customPrompt(`Add as friend — enter a name:`, shortFp);
+          if (raw === null) return;
+          friendsService.addFriend(otherFp, raw.trim() || shortFp);
+          renderConversationList();
+          if (activeConversationId === conversationId) initDmChat();
+        });
+        menu.appendChild(addItem);
+      }
+
+      const blockItem = document.createElement('div');
+      blockItem.className = 'dm-context-item';
+      blockItem.textContent = isBlocked ? 'Unblock' : 'Block';
+      blockItem.addEventListener('click', () => {
+        closeContextMenu();
+        if (isBlocked) {
+          friendsService.unblockContact(otherFp);
+        } else {
+          friendsService.blockContact(otherFp);
+        }
+        renderConversationList();
+        if (activeConversationId === conversationId) initDmChat();
+      });
+      menu.appendChild(blockItem);
+    }
   }
 
-  const blockItem = document.createElement('div');
-  blockItem.className = 'dm-context-item';
-  blockItem.textContent = isBlocked ? 'Unblock' : 'Block';
-  blockItem.addEventListener('click', () => {
-    closeContextMenu();
-    if (isBlocked) {
-      friendsService.unblockContact(fingerprint);
-    } else {
-      friendsService.blockContact(fingerprint);
-    }
-    renderConversationList();
-    if (activePeer === fingerprint) initDmChat();
-  });
+  if (conv.type === 'group') {
+    const leaveItem = document.createElement('div');
+    leaveItem.className = 'dm-context-item dm-context-danger';
+    leaveItem.textContent = 'Leave Group';
+    leaveItem.addEventListener('click', async () => {
+      closeContextMenu();
+      const confirmed = await customConfirm('Leave this group conversation?');
+      if (!confirmed) return;
+      try {
+        await dmService.leaveConversation(conversationId);
+        if (activeConversationId === conversationId) {
+          activeConversationId = null;
+        }
+        renderConversationList();
+        initDmChat();
+      } catch (err) {
+        customAlert('Failed to leave conversation: ' + err.message);
+      }
+    });
+    menu.appendChild(leaveItem);
+  }
 
   const purgeItem = document.createElement('div');
   purgeItem.className = 'dm-context-item dm-context-danger';
   purgeItem.textContent = 'Purge';
   purgeItem.addEventListener('click', async () => {
     closeContextMenu();
-    const confirmed = await customConfirm('Purge this conversation? All messages will be deleted and the contact will be removed.');
+    const confirmed = await customConfirm('Purge this conversation? All messages will be deleted locally.');
     if (!confirmed) return;
-    dmService.purgeConversation(fingerprint);
-    friendsService?.removeFriend(fingerprint);
-    if (activePeer === fingerprint) {
-      activePeer = null;
+    dmService.purgeConversation(conversationId);
+    if (activeConversationId === conversationId) {
+      activeConversationId = null;
     }
     renderConversationList();
     initDmChat();
   });
-
-  menu.appendChild(blockItem);
   menu.appendChild(purgeItem);
+
   document.body.appendChild(menu);
   _ctxMenu = menu;
 }
@@ -165,88 +214,30 @@ document.addEventListener('contextmenu', (e) => {
 
 /**
  * Builds a conversation list item element.
- * @param {{fingerprint: string, nickname: string, lastMsg: object|null}} peer
+ * @param {import('../services/dm.js').Conversation} conv
+ * @param {import('../services/dm.js').DmMessage|null} lastMsg
  * @returns {HTMLElement}
  */
-function buildConvItem(peer) {
-  const blocked = friendsService?.isBlocked(peer.fingerprint);
+function buildConvItem(conv, lastMsg) {
   const item = document.createElement('div');
-  item.className = 'dm-conv-item' + (peer.fingerprint === activePeer ? ' active' : '') + (blocked ? ' dm-conv-blocked' : '');
-  item.dataset.fingerprint = peer.fingerprint;
+  const isActive = conv.id === activeConversationId;
+  item.className = 'dm-conv-item' + (isActive ? ' active' : '');
+  item.dataset.conversationId = conv.id;
 
-  const preview = peer.lastMsg ? escapeHtml(peer.lastMsg.content.slice(0, 60)) : '<em>No messages yet</em>';
-  const time = peer.lastMsg ? `<span class="dm-conv-time">${formatTime(peer.lastMsg.createdAt)}</span>` : '';
-  const blockedBadge = blocked ? ' <span class="dm-blocked-badge">Blocked</span>' : '';
+  const name = conversationDisplayName(conv);
+  const preview = lastMsg ? escapeHtml(lastMsg.content.slice(0, 60)) : '<em>No messages yet</em>';
+  const time = lastMsg ? `<span class="dm-conv-time">${formatTime(lastMsg.createdAt)}</span>` : '';
+
+  const isGroup = conv.type === 'group';
+  const icon = isGroup ? '<i class="bi bi-people-fill dm-conv-group-icon"></i> ' : '';
 
   item.innerHTML = `
-    <div class="dm-conv-name">${escapeHtml(peer.nickname)}${blockedBadge}${time}</div>
+    <div class="dm-conv-name">${icon}${escapeHtml(name)}${time}</div>
     <div class="dm-conv-preview">${preview}</div>
   `;
 
-  item.addEventListener('click', () => openConversation(peer.fingerprint));
-  item.addEventListener('contextmenu', (e) => showConvContextMenu(e, peer.fingerprint));
-  return item;
-}
-
-/**
- * Builds a message request item element with Accept and Ignore buttons.
- * @param {{fingerprint: string, lastMsg: object|null}} peer
- * @returns {HTMLElement}
- */
-function buildRequestItem(peer) {
-  const item = document.createElement('div');
-  item.className = 'dm-conv-item dm-request-item';
-  item.dataset.fingerprint = peer.fingerprint;
-
-  const preview = peer.lastMsg ? escapeHtml(peer.lastMsg.content.slice(0, 60)) : '';
-  const time = peer.lastMsg ? `<span class="dm-conv-time">${formatTime(peer.lastMsg.createdAt)}</span>` : '';
-  const shortFp = peer.fingerprint.slice(0, 12) + '…';
-
-  const top = document.createElement('div');
-  top.className = 'dm-conv-name';
-  top.innerHTML = `${escapeHtml(shortFp)}${time}`;
-
-  const previewEl = document.createElement('div');
-  previewEl.className = 'dm-conv-preview';
-  previewEl.innerHTML = preview;
-
-  const actions = document.createElement('div');
-  actions.className = 'dm-request-actions';
-
-  const acceptBtn = document.createElement('button');
-  acceptBtn.className = 'dm-request-accept';
-  acceptBtn.textContent = 'Accept';
-  acceptBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    const raw = await customPrompt(`Add as friend — enter a name for ${shortFp}:`, shortFp);
-    if (raw === null) return;
-    const nickname = raw.trim() || shortFp;
-    friendsService.addFriend(peer.fingerprint, nickname);
-    renderConversationList();
-    openConversation(peer.fingerprint);
-  });
-
-  const ignoreBtn = document.createElement('button');
-  ignoreBtn.className = 'dm-request-ignore';
-  ignoreBtn.textContent = 'Ignore';
-  ignoreBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    friendsService.ignoreRequest(peer.fingerprint);
-    renderConversationList();
-    if (activePeer === peer.fingerprint) {
-      activePeer = null;
-      initDmChat();
-    }
-  });
-
-  actions.appendChild(acceptBtn);
-  actions.appendChild(ignoreBtn);
-
-  item.appendChild(top);
-  item.appendChild(previewEl);
-  item.appendChild(actions);
-  item.addEventListener('click', () => openConversation(peer.fingerprint));
-  item.addEventListener('contextmenu', (e) => showConvContextMenu(e, peer.fingerprint));
+  item.addEventListener('click', () => openConversation(conv.id));
+  item.addEventListener('contextmenu', (e) => showConvContextMenu(e, conv.id));
   return item;
 }
 
@@ -313,62 +304,24 @@ function renderConversationList() {
   const list = el('dm-conversation-list');
   if (!list || !dmService) return;
 
-  const convMap = dmService.getConversationList();
-  const friends = friendsService?.getFriends() ?? [];
-
-  // Split into known peers (friends) and requests (received from strangers)
-  const knownPeers = new Map();
-  for (const f of friends) {
-    knownPeers.set(f.fingerprint, { fingerprint: f.fingerprint, nickname: f.nickname, lastMsg: null });
-  }
-
-  const requests = [];
-  for (const [fingerprint, lastMsg] of convMap) {
-    if (knownPeers.has(fingerprint)) {
-      knownPeers.get(fingerprint).lastMsg = lastMsg;
-    } else if (lastMsg.direction === 'received' && !friendsService?.isIgnored(fingerprint)) {
-      requests.push({ fingerprint, lastMsg });
-    }
-  }
-
-  // Also include sent-only conversations (peers we messaged but haven't added as friends)
-  for (const [fingerprint, lastMsg] of convMap) {
-    if (!knownPeers.has(fingerprint) && lastMsg.direction === 'sent') {
-      knownPeers.set(fingerprint, { fingerprint, nickname: fingerprint.slice(0, 12) + '…', lastMsg });
-    }
-  }
+  const conversations = dmService.getConversationList();
+  const lastMessages = dmService.getLastMessages();
 
   list.innerHTML = '';
 
-  if (knownPeers.size === 0 && requests.length === 0) {
-    list.innerHTML = '<div class="dm-empty-hint">No conversations yet.<br>Right-click a user to send them a friend request.</div>';
+  if (conversations.length === 0) {
+    list.innerHTML = '<div class="dm-empty-hint">No conversations yet.<br>Click <b>+</b> to start one, or right-click a user to send them a friend request.</div>';
     return;
   }
 
-  if (requests.length > 0) {
-    const header = document.createElement('div');
-    header.className = 'dm-section-header';
-    header.textContent = `Message Requests (${requests.length})`;
-    list.appendChild(header);
+  const sorted = [...conversations].sort((a, b) => {
+    const aTime = lastMessages.get(a.id)?.createdAt ?? a.createdAt;
+    const bTime = lastMessages.get(b.id)?.createdAt ?? b.createdAt;
+    return bTime - aTime;
+  });
 
-    requests.sort((a, b) => (b.lastMsg?.createdAt ?? 0) - (a.lastMsg?.createdAt ?? 0));
-    for (const peer of requests) {
-      list.appendChild(buildRequestItem(peer));
-    }
-  }
-
-  if (knownPeers.size > 0) {
-    if (requests.length > 0) {
-      const header = document.createElement('div');
-      header.className = 'dm-section-header';
-      header.textContent = 'Conversations';
-      list.appendChild(header);
-    }
-
-    const sorted = [...knownPeers.values()].sort((a, b) => (b.lastMsg?.createdAt ?? 0) - (a.lastMsg?.createdAt ?? 0));
-    for (const peer of sorted) {
-      list.appendChild(buildConvItem(peer));
-    }
+  for (const conv of sorted) {
+    list.appendChild(buildConvItem(conv, lastMessages.get(conv.id) ?? null));
   }
 }
 
@@ -462,9 +415,33 @@ function buildFriendItem(friend) {
   item.appendChild(nameEl);
   item.addEventListener('click', () => {
     switchTab('conversations');
-    openConversation(friend.fingerprint);
+    const existingConv = dmService?.findDirectConversation(friend.fingerprint);
+    if (existingConv) {
+      openConversation(existingConv.id);
+    } else {
+      startDirectConversation(friend.fingerprint);
+    }
   });
   return item;
+}
+
+/**
+ * Creates a new direct conversation with a peer and opens it.
+ * @param {string} fingerprint
+ */
+async function startDirectConversation(fingerprint) {
+  try {
+    const active = connectionManager.getActive();
+    const clients = active?.clients ?? [];
+    const peerClient = clients.find((c) => c.fingerprint === fingerprint);
+    const publicKeyArmored = peerClient?.publicKey ?? null;
+    const nickname = friendsService?.getFriend(fingerprint)?.nickname ?? fingerprint.slice(0, 12) + '…';
+
+    const conv = await dmService.createConversation([{ fingerprint, publicKeyArmored, nickname }]);
+    openConversation(conv.id);
+  } catch (err) {
+    customAlert('Failed to create conversation: ' + err.message);
+  }
 }
 
 /**
@@ -477,10 +454,9 @@ function initDmChat() {
 
   if (!container) return;
 
-  if (!activePeer) {
+  if (!activeConversationId) {
     if (chatMessagesEl) chatMessagesEl.innerHTML = '<div class="dm-empty-hint">Select a conversation</div>';
     if (header) header.textContent = '';
-    // Disable input
     const input = container.querySelector('.chat-input');
     const sendBtn = container.querySelector('.btn-send');
     if (input) input.disabled = true;
@@ -488,55 +464,214 @@ function initDmChat() {
     return;
   }
 
-  const blocked = friendsService?.isBlocked(activePeer);
-  if (header) renderDmHeader(header, peerName(activePeer));
-
-  if (blocked) {
-    if (chatMessagesEl) chatMessagesEl.innerHTML = '';
-    const input = container.querySelector('.chat-input');
-    const sendBtn = container.querySelector('.btn-send');
-    if (input) {
-      input.disabled = true;
-      input.placeholder = 'You have blocked this person.';
-    }
-    if (sendBtn) sendBtn.disabled = true;
+  const conv = dmService?.getConversationMeta(activeConversationId);
+  if (!conv) {
+    activeConversationId = null;
+    initDmChat();
     return;
   }
 
-  // Destroy previous provider
+  const name = conversationDisplayName(conv);
+
+  if (conv.type === 'direct') {
+    const otherFp = conv.participants.find((p) => p.fingerprint !== dmService._fingerprint)?.fingerprint;
+    const blocked = otherFp && friendsService?.isBlocked(otherFp);
+    if (blocked) {
+      if (header) renderDmHeader(header, name, conv);
+      if (chatMessagesEl) chatMessagesEl.innerHTML = '';
+      const input = container.querySelector('.chat-input');
+      const sendBtn = container.querySelector('.btn-send');
+      if (input) {
+        input.disabled = true;
+        input.placeholder = 'You have blocked this person.';
+      }
+      if (sendBtn) sendBtn.disabled = true;
+      return;
+    }
+  }
+
+  if (header) renderDmHeader(header, name, conv);
+
   if (dmChatProvider) {
     cleanupChat();
     dmChatProvider.destroy();
     dmChatProvider = null;
   }
 
-  const nickname = peerName(activePeer);
   const ownNicknameKey = `gimodi:ownNickname:${dmService._fingerprint}`;
   const serverNickname = connectionManager.getCredentials(connectionManager.activeKey)?.nickname;
   if (serverNickname) {
     localStorage.setItem(ownNicknameKey, serverNickname);
   }
   const ownNickname = serverNickname || localStorage.getItem(ownNicknameKey);
-  dmChatProvider = new DmChatProvider(dmService, activePeer, nickname, ownNickname);
+  dmChatProvider = new DmChatProvider(dmService, activeConversationId, name, ownNickname);
   initChatView(null, dmChatProvider, container);
 }
 
-
 /**
- * Opens a conversation with a peer, rendering their messages via the chat component.
- * @param {string} fingerprint
+ * Opens a conversation by its ID.
+ * @param {string} conversationId
  */
-function openConversation(fingerprint) {
-  activePeer = fingerprint;
+function openConversation(conversationId) {
+  activeConversationId = conversationId;
   renderConversationList();
   initDmChat();
 }
 
-// showRetryPicker and handleSend removed — the chat component handles sending via the DmChatProvider
+/**
+ * Shows the new conversation dialog with friend selection and optional group naming.
+ */
+async function showNewConversationDialog() {
+  const friends = friendsService?.getFriends() ?? [];
+  if (friends.length === 0) {
+    customAlert('You need to add friends first before creating a conversation.');
+    return;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'dm-new-conv-overlay';
+
+  const dialog = document.createElement('div');
+  dialog.className = 'dm-new-conv-dialog';
+
+  const title = document.createElement('h3');
+  title.textContent = 'New Conversation';
+  dialog.appendChild(title);
+
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.className = 'dm-new-conv-search';
+  searchInput.placeholder = 'Search friends...';
+  dialog.appendChild(searchInput);
+
+  const friendListEl = document.createElement('div');
+  friendListEl.className = 'dm-new-conv-friends';
+
+  const selected = new Set();
+
+  /**
+   * @param {string} [filter]
+   */
+  function renderFriendCheckboxes(filter = '') {
+    friendListEl.innerHTML = '';
+    const filtered = filter
+      ? friends.filter((f) => f.nickname.toLowerCase().includes(filter.toLowerCase()))
+      : friends;
+
+    for (const friend of filtered) {
+      const label = document.createElement('label');
+      label.className = 'dm-new-conv-friend-item';
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = selected.has(friend.fingerprint);
+      cb.addEventListener('change', () => {
+        if (cb.checked) {
+          selected.add(friend.fingerprint);
+        } else {
+          selected.delete(friend.fingerprint);
+        }
+        updateGroupNameVisibility();
+      });
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = friend.nickname;
+
+      label.appendChild(cb);
+      label.appendChild(nameSpan);
+      friendListEl.appendChild(label);
+    }
+  }
+
+  renderFriendCheckboxes();
+  searchInput.addEventListener('input', () => renderFriendCheckboxes(searchInput.value));
+  dialog.appendChild(friendListEl);
+
+  const groupNameRow = document.createElement('div');
+  groupNameRow.className = 'dm-new-conv-group-name-row';
+  groupNameRow.style.display = 'none';
+
+  const groupNameLabel = document.createElement('label');
+  groupNameLabel.textContent = 'Group name (optional):';
+  const groupNameInput = document.createElement('input');
+  groupNameInput.type = 'text';
+  groupNameInput.className = 'dm-new-conv-group-name';
+  groupNameInput.placeholder = 'Leave empty to use participant names';
+  groupNameRow.appendChild(groupNameLabel);
+  groupNameRow.appendChild(groupNameInput);
+  dialog.appendChild(groupNameRow);
+
+  function updateGroupNameVisibility() {
+    groupNameRow.style.display = selected.size > 1 ? '' : 'none';
+  }
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'dm-new-conv-buttons';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'dm-new-conv-cancel';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => overlay.remove());
+
+  const createBtn = document.createElement('button');
+  createBtn.className = 'dm-new-conv-create';
+  createBtn.textContent = 'Create';
+  createBtn.addEventListener('click', async () => {
+    if (selected.size === 0) {
+      customAlert('Select at least one friend.');
+      return;
+    }
+
+    if (selected.size === 1) {
+      const fp = [...selected][0];
+      const existingConv = dmService?.findDirectConversation(fp);
+      if (existingConv) {
+        overlay.remove();
+        openConversation(existingConv.id);
+        return;
+      }
+    }
+
+    createBtn.disabled = true;
+    createBtn.textContent = 'Creating...';
+
+    try {
+      const participants = [...selected].map((fp) => {
+        const friend = friends.find((f) => f.fingerprint === fp);
+        return {
+          fingerprint: fp,
+          publicKeyArmored: null,
+          nickname: friend?.nickname ?? fp.slice(0, 12) + '…',
+        };
+      });
+
+      const groupName = selected.size > 1 ? (groupNameInput.value.trim() || null) : null;
+      const conv = await dmService.createConversation(participants, groupName);
+      overlay.remove();
+      renderConversationList();
+      openConversation(conv.id);
+    } catch (err) {
+      createBtn.disabled = false;
+      createBtn.textContent = 'Create';
+      customAlert('Failed to create conversation: ' + err.message);
+    }
+  });
+
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(createBtn);
+  dialog.appendChild(btnRow);
+
+  overlay.appendChild(dialog);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  document.body.appendChild(overlay);
+  searchInput.focus();
+}
 
 /**
  * Updates the service references when a new identity becomes active.
- * Called from app.js whenever ensureDmServices creates new instances.
  * @param {import('../services/dm.js').DmService} dm
  * @param {import('../services/friends.js').FriendsService} friends
  */
@@ -547,7 +682,7 @@ export function updateDmServices(dm, friends) {
   friendsService.addEventListener('friend:accepted', renderActiveTab);
   friendsService.addEventListener('friend:rejected', renderActiveTab);
   friendsService.addEventListener('friend:removed', renderActiveTab);
-  activePeer = null;
+  activeConversationId = null;
   renderActiveTab();
   initDmChat();
 }
@@ -574,17 +709,37 @@ export function initDmView(dm, friends) {
 
   dmService.addEventListener('message-received', () => {
     renderConversationList();
-    // The chat component handles live message rendering via the provider events
   });
 
   dmService.addEventListener('conversation-purged', () => {
     renderConversationList();
-    if (activePeer) initDmChat();
+    if (activeConversationId) initDmChat();
   });
 
   dmService.addEventListener('message-updated', () => {
     renderConversationList();
-    // The chat component handles message updates via the provider events
+  });
+
+  dmService.addEventListener('conversation-created', () => {
+    renderConversationList();
+  });
+
+  dmService.addEventListener('conversation-invite', () => {
+    renderConversationList();
+  });
+
+  dmService.addEventListener('conversations-loaded', () => {
+    renderConversationList();
+  });
+
+  dmService.addEventListener('participant-changed', () => {
+    renderConversationList();
+    if (activeConversationId) initDmChat();
+  });
+
+  dmService.addEventListener('conversation-left', () => {
+    renderConversationList();
+    if (activeConversationId) initDmChat();
   });
 
   friendsService.addEventListener('friend:request-received', renderActiveTab);
@@ -601,22 +756,32 @@ export function initDmView(dm, friends) {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
   }
 
+  const newConvBtn = el('dm-new-conversation-btn');
+  if (newConvBtn) {
+    newConvBtn.addEventListener('click', showNewConversationDialog);
+  }
+
   renderConversationList();
 }
 
 /**
  * Refreshes the DM view when switching to it.
- * Called from app.js each time the DM view becomes visible.
  */
 export function refreshDmView() {
   renderActiveTab();
-  if (activePeer) initDmChat();
+  if (activeConversationId) initDmChat();
 }
 
 /**
  * Opens the DM view directly to a conversation with the given fingerprint.
+ * Creates a direct conversation if one doesn't exist.
  * @param {string} fingerprint
  */
 export function openDmConversation(fingerprint) {
-  openConversation(fingerprint);
+  const existing = dmService?.findDirectConversation(fingerprint);
+  if (existing) {
+    openConversation(existing.id);
+  } else {
+    startDirectConversation(fingerprint);
+  }
 }

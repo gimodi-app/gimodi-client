@@ -3248,9 +3248,11 @@ export function showUserContextMenu(e, user, options = {}) {
       });
       window.dispatchEvent(new CustomEvent('gimodi:friends-updated'));
     });
-    addItem('Direct Message', () => {
-      window.dispatchEvent(new CustomEvent('gimodi:open-dm', { detail: { userId: user.userId, displayName: user.nickname } }));
-    });
+    if (user.fingerprint) {
+      addItem('Direct Message', () => {
+        window.dispatchEvent(new CustomEvent('gimodi:open-dm', { detail: { fingerprint: user.fingerprint, displayName: user.nickname } }));
+      });
+    }
   }
 
   const hasAdminActions = isOther && (serverService.hasPermission('user.kick') || serverService.hasPermission('user.ban') || serverService.hasPermission('user.assign_role'));

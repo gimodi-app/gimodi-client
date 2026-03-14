@@ -1,18 +1,18 @@
 /**
- * Chat provider that wraps the existing DmService for direct message chat.
+ * Chat provider that wraps the existing DmService for conversation-based direct messages.
  * Implements the ChatProvider interface with limited feature support.
  */
 class DmChatProvider {
   /**
    * @param {import('../dm.js').DmService} dmService
-   * @param {string} peerFingerprint
-   * @param {string} peerNickname
+   * @param {string} conversationId
+   * @param {string} conversationName
    * @param {string} [ownNickname]
    */
-  constructor(dmService, peerFingerprint, peerNickname, ownNickname) {
+  constructor(dmService, conversationId, conversationName, ownNickname) {
     this._dmService = dmService;
-    this._peerFingerprint = peerFingerprint;
-    this._peerNickname = peerNickname;
+    this._conversationId = conversationId;
+    this._conversationName = conversationName;
     this._ownNickname = ownNickname || 'You';
 
     this.supportsCommands = false;
@@ -37,7 +37,7 @@ class DmChatProvider {
   /** @private */
   _bindEvents() {
     const onReceived = (e) => {
-      if (e.detail.peerFingerprint === this._peerFingerprint || e.detail.senderFingerprint === this._peerFingerprint) {
+      if (e.detail.conversationId === this._conversationId) {
         if (this._seenMessageIds.has(e.detail.id)) return;
         this._seenMessageIds.add(e.detail.id);
         const msg = this._toMessageFormat(e.detail);
@@ -46,18 +46,17 @@ class DmChatProvider {
     };
 
     const onUpdated = (e) => {
-      if (e.detail.peerFingerprint === this._peerFingerprint) {
+      if (e.detail.conversationId === this._conversationId) {
         const msg = this._toMessageFormat(e.detail);
         if (!this._seenMessageIds.has(e.detail.id)) {
           this._seenMessageIds.add(e.detail.id);
           this.events.dispatchEvent(new CustomEvent('message', { detail: msg }));
         }
-        // Status updates are not rendered differently in the chat component yet
       }
     };
 
     const onPurged = (e) => {
-      if (e.detail?.peerFingerprint === this._peerFingerprint) {
+      if (e.detail?.conversationId === this._conversationId) {
         this.events.dispatchEvent(new CustomEvent('cleared', { detail: {} }));
       }
     };
@@ -81,6 +80,23 @@ class DmChatProvider {
   }
 
   /**
+   * Resolves the display name for a message sender.
+   * @param {object} dm
+   * @returns {string}
+   * @private
+   */
+  _senderName(dm) {
+    if (dm.direction === 'sent') return this._ownNickname;
+
+    const conv = this._dmService.getConversationMeta(this._conversationId);
+    if (conv) {
+      const participant = conv.participants.find((p) => p.fingerprint === dm.senderFingerprint);
+      if (participant) return participant.nickname;
+    }
+    return dm.senderFingerprint?.slice(0, 12) + '…';
+  }
+
+  /**
    * Converts a DM message to the format expected by the chat component.
    * @param {object} dm
    * @returns {object}
@@ -90,9 +106,9 @@ class DmChatProvider {
     return {
       id: dm.id,
       content: dm.content,
-      nickname: dm.direction === 'sent' ? this._ownNickname : this._peerNickname,
+      nickname: this._senderName(dm),
       timestamp: dm.createdAt,
-      clientId: dm.direction === 'sent' ? 'self' : 'peer',
+      clientId: dm.direction === 'sent' ? 'self' : dm.senderFingerprint || 'peer',
       userId: null,
       channelId: null,
       direction: dm.direction,
@@ -111,19 +127,19 @@ class DmChatProvider {
   async sendMessage(content, replyTo = null) {
     let replyToObj = null;
     if (replyTo) {
-      const msgs = this._dmService.getConversation(this._peerFingerprint);
+      const msgs = this._dmService.getConversation(this._conversationId);
       const orig = msgs.find((m) => m.id === replyTo);
       if (orig) {
         replyToObj = {
           id: replyTo,
-          nickname: orig.direction === 'sent' ? this._ownNickname : this._peerNickname,
+          nickname: this._senderName(orig),
           content: orig.content,
         };
       } else {
         replyToObj = { id: replyTo };
       }
     }
-    await this._dmService.sendDm(this._peerFingerprint, content, replyToObj);
+    await this._dmService.sendDm(this._conversationId, content, replyToObj);
   }
 
   /**
@@ -133,7 +149,7 @@ class DmChatProvider {
    * @returns {Promise<{messages: object[]}>}
    */
   async fetchHistory(_channelId, _before, _limit) {
-    const messages = this._dmService.getConversation(this._peerFingerprint);
+    const messages = this._dmService.getConversation(this._conversationId);
     for (const m of messages) {
       this._seenMessageIds.add(m.id);
     }
@@ -179,7 +195,9 @@ class DmChatProvider {
    * @returns {Array<{nickname: string}>}
    */
   getMentionCandidates() {
-    return [{ nickname: this._peerNickname }, { nickname: this._ownNickname }];
+    const conv = this._dmService.getConversationMeta(this._conversationId);
+    if (!conv) return [{ nickname: this._ownNickname }];
+    return conv.participants.map((p) => ({ nickname: p.nickname }));
   }
 
   /**

@@ -385,6 +385,79 @@ async function importIdentity(data) {
   return sanitizeIdentity(identity);
 }
 
+/**
+ * Generates a random 256-bit AES session key.
+ * @returns {string} Base64-encoded 32-byte key
+ */
+function generateSessionKey() {
+  const crypto = require('crypto');
+  return crypto.randomBytes(32).toString('base64');
+}
+
+/**
+ * Encrypts plaintext with an AES-256-GCM session key.
+ * @param {string} base64Key - Base64-encoded 32-byte AES key
+ * @param {string} plaintext
+ * @returns {string} Base64-encoded iv + ciphertext + authTag
+ */
+function encryptWithSessionKey(base64Key, plaintext) {
+  const crypto = require('crypto');
+  const key = Buffer.from(base64Key, 'base64');
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return Buffer.concat([iv, encrypted, authTag]).toString('base64');
+}
+
+/**
+ * Decrypts AES-256-GCM ciphertext with a session key.
+ * @param {string} base64Key - Base64-encoded 32-byte AES key
+ * @param {string} ciphertext - Base64-encoded iv + ciphertext + authTag
+ * @returns {string} Decrypted plaintext
+ */
+function decryptWithSessionKey(base64Key, ciphertext) {
+  const crypto = require('crypto');
+  const key = Buffer.from(base64Key, 'base64');
+  const data = Buffer.from(ciphertext, 'base64');
+  const iv = data.subarray(0, 12);
+  const authTag = data.subarray(data.length - 16);
+  const encrypted = data.subarray(12, data.length - 16);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+  return decipher.update(encrypted, undefined, 'utf8') + decipher.final('utf8');
+}
+
+/**
+ * PGP-encrypts a session key individually for each participant's public key.
+ * @param {string} base64Key - The session key to distribute
+ * @param {Array<{ fingerprint: string, publicKeyArmored: string }>} participants
+ * @returns {Promise<Record<string, string>>} fingerprint → armored PGP message
+ */
+async function encryptSessionKeyForParticipants(base64Key, participants) {
+  const pgp = await getOpenpgp();
+  const result = {};
+  for (const { fingerprint, publicKeyArmored } of participants) {
+    const encryptionKey = await pgp.readKey({ armoredKey: publicKeyArmored });
+    const encrypted = await pgp.encrypt({
+      message: await pgp.createMessage({ text: base64Key }),
+      encryptionKeys: [encryptionKey],
+      format: 'armored',
+    });
+    result[fingerprint] = encrypted;
+  }
+  return result;
+}
+
+/**
+ * PGP-decrypts a session key using the current default identity's private key.
+ * @param {string} encryptedKey - Armored PGP message containing the session key
+ * @returns {Promise<string>} Base64-encoded session key
+ */
+async function decryptSessionKey(encryptedKey) {
+  return decryptMessage(encryptedKey);
+}
+
 module.exports = {
   loadIdentities: loadAllSanitized,
   createIdentity,
@@ -396,6 +469,11 @@ module.exports = {
   getFullIdentity,
   encryptMessage,
   decryptMessage,
+  generateSessionKey,
+  encryptWithSessionKey,
+  decryptWithSessionKey,
+  encryptSessionKeyForParticipants,
+  decryptSessionKey,
   exportIdentity,
   importIdentity,
 };
