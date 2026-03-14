@@ -41,6 +41,7 @@ import { initSidePanel } from './views/side-panel.js';
 import { initDmView, updateDmServices, refreshDmView, openDmConversation } from './views/dm.js';
 import { DmService } from './services/dm.js';
 import { FriendsService } from './services/friends.js';
+import ServerChatProvider from './services/chat-providers/server.js';
 
 const log = (...args) => console.log('[app]', ...args);
 
@@ -490,7 +491,7 @@ async function switchToServer(key, options) {
   const saved = connectionManager.getServerState(key);
   if (saved) {
     restoreServerState(saved.server);
-    restoreChatState(saved.chat);
+    restoreChatState(saved.chat, new ServerChatProvider(saved.chat?.currentChannelId || null));
     if (!voiceActive) {
       initVoiceView([]);
     }
@@ -659,7 +660,8 @@ window.addEventListener('gimodi:connected', async (e) => {
   const channelId = null;
 
   log('Initial channel:', channelId, '(lobby)');
-  initChatView(channelId);
+  const serverChatProvider = new ServerChatProvider(channelId);
+  initChatView(channelId, serverChatProvider);
   initSidePanel(getViewingChannelId);
   initUnreadState(data.channels, serverService.address);
 
@@ -1533,7 +1535,7 @@ connectionManager.addEventListener('background-connected', (e) => {
   log('Background connected:', key, data.serverName);
 
   const fpIdx = key.indexOf('\0');
-  if (fpIdx >= 0) {
+  if (fpIdx >= 0 && !dmService) {
     ensureDmServices(key.slice(fpIdx + 1));
   }
 
