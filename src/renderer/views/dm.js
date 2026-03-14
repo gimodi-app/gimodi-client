@@ -222,6 +222,7 @@ function buildRequestItem(peer) {
   item.appendChild(previewEl);
   item.appendChild(actions);
   item.addEventListener('click', () => openConversation(peer.fingerprint));
+  item.addEventListener('contextmenu', (e) => showConvContextMenu(e, peer.fingerprint));
   return item;
 }
 
