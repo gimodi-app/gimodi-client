@@ -364,6 +364,15 @@ export class DmService extends EventTarget {
         const existing = this._conversations.get(raw.id);
         existing.participants = raw.participants;
         existing.name = raw.name;
+        if (!existing.sessionKey && existing.type === 'group' && raw.encryptedSessionKey) {
+          try {
+            existing.sessionKey = await window.gimodi.identity.decryptSessionKey(raw.encryptedSessionKey);
+            existing.encryptedSessionKey = raw.encryptedSessionKey;
+            this.dispatchEvent(new CustomEvent('session-key-restored', { detail: { conversationId: existing.id } }));
+          } catch (err) {
+            console.error('[DmService] Failed to decrypt session key on fetch for', existing.id, err);
+          }
+        }
       }
     }
     this._saveConversationsToStorage();
@@ -621,6 +630,7 @@ export class DmService extends EventTarget {
 
     const conv = this._conversations.get(conversationId);
     if (!conv) return;
+    if (conv.type === 'group' && !conv.sessionKey) return;
 
     const { messages: rawMessages } = await conn.request('dm:history', { conversationId, before, limit });
     const stored = loadMessages(this._fingerprint);
@@ -732,6 +742,7 @@ export class DmService extends EventTarget {
         try {
           existing.sessionKey = await window.gimodi.identity.decryptSessionKey(encryptedKey);
           existing.encryptedSessionKey = encryptedKey;
+          this.dispatchEvent(new CustomEvent('session-key-restored', { detail: { conversationId } }));
         } catch (err) {
           console.error('[DmService] Failed to decrypt session key for conversation', conversationId, err);
         }

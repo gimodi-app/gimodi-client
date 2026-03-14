@@ -73,10 +73,19 @@ class DmChatProvider {
 
     this._boundHandlers.set('reaction-changed', onReactionChanged);
 
+    const onKeyRestored = (e) => {
+      if (e.detail?.conversationId === this._conversationId) {
+        this._fetchFromServer();
+      }
+    };
+
+    this._boundHandlers.set('session-key-restored', onKeyRestored);
+
     this._dmService.addEventListener('message-received', onReceived);
     this._dmService.addEventListener('message-updated', onUpdated);
     this._dmService.addEventListener('conversation-purged', onPurged);
     this._dmService.addEventListener('reaction-changed', onReactionChanged);
+    this._dmService.addEventListener('session-key-restored', onKeyRestored);
   }
 
   /**
