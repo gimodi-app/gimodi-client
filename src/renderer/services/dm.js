@@ -286,6 +286,24 @@ export class DmService extends EventTarget {
     return this._pickServer();
   }
 
+  /**
+   * @private
+   * @param {Array} oldParticipants
+   * @param {Array} newParticipants
+   * @returns {Array}
+   */
+  _mergeParticipants(oldParticipants, newParticipants) {
+    if (!oldParticipants?.length) return newParticipants;
+    const cached = new Map(oldParticipants.map((p) => [p.fingerprint, p]));
+    return newParticipants.map((p) => {
+      const old = cached.get(p.fingerprint);
+      if (old?.nickname && (!p.nickname || p.nickname.endsWith('…'))) {
+        return { ...p, nickname: old.nickname };
+      }
+      return p;
+    });
+  }
+
   // ── Conversation Management ─────────────────────────────────────────────
 
   /**
@@ -407,7 +425,7 @@ export class DmService extends EventTarget {
         this._conversations.set(conv.id, conv);
       } else {
         const existing = this._conversations.get(raw.id);
-        existing.participants = raw.participants;
+        existing.participants = this._mergeParticipants(existing.participants, raw.participants);
         existing.name = raw.name;
         existing.serverKey = serverKey;
         if (!existing.sessionKey && existing.type === 'group' && raw.encryptedSessionKey) {
@@ -780,7 +798,7 @@ export class DmService extends EventTarget {
 
     if (this._conversations.has(conversationId)) {
       const existing = this._conversations.get(conversationId);
-      existing.participants = participants;
+      existing.participants = this._mergeParticipants(existing.participants, participants);
       existing.name = name;
       if (serverKey) existing.serverKey = serverKey;
       if (!existing.sessionKey && existing.type === 'group' && encryptedKey) {
