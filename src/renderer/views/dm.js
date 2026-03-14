@@ -1,5 +1,5 @@
 import connectionManager from '../services/connectionManager.js';
-import { customAlert, customConfirm } from '../services/dialogs.js';
+import { customAlert, customConfirm, customPrompt } from '../services/dialogs.js';
 
 /** @type {import('../services/dm.js').DmService|null} */
 let dmService = null;
@@ -79,7 +79,24 @@ function showConvContextMenu(e, fingerprint) {
   menu.style.left = e.clientX + 'px';
   menu.style.top = e.clientY + 'px';
 
+  const isFriend = friendsService?.isFriend(fingerprint);
   const isBlocked = friendsService?.isBlocked(fingerprint);
+
+  if (!isFriend) {
+    const addItem = document.createElement('div');
+    addItem.className = 'dm-context-item';
+    addItem.textContent = 'Add Friend';
+    addItem.addEventListener('click', async () => {
+      closeContextMenu();
+      const shortFp = fingerprint.slice(0, 12) + '…';
+      const raw = await customPrompt(`Add as friend — enter a name:`, shortFp);
+      if (raw === null) return;
+      friendsService.addFriend(fingerprint, raw.trim() || shortFp);
+      renderConversationList();
+      if (activePeer === fingerprint) renderMessages();
+    });
+    menu.appendChild(addItem);
+  }
 
   const blockItem = document.createElement('div');
   blockItem.className = 'dm-context-item';
@@ -177,7 +194,7 @@ function buildRequestItem(peer) {
   acceptBtn.textContent = 'Accept';
   acceptBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
-    const raw = prompt(`Add as friend — enter a name for ${shortFp}:`, shortFp);
+    const raw = await customPrompt(`Add as friend — enter a name for ${shortFp}:`, shortFp);
     if (raw === null) return;
     const nickname = raw.trim() || shortFp;
     friendsService.addFriend(peer.fingerprint, nickname);
