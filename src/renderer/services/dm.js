@@ -349,6 +349,16 @@ export class DmService extends EventTarget {
   }
 
   /**
+   * Removes all locally stored messages for a conversation with the given peer.
+   * @param {string} peerFingerprint
+   */
+  purgeConversation(peerFingerprint) {
+    const messages = loadMessages(this._fingerprint).filter((m) => m.peerFingerprint !== peerFingerprint);
+    saveMessages(this._fingerprint, messages);
+    this.dispatchEvent(new CustomEvent('conversation-purged', { detail: { peerFingerprint } }));
+  }
+
+  /**
    * Returns a single message by ID from local storage.
    * @private
    * @param {string} id

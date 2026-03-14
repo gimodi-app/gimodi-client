@@ -1,5 +1,6 @@
 const STORAGE_KEY_PREFIX = 'dm_friends_';
 const IGNORED_KEY_PREFIX = 'dm_ignored_';
+const BLOCKED_KEY_PREFIX = 'dm_blocked_';
 
 /**
  * Returns the localStorage key for the friends list of a given identity fingerprint.
@@ -132,6 +133,52 @@ export class FriendsService {
       const raw = localStorage.getItem(key);
       const ignored = raw ? JSON.parse(raw) : [];
       return ignored.includes(fingerprint);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Blocks a contact. Blocked contacts keep their conversation history visible
+   * but incoming messages are suppressed and replies are disabled.
+   * @param {string} fingerprint
+   */
+  blockContact(fingerprint) {
+    try {
+      const key = `${BLOCKED_KEY_PREFIX}${this._fingerprint}`;
+      const raw = localStorage.getItem(key);
+      const blocked = raw ? JSON.parse(raw) : [];
+      if (!blocked.includes(fingerprint)) {
+        blocked.push(fingerprint);
+        localStorage.setItem(key, JSON.stringify(blocked));
+      }
+    } catch {}
+  }
+
+  /**
+   * Unblocks a previously blocked contact.
+   * @param {string} fingerprint
+   */
+  unblockContact(fingerprint) {
+    try {
+      const key = `${BLOCKED_KEY_PREFIX}${this._fingerprint}`;
+      const raw = localStorage.getItem(key);
+      const blocked = (raw ? JSON.parse(raw) : []).filter((fp) => fp !== fingerprint);
+      localStorage.setItem(key, JSON.stringify(blocked));
+    } catch {}
+  }
+
+  /**
+   * Returns true if the given fingerprint is blocked.
+   * @param {string} fingerprint
+   * @returns {boolean}
+   */
+  isBlocked(fingerprint) {
+    try {
+      const key = `${BLOCKED_KEY_PREFIX}${this._fingerprint}`;
+      const raw = localStorage.getItem(key);
+      const blocked = raw ? JSON.parse(raw) : [];
+      return blocked.includes(fingerprint);
     } catch {
       return false;
     }

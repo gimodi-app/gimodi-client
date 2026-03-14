@@ -1,5 +1,5 @@
 import connectionManager from '../services/connectionManager.js';
-import { customAlert } from '../services/dialogs.js';
+import { customAlert, customConfirm } from '../services/dialogs.js';
 
 /** @type {import('../services/dm.js').DmService|null} */
 let dmService = null;
@@ -52,25 +52,98 @@ function statusIcon(status) {
   return '<i class="bi bi-clock dm-status-pending" title="Pending"></i>';
 }
 
+/** @type {HTMLElement|null} */
+let _ctxMenu = null;
+
+/**
+ * Closes the open context menu, if any.
+ */
+function closeContextMenu() {
+  if (_ctxMenu) {
+    _ctxMenu.remove();
+    _ctxMenu = null;
+  }
+}
+
+/**
+ * Shows a context menu for a conversation item.
+ * @param {MouseEvent} e
+ * @param {string} fingerprint
+ */
+function showConvContextMenu(e, fingerprint) {
+  e.preventDefault();
+  closeContextMenu();
+
+  const menu = document.createElement('div');
+  menu.className = 'dm-context-menu';
+  menu.style.left = e.clientX + 'px';
+  menu.style.top = e.clientY + 'px';
+
+  const isBlocked = friendsService?.isBlocked(fingerprint);
+
+  const blockItem = document.createElement('div');
+  blockItem.className = 'dm-context-item';
+  blockItem.textContent = isBlocked ? 'Unblock' : 'Block';
+  blockItem.addEventListener('click', () => {
+    closeContextMenu();
+    if (isBlocked) {
+      friendsService.unblockContact(fingerprint);
+    } else {
+      friendsService.blockContact(fingerprint);
+    }
+    renderConversationList();
+    if (activePeer === fingerprint) renderMessages();
+  });
+
+  const purgeItem = document.createElement('div');
+  purgeItem.className = 'dm-context-item dm-context-danger';
+  purgeItem.textContent = 'Purge';
+  purgeItem.addEventListener('click', async () => {
+    closeContextMenu();
+    const confirmed = await customConfirm('Purge this conversation? All messages will be deleted and the contact will be removed.');
+    if (!confirmed) return;
+    dmService.purgeConversation(fingerprint);
+    friendsService?.removeFriend(fingerprint);
+    if (activePeer === fingerprint) {
+      activePeer = null;
+    }
+    renderConversationList();
+    renderMessages();
+  });
+
+  menu.appendChild(blockItem);
+  menu.appendChild(purgeItem);
+  document.body.appendChild(menu);
+  _ctxMenu = menu;
+}
+
+document.addEventListener('click', closeContextMenu, true);
+document.addEventListener('contextmenu', (e) => {
+  if (!e.target.closest('.dm-conv-item')) closeContextMenu();
+}, true);
+
 /**
  * Builds a conversation list item element.
  * @param {{fingerprint: string, nickname: string, lastMsg: object|null}} peer
  * @returns {HTMLElement}
  */
 function buildConvItem(peer) {
+  const blocked = friendsService?.isBlocked(peer.fingerprint);
   const item = document.createElement('div');
-  item.className = 'dm-conv-item' + (peer.fingerprint === activePeer ? ' active' : '');
+  item.className = 'dm-conv-item' + (peer.fingerprint === activePeer ? ' active' : '') + (blocked ? ' dm-conv-blocked' : '');
   item.dataset.fingerprint = peer.fingerprint;
 
   const preview = peer.lastMsg ? escapeHtml(peer.lastMsg.content.slice(0, 60)) : '<em>No messages yet</em>';
   const time = peer.lastMsg ? `<span class="dm-conv-time">${formatTime(peer.lastMsg.createdAt)}</span>` : '';
+  const blockedBadge = blocked ? ' <span class="dm-blocked-badge">Blocked</span>' : '';
 
   item.innerHTML = `
-    <div class="dm-conv-name">${escapeHtml(peer.nickname)}${time}</div>
+    <div class="dm-conv-name">${escapeHtml(peer.nickname)}${blockedBadge}${time}</div>
     <div class="dm-conv-preview">${preview}</div>
   `;
 
   item.addEventListener('click', () => openConversation(peer.fingerprint));
+  item.addEventListener('contextmenu', (e) => showConvContextMenu(e, peer.fingerprint));
   return item;
 }
 
@@ -220,9 +293,11 @@ function renderMessages() {
     return;
   }
 
+  const blocked = friendsService?.isBlocked(activePeer);
   if (header) header.textContent = peerName(activePeer);
-  if (input) input.disabled = false;
-  if (sendBtn) sendBtn.disabled = false;
+  if (input) input.disabled = !!blocked;
+  if (sendBtn) sendBtn.disabled = !!blocked;
+  if (input) input.placeholder = blocked ? 'You have blocked this person.' : 'Message…';
 
   const messages = dmService?.getConversation(activePeer) ?? [];
   container.innerHTML = '';
@@ -340,6 +415,11 @@ export function initDmView(dm, friends) {
   dmService.addEventListener('message-received', () => {
     renderConversationList();
     if (activePeer) renderMessages();
+  });
+
+  dmService.addEventListener('conversation-purged', () => {
+    renderConversationList();
+    renderMessages();
   });
 
   dmService.addEventListener('message-updated', (e) => {

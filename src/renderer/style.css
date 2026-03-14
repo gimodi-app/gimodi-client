@@ -5576,3 +5576,51 @@ input.is-invalid {
   border-color: var(--text-muted);
   color: var(--text-normal);
 }
+
+.dm-context-menu {
+  position: fixed;
+  z-index: 9999;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 140px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+.dm-context-item {
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--text-normal);
+  cursor: pointer;
+  user-select: none;
+}
+
+.dm-context-item:hover {
+  background: var(--bg-hover);
+}
+
+.dm-context-danger {
+  color: #e57373;
+}
+
+.dm-context-danger:hover {
+  background: rgba(229, 115, 115, 0.12);
+}
+
+.dm-blocked-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #e57373;
+  background: rgba(229, 115, 115, 0.15);
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+
+.dm-conv-blocked .dm-conv-preview {
+  opacity: 0.45;
+}
