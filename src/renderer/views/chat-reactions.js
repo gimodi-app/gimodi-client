@@ -3,6 +3,26 @@ import serverService from '../services/server.js';
 import { escapeHtml } from './chat-markdown.js';
 import { showEmojiPicker, closeEmojiPicker } from './emoji-picker.js';
 
+/** @type {object|null} */
+let _activeProvider = null;
+
+/**
+ * Sets the active chat provider for reaction events.
+ * Pass null to fall back to the default channel chatService.
+ * @param {object|null} provider
+ */
+export function setReactionProvider(provider) {
+  _activeProvider = provider;
+}
+
+/**
+ * Returns the active reaction handler (provider or chatService fallback).
+ * @returns {{ react: Function, unreact: Function }}
+ */
+function reactionHandler() {
+  return _activeProvider || chatService;
+}
+
 const QUICK_REACTIONS = ['👍', '👎', '❤️', '😂', '😊', '🔥'];
 
 /**
@@ -32,9 +52,9 @@ export function renderReactions(msgEl, messageId, reactions) {
     btn.title = r.userIds.length === 1 ? '1 person' : `${r.userIds.length} people`;
     btn.addEventListener('click', () => {
       if (r.currentUser) {
-        chatService.unreact(messageId, r.emoji);
+        reactionHandler().unreact(messageId, r.emoji);
       } else {
-        chatService.react(messageId, r.emoji);
+        reactionHandler().react(messageId, r.emoji);
       }
     });
     reactionsRow.appendChild(btn);
@@ -79,7 +99,7 @@ export function showQuickReactionPicker(x, y, messageId) {
     btn.className = 'quick-reaction-btn';
     btn.textContent = emoji;
     btn.addEventListener('click', () => {
-      chatService.react(messageId, emoji);
+      reactionHandler().react(messageId, emoji);
       closeQuickReactionPicker();
     });
     bar.appendChild(btn);
@@ -96,7 +116,7 @@ export function showQuickReactionPicker(x, y, messageId) {
     showEmojiPicker({
       x: rect.left,
       y: rect.bottom + 4,
-      onSelect: (emoji) => chatService.react(messageId, emoji),
+      onSelect: (emoji) => reactionHandler().react(messageId, emoji),
     });
   });
   bar.appendChild(moreBtn);
@@ -150,11 +170,7 @@ function closeQuickReactionPicker() {
  */
 export function onReactionUpdate(e) {
   const { messageId, reactions } = e.detail;
-  const chatMessages = document.getElementById('chat-messages');
-  if (!chatMessages) {
-    return;
-  }
-  const msgEl = chatMessages.querySelector(`[data-msg-id="${messageId}"]`);
+  const msgEl = document.querySelector(`[data-msg-id="${messageId}"]`);
   if (!msgEl) {
     return;
   }

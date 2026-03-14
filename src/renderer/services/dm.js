@@ -2,6 +2,7 @@ import connectionManager from './connectionManager.js';
 
 const MSG_STORAGE_PREFIX = 'dm_messages_';
 const PURGE_LOG_PREFIX = 'dm_purged_';
+const REACTIONS_STORAGE_PREFIX = 'dm_reactions_';
 
 /**
  * @typedef {'pending'|'sent'|'delivered'} DmStatus
@@ -13,6 +14,9 @@ const PURGE_LOG_PREFIX = 'dm_purged_';
  * @property {string} content
  * @property {DmStatus} status
  * @property {number} createdAt
+ * @property {string|null} [replyTo]
+ * @property {string|null} [replyToNickname]
+ * @property {string|null} [replyToContent]
  */
 
 /**
@@ -58,6 +62,27 @@ function loadPurgeLog(ownFingerprint) {
   } catch {
     return {};
   }
+}
+
+/**
+ * @param {string} ownFingerprint
+ * @returns {Record<string, string[]>}
+ */
+function loadReactions(ownFingerprint) {
+  try {
+    const raw = localStorage.getItem(`${REACTIONS_STORAGE_PREFIX}${ownFingerprint}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * @param {string} ownFingerprint
+ * @param {Record<string, string[]>} data
+ */
+function saveReactions(ownFingerprint, data) {
+  localStorage.setItem(`${REACTIONS_STORAGE_PREFIX}${ownFingerprint}`, JSON.stringify(data));
 }
 
 /**
@@ -177,9 +202,10 @@ export class DmService extends EventTarget {
    * Generates a UUID client-side, stores locally as 'sent', and transmits via the best available server.
    * @param {string} recipientFingerprint
    * @param {string} content
+   * @param {{ id: string, nickname: string, content: string }|null} [replyTo]
    * @returns {Promise<DmMessage>} The stored message object
    */
-  async sendDm(recipientFingerprint, content) {
+  async sendDm(recipientFingerprint, content, replyTo = null) {
     const id = crypto.randomUUID();
     const now = Date.now();
 
@@ -191,6 +217,9 @@ export class DmService extends EventTarget {
       content,
       status: 'pending',
       createdAt: now,
+      replyTo: replyTo?.id ?? null,
+      replyToNickname: replyTo?.nickname ?? null,
+      replyToContent: replyTo?.content ?? null,
     };
 
     this._storeMessage(message);
@@ -201,8 +230,15 @@ export class DmService extends EventTarget {
       throw new Error('No server connected');
     }
 
+    const payload = { id, recipientFingerprint, content };
+    if (replyTo?.id) {
+      payload.replyTo = replyTo.id;
+      payload.replyToNickname = replyTo.nickname ?? null;
+      payload.replyToContent = replyTo.content ?? null;
+    }
+
     try {
-      await server.conn.request('dm:send', { id, recipientFingerprint, content });
+      await server.conn.request('dm:send', payload);
       this._updateStatus(id, 'sent');
     } catch (err) {
       // Leave as 'pending' so the UI can offer a retry
@@ -288,6 +324,9 @@ export class DmService extends EventTarget {
         content: raw.content,
         status: raw.delivered_at ? 'delivered' : 'sent',
         createdAt: raw.created_at,
+        replyTo: raw.reply_to ?? null,
+        replyToNickname: raw.reply_to_nickname ?? null,
+        replyToContent: raw.reply_to_content ?? null,
       });
     }
 
@@ -302,7 +341,7 @@ export class DmService extends EventTarget {
    * @param {object} detail
    */
   _handleReceived(detail) {
-    const { id, senderFingerprint, content, createdAt } = detail;
+    const { id, senderFingerprint, content, createdAt, replyTo, replyToNickname, replyToContent } = detail;
 
     const purgeLog = loadPurgeLog(this._fingerprint);
     const purgedAt = purgeLog[senderFingerprint];
@@ -326,6 +365,9 @@ export class DmService extends EventTarget {
       content,
       status: 'delivered',
       createdAt,
+      replyTo: replyTo ?? null,
+      replyToNickname: replyToNickname ?? null,
+      replyToContent: replyToContent ?? null,
     };
 
     messages.push(message);
@@ -431,6 +473,58 @@ export class DmService extends EventTarget {
     }
 
     this.dispatchEvent(new CustomEvent('conversation-purged', { detail: { peerFingerprint } }));
+  }
+
+  /**
+   * Returns aggregated reactions for a message from local storage.
+   * @param {string} messageId
+   * @returns {Array<{emoji: string, count: number, userIds: string[], currentUser: boolean}>}
+   */
+  getReactions(messageId) {
+    const data = loadReactions(this._fingerprint);
+    return (data[messageId] || []).map((emoji) => ({
+      emoji,
+      count: 1,
+      userIds: [this._fingerprint],
+      currentUser: true,
+    }));
+  }
+
+  /**
+   * Adds a reaction emoji to a message and persists it locally.
+   * @param {string} messageId
+   * @param {string} emoji
+   */
+  addReaction(messageId, emoji) {
+    const data = loadReactions(this._fingerprint);
+    const emojis = data[messageId] || [];
+    if (!emojis.includes(emoji)) {
+      emojis.push(emoji);
+      data[messageId] = emojis;
+      saveReactions(this._fingerprint, data);
+      this.dispatchEvent(new CustomEvent('reaction-changed', { detail: { messageId } }));
+    }
+  }
+
+  /**
+   * Removes a reaction emoji from a message and persists the change locally.
+   * @param {string} messageId
+   * @param {string} emoji
+   */
+  removeReaction(messageId, emoji) {
+    const data = loadReactions(this._fingerprint);
+    const emojis = data[messageId] || [];
+    const idx = emojis.indexOf(emoji);
+    if (idx !== -1) {
+      emojis.splice(idx, 1);
+      if (emojis.length === 0) {
+        delete data[messageId];
+      } else {
+        data[messageId] = emojis;
+      }
+      saveReactions(this._fingerprint, data);
+      this.dispatchEvent(new CustomEvent('reaction-changed', { detail: { messageId } }));
+    }
   }
 
   /**

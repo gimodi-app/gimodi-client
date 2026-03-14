@@ -20,8 +20,8 @@ class DmChatProvider {
     this.supportsPinning = false;
     this.supportsTabs = false;
     this.supportsFileUpload = false;
-    this.supportsReactions = false;
-    this.supportsReplies = false;
+    this.supportsReactions = true;
+    this.supportsReplies = true;
     this.supportsTyping = false;
     this.supportsLinkPreviews = false;
     this.supportsEdit = false;
@@ -66,9 +66,18 @@ class DmChatProvider {
     this._boundHandlers.set('message-updated', onUpdated);
     this._boundHandlers.set('conversation-purged', onPurged);
 
+    const onReactionChanged = (e) => {
+      const { messageId } = e.detail;
+      const reactions = this._dmService.getReactions(messageId);
+      this.events.dispatchEvent(new CustomEvent('reaction-update', { detail: { messageId, reactions } }));
+    };
+
+    this._boundHandlers.set('reaction-changed', onReactionChanged);
+
     this._dmService.addEventListener('message-received', onReceived);
     this._dmService.addEventListener('message-updated', onUpdated);
     this._dmService.addEventListener('conversation-purged', onPurged);
+    this._dmService.addEventListener('reaction-changed', onReactionChanged);
   }
 
   /**
@@ -88,14 +97,19 @@ class DmChatProvider {
       channelId: null,
       direction: dm.direction,
       status: dm.status,
+      replyTo: dm.replyTo || undefined,
+      replyToNickname: dm.replyToNickname || undefined,
+      replyToContent: dm.replyToContent || undefined,
+      reactions: this._dmService.getReactions(dm.id),
     };
   }
 
   /**
    * @param {string} content
+   * @param {{ id: string, nickname: string, content: string }|null} [replyTo]
    */
-  async sendMessage(content) {
-    await this._dmService.sendDm(this._peerFingerprint, content);
+  async sendMessage(content, replyTo = null) {
+    await this._dmService.sendDm(this._peerFingerprint, content, replyTo);
   }
 
   /**
@@ -127,12 +141,20 @@ class DmChatProvider {
     // Not supported for DMs yet
   }
 
-  react() {
-    // Not supported for DMs yet
+  /**
+   * @param {string} messageId
+   * @param {string} emoji
+   */
+  react(messageId, emoji) {
+    this._dmService.addReaction(messageId, emoji);
   }
 
-  unreact() {
-    // Not supported for DMs yet
+  /**
+   * @param {string} messageId
+   * @param {string} emoji
+   */
+  unreact(messageId, emoji) {
+    this._dmService.removeReaction(messageId, emoji);
   }
 
   sendTyping() {
@@ -154,10 +176,11 @@ class DmChatProvider {
   }
 
   /**
-   * @returns {null}
+   * Returns the own fingerprint as identity token so reaction/reply UI is shown.
+   * @returns {string}
    */
   get userId() {
-    return null;
+    return this._dmService._fingerprint;
   }
 
   /**

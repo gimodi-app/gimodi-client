@@ -5,7 +5,7 @@ import { setNickname, invalidateNickname, getCachedNickname, resolveNicknames } 
 import { formatTime, formatTimeShort, formatDateTime, formatRelativeTime } from '../services/timeFormat.js';
 import { customConfirm } from '../services/dialogs.js';
 import { renderMarkdown, escapeHtml, replaceEmoticons, isEmojiOnly } from './chat-markdown.js';
-import { renderReactions, showQuickReactionPicker, onReactionUpdate } from './chat-reactions.js';
+import { renderReactions, showQuickReactionPicker, onReactionUpdate, setReactionProvider } from './chat-reactions.js';
 import { searchEmoji, getEmoji } from '../services/emoji-shortcodes.js';
 
 const MAX_MESSAGE_LENGTH = 4000;
@@ -862,6 +862,7 @@ export function initChatView(channelId, chatProvider, container) {
   }
   if (provider.supportsReactions) {
     provider.events.addEventListener('reaction-update', onReactionUpdate);
+    setReactionProvider(provider);
   }
   if (provider.supportsEdit) {
     provider.events.addEventListener('message-edited', onMessageEdited);
@@ -969,6 +970,7 @@ export function cleanup() {
     provider.events.removeEventListener('purged', onChatPurged);
     provider.events.removeEventListener('typing', onTypingEvent);
     provider.events.removeEventListener('reaction-update', onReactionUpdate);
+    setReactionProvider(null);
     provider.events.removeEventListener('message-edited', onMessageEdited);
     provider.events.removeEventListener('subscribed', onChatSubscribed);
     if (provider.removeServerEventListener) {
