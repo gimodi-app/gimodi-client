@@ -1,356 +1,360 @@
+import connectionManager from './connectionManager.js';
+
+const MSG_STORAGE_PREFIX = 'dm_messages_';
+
 /**
- * DmService listens to dm:* events on ALL connections, merges conversations
- * by fingerprint, handles route selection for sending, and aggregates presence.
+ * @typedef {'pending'|'sent'|'delivered'} DmStatus
+ *
+ * @typedef {object} DmMessage
+ * @property {string} id - UUID generated client-side
+ * @property {string} peerFingerprint - The other party's fingerprint
+ * @property {'sent'|'received'} direction
+ * @property {string} content
+ * @property {DmStatus} status
+ * @property {number} createdAt
  */
-class DmService extends EventTarget {
-  constructor() {
-    super();
-    /** @type {Map<string, object[]>} fingerprint → messages[] */
-    this._conversations = new Map();
-    /** @type {Map<string, object>} fingerprint → { displayName, servers, lastMessage } */
-    this._conversationMeta = new Map();
-    /** @type {Map<string, boolean>} fingerprint → online */
-    this._presence = new Map();
-    /** @type {Map<string, Function[]>} connKey → bound listeners */
-    this._connListeners = new Map();
-    /** @type {import('./connectionManager.js').default|null} */
-    this._connectionManager = null;
-    /** @type {object[]} */
-    this._friends = [];
-  }
 
-  /**
-   * Initializes the DM service with a connection manager reference.
-   * @param {import('./connectionManager.js').default} connectionManager
-   */
-  init(connectionManager) {
-    this._connectionManager = connectionManager;
+/**
+ * localStorage key for the message store of a given identity fingerprint.
+ * @param {string} ownFingerprint
+ * @returns {string}
+ */
+function storageKey(ownFingerprint) {
+  return `${MSG_STORAGE_PREFIX}${ownFingerprint}`;
+}
 
-    for (const [key, conn] of connectionManager.connections) {
-      this._bindConnection(key, conn);
-    }
-  }
-
-  /**
-   * Binds dm:* and presence:* listeners to a server connection.
-   * @param {string} key
-   * @param {import('./serverConnection.js').ServerService} conn
-   */
-  _bindConnection(key, conn) {
-    if (this._connListeners.has(key)) {
-      return;
-    }
-
-    const onDmReceive = (e) => this._onDmReceive(key, e.detail);
-    const onDmDeleted = (e) => this._onDmDeleted(key, e.detail);
-    const onDmLinkPreview = (e) => this._onDmLinkPreview(key, e.detail);
-    const onPresenceUpdate = (e) => this._onPresenceUpdate(e.detail);
-
-    conn.addEventListener('dm:receive', onDmReceive);
-    conn.addEventListener('dm:deleted', onDmDeleted);
-    conn.addEventListener('dm:link-preview', onDmLinkPreview);
-    conn.addEventListener('presence:update', onPresenceUpdate);
-
-    this._connListeners.set(key, [
-      { type: 'dm:receive', fn: onDmReceive },
-      { type: 'dm:deleted', fn: onDmDeleted },
-      { type: 'dm:link-preview', fn: onDmLinkPreview },
-      { type: 'presence:update', fn: onPresenceUpdate },
-    ]);
-  }
-
-  /**
-   * Unbinds listeners from a server connection.
-   * @param {string} key
-   * @param {import('./serverConnection.js').ServerService} conn
-   */
-  unbindConnection(key, conn) {
-    const listeners = this._connListeners.get(key);
-    if (!listeners) {
-      return;
-    }
-    for (const { type, fn } of listeners) {
-      conn.removeEventListener(type, fn);
-    }
-    this._connListeners.delete(key);
-  }
-
-  /**
-   * Called when a new server connection is added.
-   * @param {string} key
-   * @param {import('./serverConnection.js').ServerService} conn
-   */
-  onConnectionAdded(key, conn) {
-    this._bindConnection(key, conn);
-    this._subscribePresence(key, conn);
-  }
-
-  /**
-   * Called when a server connection is removed.
-   * @param {string} key
-   * @param {import('./serverConnection.js').ServerService} conn
-   */
-  onConnectionRemoved(key, conn) {
-    this.unbindConnection(key, conn);
-  }
-
-  /**
-   * Subscribes to presence updates for all friends on a specific connection.
-   * @param {string} key
-   * @param {import('./serverConnection.js').ServerService} conn
-   */
-  _subscribePresence(key, conn) {
-    const fingerprints = this._friends.map((f) => f.fingerprint).filter(Boolean);
-    if (fingerprints.length > 0) {
-      conn.send('presence:subscribe', { fingerprints });
-    }
-  }
-
-  /**
-   * Updates the friends list and re-subscribes presence on all connections.
-   * @param {object[]} friends
-   */
-  setFriends(friends) {
-    this._friends = friends;
-    if (!this._connectionManager) {
-      return;
-    }
-    const fingerprints = friends.map((f) => f.fingerprint).filter(Boolean);
-    if (fingerprints.length === 0) {
-      return;
-    }
-    for (const [key, conn] of this._connectionManager.connections) {
-      conn.send('presence:subscribe', { fingerprints });
-    }
-  }
-
-  /**
-   * Returns the fingerprint for a partner userId by looking up friends.
-   * @param {string} partnerUserId
-   * @param {string} connKey
-   * @returns {string|null}
-   */
-  _resolveFingerprint(partnerUserId, connKey) {
-    for (const friend of this._friends) {
-      for (const s of friend.servers) {
-        if (s.userId === partnerUserId) {
-          return friend.fingerprint;
-        }
-      }
-    }
-
-    if (!this._connectionManager) {
-      return null;
-    }
-    const conn = this._connectionManager.getConnection(connKey);
-    if (!conn) {
-      return null;
-    }
-    const clients = conn.clients || [];
-    for (const c of clients) {
-      if (c.userId === partnerUserId && c.fingerprint) {
-        return c.fingerprint;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * @param {string} connKey
-   * @param {object} msg
-   */
-  _onDmReceive(connKey, msg) {
-    const conn = this._connectionManager?.getConnection(connKey);
-    const myUserId = conn?.userId;
-    const partnerUserId = msg.senderUserId === myUserId ? msg.recipientUserId : msg.senderUserId;
-    const fingerprint = this._resolveFingerprint(partnerUserId, connKey);
-
-    this.dispatchEvent(
-      new CustomEvent('dm-message', {
-        detail: { ...msg, fingerprint, connKey, partnerUserId },
-      }),
-    );
-  }
-
-  /**
-   * @param {string} connKey
-   * @param {object} detail
-   */
-  _onDmDeleted(connKey, detail) {
-    this.dispatchEvent(new CustomEvent('dm-deleted', { detail: { ...detail, connKey } }));
-  }
-
-  /**
-   * @param {string} connKey
-   * @param {object} detail
-   */
-  _onDmLinkPreview(connKey, detail) {
-    this.dispatchEvent(new CustomEvent('dm-link-preview', { detail: { ...detail, connKey } }));
-  }
-
-  /**
-   * @param {object} detail
-   */
-  _onPresenceUpdate(detail) {
-    const { fingerprint, online } = detail;
-    this._presence.set(fingerprint, online);
-    this.dispatchEvent(new CustomEvent('presence-update', { detail: { fingerprint, online } }));
-  }
-
-  /**
-   * Checks if a friend (by fingerprint) is online on any connected server.
-   * @param {string} fingerprint
-   * @returns {boolean}
-   */
-  isOnline(fingerprint) {
-    return this._presence.get(fingerprint) || false;
-  }
-
-  /**
-   * Picks the best connection to route a DM through for a given friend.
-   * @param {string} fingerprint
-   * @returns {{ conn: import('./serverConnection.js').ServerService, recipientUserId: string, connKey: string }|null}
-   */
-  pickRoute(fingerprint) {
-    const friend = this._friends.find((f) => f.fingerprint === fingerprint);
-    if (!friend || !this._connectionManager) {
-      return null;
-    }
-
-    let bestConn = null;
-    let bestUserId = null;
-    let bestKey = null;
-
-    for (const server of friend.servers) {
-      for (const [key, conn] of this._connectionManager.connections) {
-        if (!conn.connected) {
-          continue;
-        }
-        const clients = conn.clients || [];
-        const friendOnline = clients.some((c) => c.userId === server.userId);
-
-        if (conn.userId && server.address) {
-          const connAddress = key.split('\0')[0];
-          if (connAddress === server.address || conn.userId) {
-            if (friendOnline) {
-              return { conn, recipientUserId: server.userId, connKey: key };
-            }
-            if (!bestConn) {
-              bestConn = conn;
-              bestUserId = server.userId;
-              bestKey = key;
-            }
-          }
-        }
-      }
-    }
-
-    if (bestConn) {
-      return { conn: bestConn, recipientUserId: bestUserId, connKey: bestKey };
-    }
-    return null;
-  }
-
-  /**
-   * Sends a DM to a friend, routing through the best available connection.
-   * @param {string} fingerprint
-   * @param {string} content
-   * @param {string} [replyTo]
-   * @returns {boolean}
-   */
-  sendMessage(fingerprint, content, replyTo = null) {
-    const route = this.pickRoute(fingerprint);
-    if (!route) {
-      return false;
-    }
-    route.conn.send('dm:send', { recipientUserId: route.recipientUserId, content, replyTo });
-    return true;
-  }
-
-  /**
-   * Fetches DM history for a friend through a specific server connection.
-   * @param {string} fingerprint
-   * @param {number} [before]
-   * @param {number} [limit]
-   * @returns {Promise<object|null>}
-   */
-  async fetchHistory(fingerprint, before, limit = 50) {
-    const route = this.pickRoute(fingerprint);
-    if (!route) {
-      return null;
-    }
-    return route.conn.request('dm:history', { recipientUserId: route.recipientUserId, before, limit });
-  }
-
-  /**
-   * Fetches DM conversations from all connected servers.
-   * @returns {Promise<object[]>}
-   */
-  async fetchAllConversations() {
-    if (!this._connectionManager) {
-      return [];
-    }
-
-    const promises = [];
-    for (const [key, conn] of this._connectionManager.connections) {
-      if (conn.connected && conn.userId) {
-        promises.push(
-          conn
-            .request('dm:conversations', {})
-            .then((data) => ({ key, conversations: data.conversations || [] }))
-            .catch(() => ({ key, conversations: [] })),
-        );
-      }
-    }
-
-    const results = await Promise.all(promises);
-    const merged = new Map();
-
-    for (const { key, conversations } of results) {
-      for (const conv of conversations) {
-        const fp = conv.partnerFingerprint;
-        if (!fp) {
-          continue;
-        }
-        const existing = merged.get(fp);
-        if (!existing || conv.lastMessage.timestamp > existing.lastMessage.timestamp) {
-          merged.set(fp, { ...conv, connKey: key });
-        }
-      }
-    }
-
-    return [...merged.values()];
-  }
-
-  /**
-   * Deletes a DM message through the appropriate connection.
-   * @param {string} fingerprint
-   * @param {string} messageId
-   * @returns {Promise<object|null>}
-   */
-  async deleteMessage(fingerprint, messageId) {
-    const route = this.pickRoute(fingerprint);
-    if (!route) {
-      return null;
-    }
-    return route.conn.request('dm:delete', { messageId });
-  }
-
-  /**
-   * Cleans up all listeners.
-   */
-  cleanup() {
-    if (this._connectionManager) {
-      for (const [key, conn] of this._connectionManager.connections) {
-        this.unbindConnection(key, conn);
-      }
-    }
-    this._connListeners.clear();
-    this._conversations.clear();
-    this._conversationMeta.clear();
-    this._presence.clear();
+/**
+ * @param {string} ownFingerprint
+ * @returns {DmMessage[]}
+ */
+function loadMessages(ownFingerprint) {
+  try {
+    const raw = localStorage.getItem(storageKey(ownFingerprint));
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
   }
 }
 
-const dmService = new DmService();
-export default dmService;
+/**
+ * @param {string} ownFingerprint
+ * @param {DmMessage[]} messages
+ */
+function saveMessages(ownFingerprint, messages) {
+  localStorage.setItem(storageKey(ownFingerprint), JSON.stringify(messages));
+}
+
+/**
+ * Manages direct messages for a single identity.
+ * Handles local persistence, sending via connected servers, deduplication, and delivery tracking.
+ */
+export class DmService extends EventTarget {
+  /**
+   * @param {string} ownFingerprint - The current user's OpenPGP fingerprint
+   */
+  constructor(ownFingerprint) {
+    super();
+    this._fingerprint = ownFingerprint;
+
+    /** @type {Map<string, Function>} - serverKey → bound listener for dm:receive */
+    this._receiveListeners = new Map();
+    /** @type {Map<string, Function>} - serverKey → bound listener for dm:delivered */
+    this._deliveredListeners = new Map();
+
+    connectionManager.addEventListener('connection-status-changed', (e) => {
+      const { key, status } = e.detail;
+      if (status === 'connected') {
+        this._bindConnection(key);
+      } else if (status === 'disconnected') {
+        this._unbindConnection(key);
+      }
+    });
+
+    for (const [key] of connectionManager.connections) {
+      this._bindConnection(key);
+    }
+  }
+
+  /**
+   * Attaches dm:receive and dm:delivered listeners to a server connection.
+   * @private
+   * @param {string} key
+   */
+  _bindConnection(key) {
+    if (this._receiveListeners.has(key)) {
+      return;
+    }
+
+    const conn = connectionManager.getConnection(key);
+    if (!conn) {
+      return;
+    }
+
+    const onReceive = (e) => this._handleReceived(e.detail);
+    const onDelivered = (e) => this._handleDelivered(e.detail);
+
+    conn.addEventListener('dm:receive', onReceive);
+    conn.addEventListener('dm:delivered', onDelivered);
+
+    this._receiveListeners.set(key, onReceive);
+    this._deliveredListeners.set(key, onDelivered);
+  }
+
+  /**
+   * Removes dm listeners from a server connection.
+   * @private
+   * @param {string} key
+   */
+  _unbindConnection(key) {
+    const conn = connectionManager.getConnection(key);
+    const onReceive = this._receiveListeners.get(key);
+    const onDelivered = this._deliveredListeners.get(key);
+
+    if (conn && onReceive) {
+      conn.removeEventListener('dm:receive', onReceive);
+      conn.removeEventListener('dm:delivered', onDelivered);
+    }
+
+    this._receiveListeners.delete(key);
+    this._deliveredListeners.delete(key);
+  }
+
+  /**
+   * Picks a connected server to route a DM through.
+   * Prefers the active server, falls back to any other connected server.
+   * @private
+   * @returns {{key: string, conn: object}|null}
+   */
+  _pickServer() {
+    const activeKey = connectionManager.activeKey;
+    if (activeKey) {
+      const conn = connectionManager.getConnection(activeKey);
+      if (conn?.connected) {
+        return { key: activeKey, conn };
+      }
+    }
+    for (const [key, conn] of connectionManager.connections) {
+      if (conn.connected) {
+        return { key, conn };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Sends a direct message to a recipient identified by fingerprint.
+   * Generates a UUID client-side, stores locally as 'sent', and transmits via the best available server.
+   * @param {string} recipientFingerprint
+   * @param {string} content
+   * @returns {Promise<DmMessage>} The stored message object
+   */
+  async sendDm(recipientFingerprint, content) {
+    const id = crypto.randomUUID();
+    const now = Date.now();
+
+    /** @type {DmMessage} */
+    const message = {
+      id,
+      peerFingerprint: recipientFingerprint,
+      direction: 'sent',
+      content,
+      status: 'pending',
+      createdAt: now,
+    };
+
+    this._storeMessage(message);
+    this.dispatchEvent(new CustomEvent('message-updated', { detail: message }));
+
+    const server = this._pickServer();
+    if (!server) {
+      throw new Error('No server connected');
+    }
+
+    try {
+      await server.conn.request('dm:send', { id, recipientFingerprint, content });
+      this._updateStatus(id, 'sent');
+    } catch (err) {
+      // Leave as 'pending' so the UI can offer a retry
+      throw err;
+    }
+
+    return this._getMessage(id);
+  }
+
+  /**
+   * Retries sending a pending message via a specific server.
+   * Uses the original UUID so the recipient deduplicates correctly.
+   * @param {string} messageId
+   * @param {string} serverKey - Key of the server to retry through
+   */
+  async retrySend(messageId, serverKey) {
+    const messages = loadMessages(this._fingerprint);
+    const msg = messages.find((m) => m.id === messageId);
+    if (!msg) {
+      throw new Error('Message not found');
+    }
+
+    const conn = connectionManager.getConnection(serverKey);
+    if (!conn?.connected) {
+      throw new Error('Server not connected');
+    }
+
+    await conn.request('dm:send', { id: msg.id, recipientFingerprint: msg.peerFingerprint, content: msg.content });
+    this._updateStatus(messageId, 'sent');
+  }
+
+  /**
+   * Returns messages for a conversation with a specific peer, sorted oldest-first.
+   * @param {string} peerFingerprint
+   * @returns {DmMessage[]}
+   */
+  getConversation(peerFingerprint) {
+    return loadMessages(this._fingerprint)
+      .filter((m) => m.peerFingerprint === peerFingerprint)
+      .sort((a, b) => a.createdAt - b.createdAt);
+  }
+
+  /**
+   * Returns a map of peerFingerprint → last message, for rendering the conversation list.
+   * @returns {Map<string, DmMessage>}
+   */
+  getConversationList() {
+    const latest = new Map();
+    for (const msg of loadMessages(this._fingerprint)) {
+      const existing = latest.get(msg.peerFingerprint);
+      if (!existing || msg.createdAt > existing.createdAt) {
+        latest.set(msg.peerFingerprint, msg);
+      }
+    }
+    return latest;
+  }
+
+  /**
+   * Fetches DM history for a conversation from the server and merges it into local storage.
+   * @param {string} peerFingerprint
+   * @param {string} serverKey - Which server to query
+   * @param {{ before?: number, limit?: number }} [options]
+   */
+  async fetchHistory(peerFingerprint, serverKey, { before, limit } = {}) {
+    const conn = connectionManager.getConnection(serverKey);
+    if (!conn?.connected) {
+      return;
+    }
+
+    const { messages } = await conn.request('dm:history', { peerFingerprint, before, limit });
+    const messages_ = loadMessages(this._fingerprint);
+    const knownIds = new Set(messages_.map((m) => m.id));
+
+    for (const raw of messages) {
+      if (knownIds.has(raw.id)) {
+        continue;
+      }
+      const direction = raw.sender_fingerprint === this._fingerprint ? 'sent' : 'received';
+      messages_.push({
+        id: raw.id,
+        peerFingerprint,
+        direction,
+        content: raw.content,
+        status: raw.delivered_at ? 'delivered' : 'sent',
+        createdAt: raw.created_at,
+      });
+    }
+
+    saveMessages(this._fingerprint, messages_);
+    this.dispatchEvent(new CustomEvent('history-loaded', { detail: { peerFingerprint } }));
+  }
+
+  /**
+   * Handles an incoming dm:receive event from any server.
+   * Deduplicates by UUID, stores locally, sends acknowledgment.
+   * @private
+   * @param {object} detail
+   */
+  _handleReceived(detail) {
+    const { id, senderFingerprint, content, createdAt } = detail;
+
+    const messages = loadMessages(this._fingerprint);
+    if (messages.some((m) => m.id === id)) {
+      // Already received — send ack again in case the server missed the first one
+      this._sendAck(id, senderFingerprint);
+      return;
+    }
+
+    /** @type {DmMessage} */
+    const message = {
+      id,
+      peerFingerprint: senderFingerprint,
+      direction: 'received',
+      content,
+      status: 'delivered',
+      createdAt,
+    };
+
+    messages.push(message);
+    saveMessages(this._fingerprint, messages);
+
+    this._sendAck(id, senderFingerprint);
+    this.dispatchEvent(new CustomEvent('message-received', { detail: message }));
+  }
+
+  /**
+   * Handles a dm:delivered event, updating the local message status.
+   * @private
+   * @param {object} detail
+   */
+  _handleDelivered({ id }) {
+    this._updateStatus(id, 'delivered');
+  }
+
+  /**
+   * Sends a dm:ack to the server that delivered the message.
+   * Tries all connected servers since we don't know which one the sender is on.
+   * @private
+   * @param {string} messageId
+   * @param {string} senderFingerprint
+   */
+  _sendAck(messageId, senderFingerprint) {
+    for (const [, conn] of connectionManager.connections) {
+      if (conn.connected) {
+        conn.send('dm:ack', { id: messageId, senderFingerprint });
+      }
+    }
+  }
+
+  /**
+   * Stores a message in localStorage.
+   * @private
+   * @param {DmMessage} message
+   */
+  _storeMessage(message) {
+    const messages = loadMessages(this._fingerprint);
+    messages.push(message);
+    saveMessages(this._fingerprint, messages);
+  }
+
+  /**
+   * Updates the status of a locally stored message by ID.
+   * @private
+   * @param {string} id
+   * @param {DmStatus} status
+   */
+  _updateStatus(id, status) {
+    const messages = loadMessages(this._fingerprint);
+    const msg = messages.find((m) => m.id === id);
+    if (msg) {
+      msg.status = status;
+      saveMessages(this._fingerprint, messages);
+      this.dispatchEvent(new CustomEvent('message-updated', { detail: { ...msg } }));
+    }
+  }
+
+  /**
+   * Returns a single message by ID from local storage.
+   * @private
+   * @param {string} id
+   * @returns {DmMessage|null}
+   */
+  _getMessage(id) {
+    return loadMessages(this._fingerprint).find((m) => m.id === id) ?? null;
+  }
+}

@@ -1,7 +1,7 @@
 import connectionManager, { connKey } from '../services/connectionManager.js';
-import { initSidebar as _initSidebar, renderSidebar, setActiveServer, clearActiveServer, updateServerInList, addOrUpdateServer, replaceServerInPlace } from './sidebar.js';
+import { initSidebar as _initSidebar, renderSidebar, setActiveServer, clearActiveServer, updateServerInList, addOrUpdateServer, replaceServerInPlace, removeServerByIdentity } from './sidebar.js';
 
-export { renderSidebar, setActiveServer, clearActiveServer, refreshIdentitySelects };
+export { renderSidebar, setActiveServer, clearActiveServer, refreshIdentitySelects, removeServerByIdentity };
 
 /**
  * Reloads identities and repopulates both add/edit server identity dropdowns.
@@ -249,7 +249,7 @@ async function handleAddServer() {
 
   addServerError.textContent = '';
   btnConfirmAddServer.disabled = true;
-  btnConfirmAddServer.textContent = 'Connecting...';
+  btnConfirmAddServer.textContent = 'Adding...';
 
   const selectedIdentity = getSelectedIdentityFrom(addServerIdentity);
   const identityFingerprint = selectedIdentity ? selectedIdentity.fingerprint : null;
@@ -282,7 +282,7 @@ async function handleAddServer() {
     addServerError.textContent = err.message || 'Connection failed.';
   } finally {
     btnConfirmAddServer.disabled = false;
-    btnConfirmAddServer.textContent = 'Add & Connect';
+    btnConfirmAddServer.textContent = 'Add Server';
   }
 }
 
@@ -337,10 +337,15 @@ async function handleEditServer() {
   const selectedIdentity = getSelectedIdentityFrom(editServerIdentity);
   const identityFingerprint = selectedIdentity ? selectedIdentity.fingerprint : null;
 
-  if (wasConnected) {
+  const oldKey = connKey(oldAddress, oldIdentityFingerprint);
+  if (wasConnected || connectionManager.getStatus(oldKey) === 'reconnecting') {
+    const oldConn = connectionManager.getConnection(oldKey);
+    if (oldConn) {
+      oldConn.stopReconnect();
+    }
     window.dispatchEvent(
       new CustomEvent('gimodi:disconnect-server', {
-        detail: { connKey: connKey(oldAddress, oldIdentityFingerprint) },
+        detail: { connKey: oldKey },
       }),
     );
   }
@@ -418,7 +423,7 @@ async function connectToServer(server, { autoJoin = false } = {}) {
     await saveToHistory(server.address, server.nickname, server.password, data.serverName, server.identityFingerprint);
 
     data._connKey = key;
-    window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: { ...data, autoJoin } }));
+    window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: { ...data, autoJoin, identityFingerprint: server.identityFingerprint || null } }));
   } catch (err) {
     console.error('[connect] Failed to connect:', err.message);
     showConnectError(err.message || 'Connection failed.');

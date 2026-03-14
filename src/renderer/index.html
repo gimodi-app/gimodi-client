@@ -32,11 +32,9 @@
     <div class="app-layout">
       <!-- Server Sidebar -->
       <div id="server-sidebar" class="server-sidebar">
-        <button id="btn-dm" class="server-sidebar-btn server-sidebar-dm" title="Direct Messages">
-          <i class="bi bi-chat-dots-fill"></i>
-          <span id="dm-unread-badge" class="dm-unread-badge hidden"></span>
+        <button id="btn-dm-view" class="server-sidebar-btn server-sidebar-dm" title="Direct Messages">
+          <i class="bi bi-chat-dots"></i>
         </button>
-        <div class="server-sidebar-separator"></div>
         <div id="server-sidebar-list" class="server-sidebar-list"></div>
         <button id="btn-add-server" class="server-sidebar-btn server-sidebar-add" title="Add Server">
           <i class="bi bi-plus-lg"></i>
@@ -102,7 +100,7 @@
                 <div id="channel-tree"></div>
               </div>
               <div class="voice-controls">
-                <button id="btn-disconnect" class="btn-icon" title="Disconnect"><i class="bi bi-x-lg"></i></button>
+                <button id="btn-leave-voice" class="btn-icon hidden" title="Leave Voice"><i class="bi bi-x-lg"></i></button>
                 <button id="btn-mute" class="btn-icon" title="Toggle Mute"><i class="bi bi-mic"></i></button>
                 <button id="btn-deafen" class="btn-icon" title="Deafen"><i class="bi bi-headphones"></i></button>
                 <button id="btn-webcam" class="btn-icon" title="Camera"><i class="bi bi-camera-video"></i></button>
@@ -185,32 +183,22 @@
             </div>
           </div>
         </div>
-
         <!-- DM View -->
         <div id="view-dm" class="view">
           <div class="dm-layout">
             <aside class="dm-sidebar">
               <div class="dm-sidebar-header">
+                <button id="btn-dm-back" class="btn-icon" title="Back to Server"><i class="bi bi-arrow-left"></i></button>
                 <span>Direct Messages</span>
               </div>
               <div id="dm-conversation-list" class="dm-conversation-list"></div>
             </aside>
             <main class="dm-main">
-              <div id="dm-chat-header" class="dm-chat-header">
-                <span id="dm-chat-partner-name"></span>
-                <span id="dm-chat-presence" class="dm-presence-indicator"></span>
-              </div>
-              <div id="dm-chat-messages" class="dm-chat-messages"></div>
-              <div class="dm-chat-input-row">
-                <div class="chat-input-wrapper">
-                  <textarea id="dm-chat-input" placeholder="Type a message..." rows="1" autocomplete="off"></textarea>
-                  <div class="chat-input-actions">
-                    <button id="dm-btn-send" class="btn-icon btn-send" title="Send"><i class="bi bi-arrow-right"></i></button>
-                  </div>
-                </div>
-              </div>
-              <div id="dm-empty-state" class="dm-empty-state">
-                <p>Select a conversation to start messaging</p>
+              <div id="dm-chat-header" class="dm-chat-header"></div>
+              <div id="dm-messages" class="dm-messages"></div>
+              <div class="dm-input-row">
+                <textarea id="dm-input" class="dm-input" placeholder="Send a message..." rows="1" autocomplete="off"></textarea>
+                <button id="btn-dm-send" class="btn-icon btn-send" title="Send"><i class="bi bi-arrow-right"></i></button>
               </div>
             </main>
           </div>
@@ -242,7 +230,7 @@
         </div>
         <div id="add-server-error" class="error-text"></div>
         <div class="modal-buttons">
-          <button id="btn-confirm-add-server" class="btn-primary">Add &amp; Connect</button>
+          <button id="btn-confirm-add-server" class="btn-primary">Add Server</button>
           <button id="btn-cancel-add-server" class="btn-secondary">Cancel</button>
         </div>
       </div>
@@ -306,16 +294,6 @@
         <p id="connect-error-message"></p>
         <div class="modal-buttons">
           <button id="btn-connect-error-ok" class="btn-primary">OK</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="modal-reconnect" class="modal hidden">
-      <div class="modal-content">
-        <h2>Connection Lost</h2>
-        <p id="reconnect-status">Reconnecting...</p>
-        <div class="modal-buttons">
-          <button id="btn-cancel-reconnect" class="btn-secondary">Cancel</button>
         </div>
       </div>
     </div>
