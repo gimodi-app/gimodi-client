@@ -864,6 +864,17 @@ body {
   border-top: 1px solid var(--border-color);
 }
 
+.dm-e2e-notice {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 0 0;
+}
+
+.dm-e2e-notice i {
+  font-size: 10px;
+}
+
 .dm-chat-input-row .chat-input-wrapper {
   display: flex;
   align-items: flex-end;
@@ -2984,7 +2995,7 @@ label:has(input[type='checkbox']) {
 
 .chat-input-row {
   display: flex;
-  padding: 12px 20px 16px;
+  padding: 0;
   gap: 8px;
 }
 

@@ -225,16 +225,11 @@ function buildConvItem(conv, lastMsg) {
   item.dataset.conversationId = conv.id;
 
   const name = conversationDisplayName(conv);
-  const preview = lastMsg ? escapeHtml(lastMsg.content.slice(0, 60)) : '<em>No messages yet</em>';
-  const time = lastMsg ? `<span class="dm-conv-time">${formatTime(lastMsg.createdAt)}</span>` : '';
 
   const isGroup = conv.type === 'group';
   const icon = isGroup ? '<i class="bi bi-people-fill dm-conv-group-icon"></i> ' : '';
 
-  item.innerHTML = `
-    <div class="dm-conv-name">${icon}${escapeHtml(name)}${time}</div>
-    <div class="dm-conv-preview">${preview}</div>
-  `;
+  item.innerHTML = `<div class="dm-conv-name">${icon}${escapeHtml(name)}</div>`;
 
   item.addEventListener('click', () => openConversation(conv.id));
   item.addEventListener('contextmenu', (e) => showConvContextMenu(e, conv.id));
