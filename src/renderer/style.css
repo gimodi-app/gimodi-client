@@ -5670,7 +5670,7 @@ input.is-invalid {
 }
 
 .dm-conv-item.active {
-  background: var(--bg-selected);
+  background: var(--bg-tertiary);
 }
 
 .dm-conv-name {

@@ -1877,6 +1877,24 @@ dmButton.addEventListener('click', () => {
   rerenderSidebar();
 });
 
+window.addEventListener('gimodi:open-dm', (e) => {
+  const { userId } = e.detail;
+  if (!dmService) {
+    customAlert('Connect to a server with an identity to use Direct Messages.');
+    return;
+  }
+  const activeKey = connectionManager.activeKey;
+  if (activeKey) {
+    saveCurrentViewState(activeKey);
+  }
+  clearDmUnread();
+  showView('view-dm');
+  dmButton.classList.add('active');
+  setActiveServer(null);
+  rerenderSidebar();
+  openDmConversation(userId);
+});
+
 window.addEventListener('gimodi:add-friend', async (e) => {
   const { fingerprint, nickname } = e.detail;
   if (!friendsService) {
