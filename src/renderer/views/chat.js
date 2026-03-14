@@ -1606,7 +1606,7 @@ export function updateChatNickColors(userId, roleColor) {
   if (!userId) {
     return;
   }
-  const color = roleColor || nicknameColor();
+  const color = roleColor || nicknameColor(userId);
 
   const applyColor = (msgEl) => {
     if (!msgEl.classList?.contains('chat-msg') || msgEl.dataset.userId !== userId) {
@@ -1878,7 +1878,7 @@ function onMessageDeleted(e) {
         }
       }
       const badgeHtml = badge ? `<span class="admin-badge">${escapeHtml(badge)}</span>` : '';
-      const promoteNickColor = promoteRoleColor || nicknameColor();
+      const promoteNickColor = promoteRoleColor || nicknameColor(nickname);
 
       const header = document.createElement('div');
       header.className = 'chat-msg-header';
@@ -2330,8 +2330,22 @@ function maybeInsertDaySeparator(timestamp) {
   chatMessages.appendChild(sep);
 }
 
-function nicknameColor() {
-  return '#FFD700';
+/**
+ * Returns a deterministic HSL color for a nickname string.
+ * The hue is derived from a hash of the string, saturation and lightness are
+ * fixed at values that ensure visibility on both dark and light themes.
+ * @param {string} [str]
+ * @returns {string}
+ */
+function nicknameColor(str) {
+  if (!str) return '#FFD700';
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
+    hash = hash >>> 0;
+  }
+  const hue = hash % 260;
+  return `hsl(${hue}, 70%, 62%)`;
 }
 
 function buildMessageEl(msg, prevEl) {
@@ -2381,7 +2395,7 @@ function buildMessageEl(msg, prevEl) {
       roleColor = liveClient.roleColor || null;
     }
   }
-  const nickColor = roleColor || nicknameColor();
+  const nickColor = roleColor || nicknameColor(displayNickname);
 
   const badgeHtml = badge ? `<span class="admin-badge">${escapeHtml(badge)}</span>` : '';
 
