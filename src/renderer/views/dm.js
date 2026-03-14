@@ -53,6 +53,89 @@ function statusIcon(status) {
 }
 
 /**
+ * Builds a conversation list item element.
+ * @param {{fingerprint: string, nickname: string, lastMsg: object|null}} peer
+ * @returns {HTMLElement}
+ */
+function buildConvItem(peer) {
+  const item = document.createElement('div');
+  item.className = 'dm-conv-item' + (peer.fingerprint === activePeer ? ' active' : '');
+  item.dataset.fingerprint = peer.fingerprint;
+
+  const preview = peer.lastMsg ? escapeHtml(peer.lastMsg.content.slice(0, 60)) : '<em>No messages yet</em>';
+  const time = peer.lastMsg ? `<span class="dm-conv-time">${formatTime(peer.lastMsg.createdAt)}</span>` : '';
+
+  item.innerHTML = `
+    <div class="dm-conv-name">${escapeHtml(peer.nickname)}${time}</div>
+    <div class="dm-conv-preview">${preview}</div>
+  `;
+
+  item.addEventListener('click', () => openConversation(peer.fingerprint));
+  return item;
+}
+
+/**
+ * Builds a message request item element with Accept and Ignore buttons.
+ * @param {{fingerprint: string, lastMsg: object|null}} peer
+ * @returns {HTMLElement}
+ */
+function buildRequestItem(peer) {
+  const item = document.createElement('div');
+  item.className = 'dm-conv-item dm-request-item';
+  item.dataset.fingerprint = peer.fingerprint;
+
+  const preview = peer.lastMsg ? escapeHtml(peer.lastMsg.content.slice(0, 60)) : '';
+  const time = peer.lastMsg ? `<span class="dm-conv-time">${formatTime(peer.lastMsg.createdAt)}</span>` : '';
+  const shortFp = peer.fingerprint.slice(0, 12) + '…';
+
+  const top = document.createElement('div');
+  top.className = 'dm-conv-name';
+  top.innerHTML = `${escapeHtml(shortFp)}${time}`;
+
+  const previewEl = document.createElement('div');
+  previewEl.className = 'dm-conv-preview';
+  previewEl.innerHTML = preview;
+
+  const actions = document.createElement('div');
+  actions.className = 'dm-request-actions';
+
+  const acceptBtn = document.createElement('button');
+  acceptBtn.className = 'dm-request-accept';
+  acceptBtn.textContent = 'Accept';
+  acceptBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const raw = prompt(`Add as friend — enter a name for ${shortFp}:`, shortFp);
+    if (raw === null) return;
+    const nickname = raw.trim() || shortFp;
+    friendsService.addFriend(peer.fingerprint, nickname);
+    renderConversationList();
+    openConversation(peer.fingerprint);
+  });
+
+  const ignoreBtn = document.createElement('button');
+  ignoreBtn.className = 'dm-request-ignore';
+  ignoreBtn.textContent = 'Ignore';
+  ignoreBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    friendsService.ignoreRequest(peer.fingerprint);
+    renderConversationList();
+    if (activePeer === peer.fingerprint) {
+      activePeer = null;
+      renderMessages();
+    }
+  });
+
+  actions.appendChild(acceptBtn);
+  actions.appendChild(ignoreBtn);
+
+  item.appendChild(top);
+  item.appendChild(previewEl);
+  item.appendChild(actions);
+  item.addEventListener('click', () => openConversation(peer.fingerprint));
+  return item;
+}
+
+/**
  * Renders the conversation list in the left panel.
  */
 function renderConversationList() {
@@ -62,47 +145,59 @@ function renderConversationList() {
   const convMap = dmService.getConversationList();
   const friends = friendsService?.getFriends() ?? [];
 
-  // Build union of known peers: friends + peers with messages
-  const peers = new Map();
+  // Split into known peers (friends) and requests (received from strangers)
+  const knownPeers = new Map();
   for (const f of friends) {
-    peers.set(f.fingerprint, { fingerprint: f.fingerprint, nickname: f.nickname, lastMsg: null });
+    knownPeers.set(f.fingerprint, { fingerprint: f.fingerprint, nickname: f.nickname, lastMsg: null });
   }
+
+  const requests = [];
   for (const [fingerprint, lastMsg] of convMap) {
-    if (peers.has(fingerprint)) {
-      peers.get(fingerprint).lastMsg = lastMsg;
-    } else {
-      peers.set(fingerprint, { fingerprint, nickname: fingerprint.slice(0, 12) + '…', lastMsg });
+    if (knownPeers.has(fingerprint)) {
+      knownPeers.get(fingerprint).lastMsg = lastMsg;
+    } else if (lastMsg.direction === 'received' && !friendsService?.isIgnored(fingerprint)) {
+      requests.push({ fingerprint, lastMsg });
+    }
+  }
+
+  // Also include sent-only conversations (peers we messaged but haven't added as friends)
+  for (const [fingerprint, lastMsg] of convMap) {
+    if (!knownPeers.has(fingerprint) && lastMsg.direction === 'sent') {
+      knownPeers.set(fingerprint, { fingerprint, nickname: fingerprint.slice(0, 12) + '…', lastMsg });
     }
   }
 
   list.innerHTML = '';
 
-  if (peers.size === 0) {
+  if (knownPeers.size === 0 && requests.length === 0) {
     list.innerHTML = '<div class="dm-empty-hint">No conversations yet.<br>Right-click a user to add them as a friend.</div>';
     return;
   }
 
-  const sorted = [...peers.values()].sort((a, b) => {
-    const ta = a.lastMsg?.createdAt ?? 0;
-    const tb = b.lastMsg?.createdAt ?? 0;
-    return tb - ta;
-  });
+  if (requests.length > 0) {
+    const header = document.createElement('div');
+    header.className = 'dm-section-header';
+    header.textContent = `Message Requests (${requests.length})`;
+    list.appendChild(header);
 
-  for (const peer of sorted) {
-    const item = document.createElement('div');
-    item.className = 'dm-conv-item' + (peer.fingerprint === activePeer ? ' active' : '');
-    item.dataset.fingerprint = peer.fingerprint;
+    requests.sort((a, b) => (b.lastMsg?.createdAt ?? 0) - (a.lastMsg?.createdAt ?? 0));
+    for (const peer of requests) {
+      list.appendChild(buildRequestItem(peer));
+    }
+  }
 
-    const preview = peer.lastMsg ? escapeHtml(peer.lastMsg.content.slice(0, 60)) : '<em>No messages yet</em>';
-    const time = peer.lastMsg ? `<span class="dm-conv-time">${formatTime(peer.lastMsg.createdAt)}</span>` : '';
+  if (knownPeers.size > 0) {
+    if (requests.length > 0) {
+      const header = document.createElement('div');
+      header.className = 'dm-section-header';
+      header.textContent = 'Conversations';
+      list.appendChild(header);
+    }
 
-    item.innerHTML = `
-      <div class="dm-conv-name">${escapeHtml(peer.nickname)}${time}</div>
-      <div class="dm-conv-preview">${preview}</div>
-    `;
-
-    item.addEventListener('click', () => openConversation(peer.fingerprint));
-    list.appendChild(item);
+    const sorted = [...knownPeers.values()].sort((a, b) => (b.lastMsg?.createdAt ?? 0) - (a.lastMsg?.createdAt ?? 0));
+    for (const peer of sorted) {
+      list.appendChild(buildConvItem(peer));
+    }
   }
 }
 

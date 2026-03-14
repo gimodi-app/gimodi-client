@@ -1,4 +1,5 @@
 const STORAGE_KEY_PREFIX = 'dm_friends_';
+const IGNORED_KEY_PREFIX = 'dm_ignored_';
 
 /**
  * Returns the localStorage key for the friends list of a given identity fingerprint.
@@ -102,5 +103,37 @@ export class FriendsService {
    */
   isFriend(fingerprint) {
     return loadFriends(this._fingerprint).some((f) => f.fingerprint === fingerprint);
+  }
+
+  /**
+   * Marks a fingerprint as ignored so their DM requests are suppressed.
+   * @param {string} fingerprint
+   */
+  ignoreRequest(fingerprint) {
+    try {
+      const key = `${IGNORED_KEY_PREFIX}${this._fingerprint}`;
+      const raw = localStorage.getItem(key);
+      const ignored = raw ? JSON.parse(raw) : [];
+      if (!ignored.includes(fingerprint)) {
+        ignored.push(fingerprint);
+        localStorage.setItem(key, JSON.stringify(ignored));
+      }
+    } catch {}
+  }
+
+  /**
+   * Returns true if the given fingerprint has been ignored.
+   * @param {string} fingerprint
+   * @returns {boolean}
+   */
+  isIgnored(fingerprint) {
+    try {
+      const key = `${IGNORED_KEY_PREFIX}${this._fingerprint}`;
+      const raw = localStorage.getItem(key);
+      const ignored = raw ? JSON.parse(raw) : [];
+      return ignored.includes(fingerprint);
+    } catch {
+      return false;
+    }
   }
 }
