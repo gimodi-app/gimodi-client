@@ -1,4 +1,5 @@
 import { customAlert, customConfirm, customPrompt } from '../services/dialogs.js';
+import connectionManager from '../services/connectionManager.js';
 import DmChatProvider from '../services/chat-providers/dm.js';
 import { initChatView, cleanup as cleanupChat } from './chat.js';
 
@@ -24,6 +25,34 @@ function escapeHtml(str) {
   const d = document.createElement('div');
   d.textContent = str;
   return d.innerHTML;
+}
+
+/**
+ * Renders the DM chat header with peer name, relay server badge, and placeholder action buttons.
+ * @param {HTMLElement} header
+ * @param {string} nickname
+ */
+function renderDmHeader(header, nickname) {
+  header.innerHTML = '';
+
+  const nameEl = document.createElement('span');
+  nameEl.className = 'dm-header-name';
+  nameEl.textContent = nickname;
+  header.appendChild(nameEl);
+
+  const active = connectionManager.getActive();
+  if (active?.serverName) {
+    const badge = document.createElement('span');
+    badge.className = 'dm-header-server-badge';
+    badge.textContent = active.serverName;
+    badge.title = active.address || '';
+    header.appendChild(badge);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'dm-header-actions';
+  actions.innerHTML = `<button class="btn-icon dm-header-btn" title="Call" disabled><i class="bi bi-telephone"></i></button><button class="btn-icon dm-header-btn" title="Share Screen" disabled><i class="bi bi-display"></i></button><button class="btn-icon dm-header-btn" title="Webcam" disabled><i class="bi bi-webcam"></i></button>`;
+  header.appendChild(actions);
 }
 
 /**
@@ -455,7 +484,7 @@ function initDmChat() {
   }
 
   const blocked = friendsService?.isBlocked(activePeer);
-  if (header) header.textContent = peerName(activePeer);
+  if (header) renderDmHeader(header, peerName(activePeer));
 
   if (blocked) {
     if (chatMessagesEl) chatMessagesEl.innerHTML = '';
