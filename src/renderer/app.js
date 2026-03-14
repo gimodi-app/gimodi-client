@@ -38,7 +38,7 @@ import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoi
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
 import { initSidePanel } from './views/side-panel.js';
-import { initDmView, refreshDmView, openDmConversation } from './views/dm.js';
+import { initDmView, updateDmServices, refreshDmView, openDmConversation } from './views/dm.js';
 import { DmService } from './services/dm.js';
 import { FriendsService } from './services/friends.js';
 
@@ -1817,6 +1817,8 @@ function ensureDmServices(fingerprint) {
   if (!dmViewInitialized) {
     initDmView(dmService, friendsService);
     dmViewInitialized = true;
+  } else {
+    updateDmServices(dmService, friendsService);
   }
 }
 
