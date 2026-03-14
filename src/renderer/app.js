@@ -1870,3 +1870,32 @@ window.addEventListener('gimodi:connected', (e) => {
     ensureDmServices(identityFingerprint);
   }
 }, true);
+
+/**
+ * DevTools utilities. Callable via gimodiDebug.clearAllFriends() in the console.
+ */
+window.gimodiDebug = {
+  /**
+   * Wipes all friends and DM data from localStorage and resets in-memory state.
+   */
+  clearAllFriends() {
+    const prefixes = ['dm_friends_', 'dm_ignored_', 'dm_blocked_', 'dm_messages_', 'dm_purged_'];
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (prefixes.some((p) => key.startsWith(p))) {
+        keys.push(key);
+      }
+    }
+    for (const key of keys) {
+      localStorage.removeItem(key);
+    }
+    if (dmService) {
+      dmService._messages = [];
+    }
+    if (friendsService) {
+      friendsService._pendingRequests.clear();
+    }
+    console.log(`[gimodi] Cleared ${keys.length} friend/DM entries from localStorage.`);
+  },
+};
