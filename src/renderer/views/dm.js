@@ -404,6 +404,20 @@ async function handleSend() {
 }
 
 /**
+ * Updates the service references when a new identity becomes active.
+ * Called from app.js whenever ensureDmServices creates new instances.
+ * @param {import('../services/dm.js').DmService} dm
+ * @param {import('../services/friends.js').FriendsService} friends
+ */
+export function updateDmServices(dm, friends) {
+  dmService = dm;
+  friendsService = friends;
+  activePeer = null;
+  renderConversationList();
+  renderMessages();
+}
+
+/**
  * Initializes the DM view. Called once from app.js after identity is known.
  * @param {import('../services/dm.js').DmService} dm
  * @param {import('../services/friends.js').FriendsService} friends
