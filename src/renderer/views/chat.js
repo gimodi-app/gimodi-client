@@ -1276,8 +1276,8 @@ async function loadHistory(channelId) {
       scrollToBottom();
       renderPinnedMessages();
     }
-  } catch {
-    // History may not be available
+  } catch (err) {
+    console.error('[chat] loadHistory failed:', err);
   }
 }
 

@@ -1535,7 +1535,7 @@ connectionManager.addEventListener('background-connected', (e) => {
   log('Background connected:', key, data.serverName);
 
   const fpIdx = key.indexOf('\0');
-  if (fpIdx >= 0) {
+  if (fpIdx >= 0 && !dmService) {
     ensureDmServices(key.slice(fpIdx + 1));
   }
 
