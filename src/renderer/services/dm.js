@@ -350,11 +350,17 @@ export class DmService extends EventTarget {
 
   /**
    * Removes all locally stored messages for a conversation with the given peer.
+   * Acks any unacknowledged received messages so the server won't re-deliver them on reconnect.
    * @param {string} peerFingerprint
    */
   purgeConversation(peerFingerprint) {
-    const messages = loadMessages(this._fingerprint).filter((m) => m.peerFingerprint !== peerFingerprint);
-    saveMessages(this._fingerprint, messages);
+    const all = loadMessages(this._fingerprint);
+    for (const msg of all) {
+      if (msg.peerFingerprint === peerFingerprint && msg.direction === 'received') {
+        this._sendAck(msg.id, peerFingerprint);
+      }
+    }
+    saveMessages(this._fingerprint, all.filter((m) => m.peerFingerprint !== peerFingerprint));
     this.dispatchEvent(new CustomEvent('conversation-purged', { detail: { peerFingerprint } }));
   }
 
