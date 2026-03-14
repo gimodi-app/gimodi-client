@@ -79,6 +79,7 @@ export class DmService extends EventTarget {
   constructor(ownFingerprint) {
     super();
     this._fingerprint = ownFingerprint;
+    this._cleanupPurgedMessages();
 
     /** @type {Map<string, Function>} - serverKey → bound listener for dm:receive */
     this._receiveListeners = new Map();
@@ -353,6 +354,26 @@ export class DmService extends EventTarget {
   }
 
   /**
+   * Removes any leftover messages that should have been purged.
+   * Runs once on init to clean up after previous failed purges.
+   * @private
+   */
+  _cleanupPurgedMessages() {
+    const log = loadPurgeLog(this._fingerprint);
+    if (Object.keys(log).length === 0) return;
+
+    const messages = loadMessages(this._fingerprint);
+    const cleaned = messages.filter((m) => {
+      const purgedAt = log[m.peerFingerprint];
+      return !purgedAt || m.createdAt > purgedAt;
+    });
+
+    if (cleaned.length !== messages.length) {
+      saveMessages(this._fingerprint, cleaned);
+    }
+  }
+
+  /**
    * Stores a message in localStorage.
    * @private
    * @param {DmMessage} message
@@ -389,17 +410,19 @@ export class DmService extends EventTarget {
     const purgedAt = Date.now();
     const all = loadMessages(this._fingerprint);
 
-    for (const msg of all) {
-      if (msg.peerFingerprint === peerFingerprint && msg.direction === 'received') {
-        this._sendAck(msg.id, peerFingerprint);
-      }
-    }
-
+    // Delete messages and record purge FIRST, then best-effort ack
     saveMessages(this._fingerprint, all.filter((m) => m.peerFingerprint !== peerFingerprint));
 
     const log = loadPurgeLog(this._fingerprint);
     log[peerFingerprint] = purgedAt;
     savePurgeLog(this._fingerprint, log);
+
+    // Best-effort ack so server stops re-delivering — errors here are non-fatal
+    for (const msg of all) {
+      if (msg.peerFingerprint === peerFingerprint && msg.direction === 'received') {
+        try { this._sendAck(msg.id, peerFingerprint); } catch {}
+      }
+    }
 
     this.dispatchEvent(new CustomEvent('conversation-purged', { detail: { peerFingerprint } }));
   }
