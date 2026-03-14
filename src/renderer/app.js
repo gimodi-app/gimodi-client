@@ -176,6 +176,25 @@ let dmService = null;
 /** @type {FriendsService|null} */
 let friendsService = null;
 let dmViewInitialized = false;
+const dmButton = document.getElementById('btn-dm-view');
+
+/**
+ * Shows or hides the unread indicator on the DM button.
+ * Skips showing it when the DM view is already active.
+ */
+function setDmUnread() {
+  if (viewDm.classList.contains('active')) {
+    return;
+  }
+  dmButton.classList.add('has-unread');
+}
+
+/**
+ * Clears the unread indicator on the DM button.
+ */
+function clearDmUnread() {
+  dmButton.classList.remove('has-unread');
+}
 
 // Create channel modal
 const modalCreateChannel = document.getElementById('modal-create-channel');
@@ -400,7 +419,7 @@ function showView(id) {
   viewDm.classList.remove('active');
   document.getElementById(id).classList.add('active');
   if (id !== 'view-dm') {
-    document.getElementById('btn-dm-view').classList.remove('active');
+    dmButton.classList.remove('active');
   }
 }
 
@@ -1822,6 +1841,8 @@ function ensureDmServices(fingerprint) {
   }
   dmService = new DmService(fingerprint);
   friendsService = new FriendsService(fingerprint);
+  dmService.addEventListener('message-received', setDmUnread);
+  friendsService.addEventListener('friend:request-received', setDmUnread);
   if (!dmViewInitialized) {
     initDmView(dmService, friendsService);
     dmViewInitialized = true;
@@ -1830,14 +1851,15 @@ function ensureDmServices(fingerprint) {
   }
 }
 
-document.getElementById('btn-dm-view').addEventListener('click', () => {
+dmButton.addEventListener('click', () => {
   if (!dmService) {
     customAlert('Connect to a server with an identity to use Direct Messages.');
     return;
   }
+  clearDmUnread();
   refreshDmView();
   showView('view-dm');
-  document.getElementById('btn-dm-view').classList.add('active');
+  dmButton.classList.add('active');
   setActiveServer(null);
   rerenderSidebar();
 });
