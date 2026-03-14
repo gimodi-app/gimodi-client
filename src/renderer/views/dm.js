@@ -1,5 +1,6 @@
-import connectionManager from '../services/connectionManager.js';
 import { customAlert, customConfirm, customPrompt } from '../services/dialogs.js';
+import DmChatProvider from '../services/chat-providers/dm.js';
+import { initChatView, cleanup as cleanupChat } from './chat.js';
 
 /** @type {import('../services/dm.js').DmService|null} */
 let dmService = null;
@@ -7,6 +8,10 @@ let dmService = null;
 let friendsService = null;
 /** @type {string|null} */
 let activePeer = null;
+/** @type {'conversations'|'friends'} */
+let activeTab = 'conversations';
+/** @type {DmChatProvider|null} */
+let dmChatProvider = null;
 
 const el = (id) => document.getElementById(id);
 
@@ -41,16 +46,6 @@ function peerName(fingerprint) {
   return friend ? friend.nickname : fingerprint.slice(0, 12) + '…';
 }
 
-/**
- * Renders the status indicator icon for a message.
- * @param {'pending'|'sent'|'delivered'} status
- * @returns {string}
- */
-function statusIcon(status) {
-  if (status === 'delivered') return '<i class="bi bi-check2-all dm-status-delivered" title="Delivered"></i>';
-  if (status === 'sent') return '<i class="bi bi-check2 dm-status-sent" title="Sent"></i>';
-  return '<i class="bi bi-clock dm-status-pending" title="Pending"></i>';
-}
 
 /** @type {HTMLElement|null} */
 let _ctxMenu = null;
@@ -93,7 +88,7 @@ function showConvContextMenu(e, fingerprint) {
       if (raw === null) return;
       friendsService.addFriend(fingerprint, raw.trim() || shortFp);
       renderConversationList();
-      if (activePeer === fingerprint) renderMessages();
+      if (activePeer === fingerprint) initDmChat();
     });
     menu.appendChild(addItem);
   }
@@ -109,7 +104,7 @@ function showConvContextMenu(e, fingerprint) {
       friendsService.blockContact(fingerprint);
     }
     renderConversationList();
-    if (activePeer === fingerprint) renderMessages();
+    if (activePeer === fingerprint) initDmChat();
   });
 
   const purgeItem = document.createElement('div');
@@ -125,7 +120,7 @@ function showConvContextMenu(e, fingerprint) {
       activePeer = null;
     }
     renderConversationList();
-    renderMessages();
+    initDmChat();
   });
 
   menu.appendChild(blockItem);
@@ -211,7 +206,7 @@ function buildRequestItem(peer) {
     renderConversationList();
     if (activePeer === peer.fingerprint) {
       activePeer = null;
-      renderMessages();
+      initDmChat();
     }
   });
 
@@ -314,24 +309,11 @@ function renderConversationList() {
     }
   }
 
-  const friendRequests = friendsService?.getPendingRequests() ?? [];
-
   list.innerHTML = '';
 
-  if (knownPeers.size === 0 && requests.length === 0 && friendRequests.length === 0) {
+  if (knownPeers.size === 0 && requests.length === 0) {
     list.innerHTML = '<div class="dm-empty-hint">No conversations yet.<br>Right-click a user to send them a friend request.</div>';
     return;
-  }
-
-  if (friendRequests.length > 0) {
-    const header = document.createElement('div');
-    header.className = 'dm-section-header';
-    header.textContent = `Friend Requests (${friendRequests.length})`;
-    list.appendChild(header);
-
-    for (const req of friendRequests) {
-      list.appendChild(buildFriendRequestItem(req));
-    }
   }
 
   if (requests.length > 0) {
@@ -362,19 +344,111 @@ function renderConversationList() {
 }
 
 /**
- * Renders the message list for the active conversation.
+ * Switches the active tab and renders the appropriate list.
+ * @param {'conversations'|'friends'} tab
  */
-function renderMessages() {
-  const container = el('dm-messages');
+function switchTab(tab) {
+  activeTab = tab;
+  const convList = el('dm-conversation-list');
+  const friendsList = el('dm-friends-list');
+  if (!convList || !friendsList) return;
+
+  for (const btn of document.querySelectorAll('.dm-tab')) {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  }
+
+  if (tab === 'conversations') {
+    convList.style.display = '';
+    friendsList.style.display = 'none';
+    renderConversationList();
+  } else {
+    convList.style.display = 'none';
+    friendsList.style.display = '';
+    renderFriendsList();
+  }
+}
+
+/**
+ * Renders the friends list with friend requests at the top.
+ */
+function renderFriendsList() {
+  const list = el('dm-friends-list');
+  if (!list || !friendsService) return;
+
+  const friends = friendsService.getFriends();
+  const friendRequests = friendsService.getPendingRequests();
+
+  list.innerHTML = '';
+
+  if (friends.length === 0 && friendRequests.length === 0) {
+    list.innerHTML = '<div class="dm-empty-hint">No friends yet.<br>Right-click a user to send them a friend request.</div>';
+    return;
+  }
+
+  if (friendRequests.length > 0) {
+    const header = document.createElement('div');
+    header.className = 'dm-section-header';
+    header.textContent = `Friend Requests (${friendRequests.length})`;
+    list.appendChild(header);
+
+    for (const req of friendRequests) {
+      list.appendChild(buildFriendRequestItem(req));
+    }
+  }
+
+  if (friends.length > 0) {
+    if (friendRequests.length > 0) {
+      const header = document.createElement('div');
+      header.className = 'dm-section-header';
+      header.textContent = 'Friends';
+      list.appendChild(header);
+    }
+
+    const sorted = [...friends].sort((a, b) => a.nickname.localeCompare(b.nickname));
+    for (const friend of sorted) {
+      list.appendChild(buildFriendItem(friend));
+    }
+  }
+}
+
+/**
+ * Builds a friend list item element.
+ * @param {{fingerprint: string, nickname: string}} friend
+ * @returns {HTMLElement}
+ */
+function buildFriendItem(friend) {
+  const item = document.createElement('div');
+  item.className = 'dm-conv-item';
+  item.dataset.fingerprint = friend.fingerprint;
+
+  const nameEl = document.createElement('div');
+  nameEl.className = 'dm-conv-name';
+  nameEl.textContent = friend.nickname;
+
+  item.appendChild(nameEl);
+  item.addEventListener('click', () => {
+    switchTab('conversations');
+    openConversation(friend.fingerprint);
+  });
+  return item;
+}
+
+/**
+ * Initializes the chat component for the active DM conversation.
+ */
+function initDmChat() {
+  const container = el('dm-chat-container');
   const header = el('dm-chat-header');
-  const input = el('dm-input');
-  const sendBtn = el('btn-dm-send');
+  const chatMessagesEl = el('dm-chat-messages');
 
   if (!container) return;
 
   if (!activePeer) {
-    container.innerHTML = '<div class="dm-empty-hint">Select a conversation</div>';
+    if (chatMessagesEl) chatMessagesEl.innerHTML = '<div class="dm-empty-hint">Select a conversation</div>';
     if (header) header.textContent = '';
+    // Disable input
+    const input = container.querySelector('.chat-input');
+    const sendBtn = container.querySelector('.btn-send');
     if (input) input.disabled = true;
     if (sendBtn) sendBtn.disabled = true;
     return;
@@ -382,113 +456,43 @@ function renderMessages() {
 
   const blocked = friendsService?.isBlocked(activePeer);
   if (header) header.textContent = peerName(activePeer);
-  if (input) input.disabled = !!blocked;
-  if (sendBtn) sendBtn.disabled = !!blocked;
-  if (input) input.placeholder = blocked ? 'You have blocked this person.' : 'Message…';
 
-  const messages = dmService?.getConversation(activePeer) ?? [];
-  container.innerHTML = '';
-
-  if (messages.length === 0) {
-    container.innerHTML = '<div class="dm-empty-hint">No messages yet. Say hello!</div>';
+  if (blocked) {
+    if (chatMessagesEl) chatMessagesEl.innerHTML = '';
+    const input = container.querySelector('.chat-input');
+    const sendBtn = container.querySelector('.btn-send');
+    if (input) {
+      input.disabled = true;
+      input.placeholder = 'You have blocked this person.';
+    }
+    if (sendBtn) sendBtn.disabled = true;
     return;
   }
 
-  for (const msg of messages) {
-    container.appendChild(buildMessageEl(msg));
+  // Destroy previous provider
+  if (dmChatProvider) {
+    cleanupChat();
+    dmChatProvider.destroy();
+    dmChatProvider = null;
   }
 
-  container.scrollTop = container.scrollHeight;
+  const nickname = peerName(activePeer);
+  dmChatProvider = new DmChatProvider(dmService, activePeer, nickname);
+  initChatView(null, dmChatProvider, container);
 }
 
-/**
- * Builds a single message DOM element.
- * @param {import('../services/dm.js').DmMessage} msg
- * @returns {HTMLElement}
- */
-function buildMessageEl(msg) {
-  const row = document.createElement('div');
-  row.className = 'dm-msg' + (msg.direction === 'sent' ? ' dm-msg-sent' : ' dm-msg-received');
-  row.dataset.id = msg.id;
-
-  const bubble = document.createElement('div');
-  bubble.className = 'dm-msg-bubble';
-  bubble.textContent = msg.content;
-
-  const meta = document.createElement('div');
-  meta.className = 'dm-msg-meta';
-  meta.innerHTML = `<span class="dm-msg-time">${formatTime(msg.createdAt)}</span>`;
-
-  if (msg.direction === 'sent') {
-    const statusEl = document.createElement('span');
-    statusEl.className = 'dm-msg-status';
-    statusEl.innerHTML = statusIcon(msg.status);
-    meta.appendChild(statusEl);
-
-    if (msg.status === 'pending') {
-      const retryBtn = document.createElement('button');
-      retryBtn.className = 'dm-retry-btn';
-      retryBtn.textContent = 'Retry';
-      retryBtn.addEventListener('click', () => showRetryPicker(msg.id));
-      meta.appendChild(retryBtn);
-    }
-  }
-
-  row.appendChild(bubble);
-  row.appendChild(meta);
-  return row;
-}
 
 /**
- * Opens a conversation with a peer, rendering their messages.
+ * Opens a conversation with a peer, rendering their messages via the chat component.
  * @param {string} fingerprint
  */
 function openConversation(fingerprint) {
   activePeer = fingerprint;
   renderConversationList();
-  renderMessages();
+  initDmChat();
 }
 
-/**
- * Shows a server picker to retry sending a stuck message.
- * @param {string} messageId
- */
-async function showRetryPicker(messageId) {
-  const servers = [...connectionManager.connections.entries()]
-    .filter(([, conn]) => conn.connected)
-    .map(([key]) => key);
-
-  if (servers.length === 0) {
-    await customAlert('No servers connected. Cannot retry.');
-    return;
-  }
-
-  try {
-    await dmService.retrySend(messageId, servers[0]);
-  } catch (err) {
-    await customAlert(`Retry failed: ${err.message}`);
-  }
-}
-
-/**
- * Handles sending a message from the input field.
- */
-async function handleSend() {
-  const input = el('dm-input');
-  if (!input || !activePeer || !dmService) return;
-
-  const content = input.value.trim();
-  if (!content) return;
-
-  input.value = '';
-  input.style.height = '';
-
-  try {
-    await dmService.sendDm(activePeer, content);
-  } catch (err) {
-    await customAlert(`Failed to send: ${err.message}`);
-  }
-}
+// showRetryPicker and handleSend removed — the chat component handles sending via the DmChatProvider
 
 /**
  * Updates the service references when a new identity becomes active.
@@ -499,13 +503,24 @@ async function handleSend() {
 export function updateDmServices(dm, friends) {
   dmService = dm;
   friendsService = friends;
-  friendsService.addEventListener('friend:request-received', () => renderConversationList());
-  friendsService.addEventListener('friend:accepted', () => renderConversationList());
-  friendsService.addEventListener('friend:rejected', () => renderConversationList());
-  friendsService.addEventListener('friend:removed', () => renderConversationList());
+  friendsService.addEventListener('friend:request-received', renderActiveTab);
+  friendsService.addEventListener('friend:accepted', renderActiveTab);
+  friendsService.addEventListener('friend:rejected', renderActiveTab);
+  friendsService.addEventListener('friend:removed', renderActiveTab);
   activePeer = null;
-  renderConversationList();
-  renderMessages();
+  renderActiveTab();
+  initDmChat();
+}
+
+/**
+ * Re-renders whichever tab is currently active.
+ */
+function renderActiveTab() {
+  if (activeTab === 'friends') {
+    renderFriendsList();
+  } else {
+    renderConversationList();
+  }
 }
 
 /**
@@ -519,48 +534,26 @@ export function initDmView(dm, friends) {
 
   dmService.addEventListener('message-received', () => {
     renderConversationList();
-    if (activePeer) renderMessages();
+    // The chat component handles live message rendering via the provider events
   });
 
   dmService.addEventListener('conversation-purged', () => {
     renderConversationList();
-    renderMessages();
+    if (activePeer) initDmChat();
   });
 
-  dmService.addEventListener('message-updated', (e) => {
+  dmService.addEventListener('message-updated', () => {
     renderConversationList();
-    if (activePeer && e.detail.peerFingerprint === activePeer) {
-      const existing = el('dm-messages')?.querySelector(`[data-id="${e.detail.id}"]`);
-      if (existing) {
-        existing.replaceWith(buildMessageEl(e.detail));
-      } else {
-        renderMessages();
-      }
-    }
+    // The chat component handles message updates via the provider events
   });
 
-  friendsService.addEventListener('friend:request-received', () => renderConversationList());
-  friendsService.addEventListener('friend:accepted', () => renderConversationList());
-  friendsService.addEventListener('friend:rejected', () => renderConversationList());
-  friendsService.addEventListener('friend:removed', () => renderConversationList());
+  friendsService.addEventListener('friend:request-received', renderActiveTab);
+  friendsService.addEventListener('friend:accepted', renderActiveTab);
+  friendsService.addEventListener('friend:rejected', renderActiveTab);
+  friendsService.addEventListener('friend:removed', renderActiveTab);
 
-  const sendBtn = el('btn-dm-send');
-  const input = el('dm-input');
-
-  if (sendBtn) sendBtn.addEventListener('click', handleSend);
-
-  if (input) {
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      }
-    });
-    input.addEventListener('input', () => {
-      input.style.height = '';
-      input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-    });
-    input.disabled = true;
+  for (const tab of document.querySelectorAll('.dm-tab')) {
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
   }
 
   renderConversationList();
@@ -571,8 +564,8 @@ export function initDmView(dm, friends) {
  * Called from app.js each time the DM view becomes visible.
  */
 export function refreshDmView() {
-  renderConversationList();
-  renderMessages();
+  renderActiveTab();
+  if (activePeer) initDmChat();
 }
 
 /**

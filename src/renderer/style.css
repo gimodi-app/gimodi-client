@@ -2469,58 +2469,58 @@ label:has(input[type='checkbox']) {
 }
 
 /* Compact mode active */
-#chat-messages.compact-mode .compact-row {
+.chat-messages.compact-mode .compact-row {
   display: inline;
 }
 
-#chat-messages.compact-mode .chat-msg {
+.chat-messages.compact-mode .chat-msg {
   margin-bottom: 4px;
 }
 
-#chat-messages.compact-mode .chat-msg-header,
-#chat-messages.compact-mode .chat-msg-hover-time {
+.chat-messages.compact-mode .chat-msg-header,
+.chat-messages.compact-mode .chat-msg-hover-time {
   display: none !important;
 }
 
-#chat-messages.compact-mode .chat-msg-grouped {
+.chat-messages.compact-mode .chat-msg-grouped {
   margin-bottom: 4px;
   margin-top: 0;
 }
 
-#chat-messages.compact-mode .chat-msg:has(+ .chat-msg-grouped) {
+.chat-messages.compact-mode .chat-msg:has(+ .chat-msg-grouped) {
   margin-bottom: 4px;
 }
 
-#chat-messages.compact-mode .chat-msg-grouped + .chat-msg:not(.chat-msg-grouped) {
+.chat-messages.compact-mode .chat-msg-grouped + .chat-msg:not(.chat-msg-grouped) {
   margin-top: 4px;
 }
 
-#chat-messages.compact-mode .chat-msg-body {
+.chat-messages.compact-mode .chat-msg-body {
   display: inline;
   margin-top: 0;
 }
 
-#chat-messages.compact-mode .chat-msg-body p {
+.chat-messages.compact-mode .chat-msg-body p {
   display: inline;
   margin: 0;
 }
 
 /* Images, code blocks, videos, and file cards go to a new line in compact mode */
-#chat-messages.compact-mode .chat-msg-body pre,
-#chat-messages.compact-mode .chat-msg-body .chat-image-wrapper,
-#chat-messages.compact-mode .chat-msg-body .chat-video-wrapper,
-#chat-messages.compact-mode .chat-msg-body .chat-audio-wrapper,
-#chat-messages.compact-mode .chat-msg-body .file-card,
-#chat-messages.compact-mode .chat-msg-body .link-preview {
+.chat-messages.compact-mode .chat-msg-body pre,
+.chat-messages.compact-mode .chat-msg-body .chat-image-wrapper,
+.chat-messages.compact-mode .chat-msg-body .chat-video-wrapper,
+.chat-messages.compact-mode .chat-msg-body .chat-audio-wrapper,
+.chat-messages.compact-mode .chat-msg-body .file-card,
+.chat-messages.compact-mode .chat-msg-body .link-preview {
   display: block;
   margin-top: 4px;
 }
 
-#chat-messages.compact-mode .chat-day-separator {
+.chat-messages.compact-mode .chat-day-separator {
   margin: 8px 0;
 }
 
-#chat-messages.compact-mode .chat-msg-edited {
+.chat-messages.compact-mode .chat-msg-edited {
   display: inline;
 }
 
@@ -5345,15 +5345,31 @@ input.is-invalid {
   z-index: 1;
 }
 
-.dm-sidebar-header {
+.dm-sidebar-tabs {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px;
-  font-weight: 600;
-  font-size: 13px;
   border-bottom: 1px solid var(--border);
+}
+
+.dm-tab {
+  flex: 1;
+  padding: 10px 0;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.dm-tab:hover {
   color: var(--text-normal);
+}
+
+.dm-tab.active {
+  color: var(--text-normal);
+  border-bottom-color: var(--accent);
 }
 
 .dm-conversation-list {
