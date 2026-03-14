@@ -1255,7 +1255,7 @@ let closeHandler = null;
  */
 async function loadFrequent() {
   const settings = (await window.gimodi.settings.load()) || {};
-  frequentCache = settings.emojiFrequent || [];
+  frequentCache = Array.isArray(settings.emojiFrequent) ? settings.emojiFrequent : [];
 }
 
 /**

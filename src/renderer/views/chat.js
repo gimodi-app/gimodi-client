@@ -921,6 +921,7 @@ export function cleanup() {
     'cvTabs:',
     channelViewTabs.map((t) => t.channelId),
   );
+  closeEmojiPicker();
   notificationService.removeEventListener('change', updateNotificationBell);
   if (btnNotifications) {
     btnNotifications.removeEventListener('click', toggleNotificationDropdown);
