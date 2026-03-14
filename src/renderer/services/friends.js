@@ -50,6 +50,10 @@ export class FriendsService extends EventTarget {
     this._listeners = new Map();
     /** @type {Map<string, {requestId: string, senderFingerprint: string, senderNickname: string, senderPublicKey: string, createdAt: number}>} */
     this._pendingRequests = new Map();
+    /** @type {Map<string, Map<string, string>>} connKey → Map<clientId, fingerprint> */
+    this._connClients = new Map();
+    /** @type {Set<string>} fingerprints currently online across all connections */
+    this._onlineFingerprints = new Set();
 
     connectionManager.addEventListener('connection-status-changed', (e) => {
       const { key, status } = e.detail;
@@ -93,6 +97,8 @@ export class FriendsService extends EventTarget {
     conn.addEventListener('friend:removed', onRemoved);
 
     this._listeners.set(key, { requestReceived: onRequestReceived, accepted: onAccepted, rejected: onRejected, removed: onRemoved });
+
+    this._initPresenceForConnection(key, conn);
   }
 
   /**
@@ -109,22 +115,88 @@ export class FriendsService extends EventTarget {
       conn.removeEventListener('friend:accepted', handlers.accepted);
       conn.removeEventListener('friend:rejected', handlers.rejected);
       conn.removeEventListener('friend:removed', handlers.removed);
+      if (handlers._presenceJoined) conn.removeEventListener('server:client-joined', handlers._presenceJoined);
+      if (handlers._presenceLeft) conn.removeEventListener('server:client-left', handlers._presenceLeft);
     }
 
     this._listeners.delete(key);
+
+    this._connClients.delete(key);
+    this._rebuildOnlineFingerprints();
+    this.dispatchEvent(new CustomEvent('friend:presence-changed'));
   }
 
   /**
-   * Returns true if the given fingerprint is currently connected to the viewed server.
-   * Reads from window.gimodiClients which is kept up to date by the server view.
+   * Initialises presence tracking for a newly bound connection.
+   * Reads the initial client list from connectionManager's stored connect data
+   * and attaches server:client-joined / server:client-left listeners.
+   * @private
+   * @param {string} key
+   * @param {object} conn
+   */
+  _initPresenceForConnection(key, conn) {
+    const clientMap = new Map();
+    this._connClients.set(key, clientMap);
+
+    const stored = connectionManager._connectData.get(key);
+    if (stored?.clients) {
+      for (const c of stored.clients) {
+        if (c.fingerprint) {
+          clientMap.set(c.id, c.fingerprint);
+          this._onlineFingerprints.add(c.fingerprint);
+        }
+      }
+    }
+
+    const onJoined = (e) => {
+      const { clientId, fingerprint } = e.detail;
+      if (clientId && fingerprint) {
+        clientMap.set(clientId, fingerprint);
+        this._onlineFingerprints.add(fingerprint);
+        this.dispatchEvent(new CustomEvent('friend:presence-changed'));
+      }
+    };
+
+    const onLeft = (e) => {
+      const { clientId } = e.detail;
+      const fp = clientMap.get(clientId);
+      clientMap.delete(clientId);
+      if (fp) {
+        this._rebuildOnlineFingerprints();
+        this.dispatchEvent(new CustomEvent('friend:presence-changed'));
+      }
+    };
+
+    conn.addEventListener('server:client-joined', onJoined);
+    conn.addEventListener('server:client-left', onLeft);
+
+    const existing = this._listeners.get(key);
+    if (existing) {
+      existing._presenceJoined = onJoined;
+      existing._presenceLeft = onLeft;
+    }
+  }
+
+  /**
+   * Rebuilds _onlineFingerprints from all current connection client maps.
+   * @private
+   */
+  _rebuildOnlineFingerprints() {
+    this._onlineFingerprints.clear();
+    for (const clientMap of this._connClients.values()) {
+      for (const fp of clientMap.values()) {
+        this._onlineFingerprints.add(fp);
+      }
+    }
+  }
+
+  /**
+   * Returns true if the given fingerprint is currently online on any connected server.
    * @param {string} fingerprint
    * @returns {boolean}
    */
   isOnline(fingerprint) {
-    if (!fingerprint) return false;
-    const clients = window.gimodiClients;
-    if (!Array.isArray(clients)) return false;
-    return clients.some((c) => c.fingerprint === fingerprint);
+    return fingerprint ? this._onlineFingerprints.has(fingerprint) : false;
   }
 
   /**

@@ -1,6 +1,5 @@
 import { customAlert, customConfirm, customPrompt } from '../services/dialogs.js';
 import connectionManager from '../services/connectionManager.js';
-import serverService from '../services/server.js';
 import DmChatProvider from '../services/chat-providers/dm.js';
 import { initChatView, cleanup as cleanupChat } from './chat.js';
 
@@ -592,13 +591,11 @@ export function initDmView(dm, friends) {
   friendsService.addEventListener('friend:accepted', renderActiveTab);
   friendsService.addEventListener('friend:rejected', renderActiveTab);
   friendsService.addEventListener('friend:removed', renderActiveTab);
-  const onClientPresenceChange = () => {
+  friendsService.addEventListener('friend:presence-changed', () => {
     if (activeTab === 'friends') {
       renderFriendsList();
     }
-  };
-  serverService.addEventListener('server:client-joined', onClientPresenceChange);
-  serverService.addEventListener('server:client-left', onClientPresenceChange);
+  });
 
   for (const tab of document.querySelectorAll('.dm-tab')) {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
