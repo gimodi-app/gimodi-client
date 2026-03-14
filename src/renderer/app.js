@@ -443,6 +443,13 @@ async function switchToServer(key, options) {
   const prevKey = connectionManager.activeKey;
   if (prevKey === key) {
     if (viewDm.classList.contains('active')) {
+      cleanupChat();
+      const saved = connectionManager.getServerState(key);
+      if (saved?.chat) {
+        restoreChatState(saved.chat, new ServerChatProvider(saved.chat.currentChannelId || null));
+      } else {
+        initChatView(null, new ServerChatProvider(null));
+      }
       setActiveServer(key);
       rerenderSidebar();
       showView('view-server');
@@ -1857,6 +1864,10 @@ dmButton.addEventListener('click', () => {
   if (!dmService) {
     customAlert('Connect to a server with an identity to use Direct Messages.');
     return;
+  }
+  const activeKey = connectionManager.activeKey;
+  if (activeKey) {
+    saveCurrentViewState(activeKey);
   }
   clearDmUnread();
   refreshDmView();
