@@ -1,6 +1,7 @@
 import connectionManager from './connectionManager.js';
 
 const MSG_STORAGE_PREFIX = 'dm_messages_';
+const PURGE_LOG_PREFIX = 'dm_purged_';
 
 /**
  * @typedef {'pending'|'sent'|'delivered'} DmStatus
@@ -42,6 +43,29 @@ function loadMessages(ownFingerprint) {
  */
 function saveMessages(ownFingerprint, messages) {
   localStorage.setItem(storageKey(ownFingerprint), JSON.stringify(messages));
+}
+
+/**
+ * Loads the purge log: a map of peerFingerprint → purge timestamp.
+ * Messages from a peer received before their purge timestamp are silently discarded.
+ * @param {string} ownFingerprint
+ * @returns {Record<string, number>}
+ */
+function loadPurgeLog(ownFingerprint) {
+  try {
+    const raw = localStorage.getItem(`${PURGE_LOG_PREFIX}${ownFingerprint}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * @param {string} ownFingerprint
+ * @param {Record<string, number>} log
+ */
+function savePurgeLog(ownFingerprint, log) {
+  localStorage.setItem(`${PURGE_LOG_PREFIX}${ownFingerprint}`, JSON.stringify(log));
 }
 
 /**
@@ -273,6 +297,13 @@ export class DmService extends EventTarget {
   _handleReceived(detail) {
     const { id, senderFingerprint, content, createdAt } = detail;
 
+    const purgeLog = loadPurgeLog(this._fingerprint);
+    const purgedAt = purgeLog[senderFingerprint];
+    if (purgedAt && createdAt <= purgedAt) {
+      this._sendAck(id, senderFingerprint);
+      return;
+    }
+
     const messages = loadMessages(this._fingerprint);
     if (messages.some((m) => m.id === id)) {
       // Already received — send ack again in case the server missed the first one
@@ -350,17 +381,26 @@ export class DmService extends EventTarget {
 
   /**
    * Removes all locally stored messages for a conversation with the given peer.
-   * Acks any unacknowledged received messages so the server won't re-deliver them on reconnect.
+   * Records a purge timestamp so future re-deliveries of old messages are discarded.
+   * Also acks pending received messages for the online case.
    * @param {string} peerFingerprint
    */
   purgeConversation(peerFingerprint) {
+    const purgedAt = Date.now();
     const all = loadMessages(this._fingerprint);
+
     for (const msg of all) {
       if (msg.peerFingerprint === peerFingerprint && msg.direction === 'received') {
         this._sendAck(msg.id, peerFingerprint);
       }
     }
+
     saveMessages(this._fingerprint, all.filter((m) => m.peerFingerprint !== peerFingerprint));
+
+    const log = loadPurgeLog(this._fingerprint);
+    log[peerFingerprint] = purgedAt;
+    savePurgeLog(this._fingerprint, log);
+
     this.dispatchEvent(new CustomEvent('conversation-purged', { detail: { peerFingerprint } }));
   }
 
