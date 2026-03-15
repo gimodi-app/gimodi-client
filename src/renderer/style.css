@@ -5792,6 +5792,11 @@ input.is-invalid {
     border-color 0.15s;
 }
 
+.dm-tab[data-tab='friends'] {
+  flex: 0 0 36px;
+  font-size: 15px;
+}
+
 .dm-tab:hover {
   color: var(--text-normal);
 }
