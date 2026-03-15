@@ -1433,9 +1433,11 @@ function closeChannelViewTab(channelId) {
     channelPinnedMessages.delete(channelId);
   }
   provider.unsubscribeChannel(channelId);
-  // If closing the current channel's view tab, clear stale cache so channel tab reloads fresh
   if (channelId === currentChannelId) {
     channelMessagesCache.length = 0;
+    if (!voiceChannelId) {
+      currentChannelId = null;
+    }
   }
   window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
   if (activeTab.type === 'channel-view' && activeTab.channelId === channelId) {
@@ -1452,7 +1454,7 @@ export function setVoiceChannel(channelId) {
   const prevVoiceId = voiceChannelId;
   voiceChannelId = channelId;
 
-  // Restore previous voice channel tab back into tabOrder
+  // Restore previous voice channel tab back into tabOrder so it becomes closeable
   if (prevVoiceId && prevVoiceId !== channelId && channelViewTabs.find((t) => t.channelId === prevVoiceId)) {
     if (!tabOrder.find((t) => t.type === 'channel-view' && t.id === prevVoiceId)) {
       tabOrder.push({ type: 'channel-view', id: prevVoiceId });
@@ -3040,7 +3042,9 @@ function switchToTab(tab) {
       renderPinnedMessages();
     } else {
       channelMessagesPending.length = 0;
-      loadHistory(currentChannelId);
+      if (currentChannelId) {
+        loadHistory(currentChannelId);
+      }
     }
   } else if (tab.type === 'channel-view') {
     const cvTab = channelViewTabs.find((t) => t.channelId === tab.channelId);
