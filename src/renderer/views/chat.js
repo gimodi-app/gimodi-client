@@ -2430,23 +2430,31 @@ function buildMessageEl(msg, prevEl) {
   // Compact inline row (hidden in default mode, shown in compact mode)
   const compactHtml = `<span class="compact-row"><span class="compact-time" title="${escapeHtml(fullTime)}">${compactTime}</span> <span class="compact-nick" style="color:${nickColor}" title="${badge ? escapeHtml(badge) : ''}">${escapeHtml(displayNickname)}</span></span>`;
 
+  const initials = displayNickname.trim().split(/\s+/).map((w) => w[0]).join('').substring(0, 2).toUpperCase();
+
   if (isGrouped) {
     el.classList.add('chat-msg-grouped');
     el.innerHTML = `
-      ${compactHtml}
-      ${replyRefHtml}
-      <div class="chat-msg-body${emojiOnly ? ' emoji-only' : ''}">${bodyHtml}</div>
-      ${editedLabel}
+      <div class="chat-msg-avatar chat-msg-avatar-grouped"></div>
+      <div class="chat-msg-content">
+        ${compactHtml}
+        ${replyRefHtml}
+        <div class="chat-msg-body${emojiOnly ? ' emoji-only' : ''}">${bodyHtml}</div>
+        ${editedLabel}
+      </div>
     `;
   } else {
     el.innerHTML = `
-      ${compactHtml}
-      <div class="chat-msg-header">
-        <span class="chat-msg-nick-group"><span class="chat-msg-nick" style="color:${nickColor}">${escapeHtml(displayNickname)}</span>${badgeHtml}</span>
-        <span class="chat-msg-time">${headerTime}</span>${editedLabel}
+      <div class="chat-msg-avatar">${escapeHtml(initials)}</div>
+      <div class="chat-msg-content">
+        ${compactHtml}
+        <div class="chat-msg-header">
+          <span class="chat-msg-nick-group"><span class="chat-msg-nick" style="color:${nickColor}">${escapeHtml(displayNickname)}</span>${badgeHtml}</span>
+          <span class="chat-msg-time">${headerTime}</span>${editedLabel}
+        </div>
+        ${replyRefHtml}
+        <div class="chat-msg-body${emojiOnly ? ' emoji-only' : ''}">${bodyHtml}</div>
       </div>
-      ${replyRefHtml}
-      <div class="chat-msg-body${emojiOnly ? ' emoji-only' : ''}">${bodyHtml}</div>
     `;
   }
   el.title = fullTime;

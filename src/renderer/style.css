@@ -2525,6 +2525,34 @@ label:has(input[type='checkbox']) {
   margin-right: -8px;
   border-radius: 4px;
   transition: background-color 0.1s ease;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.chat-msg-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-msg-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--accent, #5865f2);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+  margin-top: 2px;
+}
+
+.chat-msg-avatar-grouped {
+  visibility: hidden;
 }
 
 .chat-msg:hover,
@@ -2818,6 +2846,10 @@ label:has(input[type='checkbox']) {
 .chat-messages.compact-mode .chat-msg-header,
 .chat-messages.compact-mode .chat-msg-hover-time {
   display: none !important;
+}
+
+.chat-messages.compact-mode .chat-msg-avatar {
+  display: none;
 }
 
 .chat-messages.compact-mode .chat-msg-grouped {
