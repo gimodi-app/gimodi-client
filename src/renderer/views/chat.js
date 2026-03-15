@@ -1890,13 +1890,22 @@ function onMessageDeleted(e) {
       const badgeHtml = badge ? `<span class="admin-badge">${escapeHtml(badge)}</span>` : '';
       const promoteNickColor = promoteRoleColor || nicknameColor(nickname);
 
+      const avatarEl = next.querySelector('.chat-msg-avatar');
+      if (avatarEl) {
+        avatarEl.classList.remove('chat-msg-avatar-grouped');
+        avatarEl.textContent = nickname.trim().split(/\s+/).map((w) => w[0]).join('').substring(0, 2).toUpperCase();
+      }
       const header = document.createElement('div');
       header.className = 'chat-msg-header';
       header.innerHTML = `
         <span class="chat-msg-nick-group"><span class="chat-msg-nick" style="color:${promoteNickColor}">${escapeHtml(nickname)}</span>${badgeHtml}</span>
         <span class="chat-msg-time">${headerTime}</span>
       `;
-      next.insertBefore(header, next.firstChild);
+      const content = next.querySelector('.chat-msg-content');
+      const insertBefore = content?.querySelector('.chat-msg-reply, .chat-msg-body');
+      if (content && insertBefore) {
+        content.insertBefore(header, insertBefore);
+      }
     }
   }
 
@@ -2690,7 +2699,8 @@ function buildMessageEl(msg, prevEl) {
 }
 
 function appendMessage(msg) {
-  const prevEl = chatMessages.querySelector('.chat-msg:last-child');
+  const allMsgs = chatMessages.querySelectorAll('.chat-msg');
+  const prevEl = allMsgs.length > 0 ? allMsgs[allMsgs.length - 1] : null;
   const el = buildMessageEl(msg, prevEl);
   maybeInsertDaySeparator(msg.timestamp);
   chatMessages.appendChild(el);
@@ -2892,10 +2902,12 @@ async function loadOlderChannelMessages(pg) {
     await resolveNicknames(userIds);
   }
   const frag = document.createDocumentFragment();
+  let batchPrev = null;
   for (const msg of sorted) {
-    const el = buildMessageEl(msg);
+    const el = buildMessageEl(msg, batchPrev);
     if (el) {
       frag.appendChild(el);
+      batchPrev = el;
     }
   }
   chatMessages.prepend(frag);
@@ -2915,10 +2927,12 @@ async function loadOlderChannelViewMessages(pg) {
     await resolveNicknames(userIds);
   }
   const frag = document.createDocumentFragment();
+  let batchPrev = null;
   for (const msg of sorted) {
-    const el = buildMessageEl(msg);
+    const el = buildMessageEl(msg, batchPrev);
     if (el) {
       frag.appendChild(el);
+      batchPrev = el;
     }
   }
   chatMessages.prepend(frag);
