@@ -794,6 +794,41 @@ body {
   opacity: 0.5;
 }
 
+.dm-conv-avatar {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--accent, #5865f2);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.dm-conv-avatar::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-secondary);
+}
+
+.dm-conv-avatar.online::after {
+  background: #3ba55d;
+}
+
+.dm-conv-avatar.offline::after {
+  background: #747f8d;
+}
+
 .dm-conv-info {
   flex: 1;
   min-width: 0;

@@ -425,14 +425,23 @@ function buildFriendItem(friend) {
   item.dataset.fingerprint = friend.fingerprint;
 
   const online = friendsService?.isOnline(friend.fingerprint) ?? false;
-  const indicator = document.createElement('span');
-  indicator.className = 'dm-conv-indicator ' + (online ? 'online' : 'offline');
+
+  const avatar = document.createElement('div');
+  avatar.className = 'dm-conv-avatar ' + (online ? 'online' : 'offline');
+  const initials = (friend.nickname || '')
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase();
+  avatar.textContent = initials;
 
   const nameEl = document.createElement('div');
   nameEl.className = 'dm-conv-name dm-friend-name';
   nameEl.textContent = friend.nickname;
 
-  item.appendChild(indicator);
+  item.appendChild(avatar);
   item.appendChild(nameEl);
   item.addEventListener('click', () => {
     switchTab('conversations');

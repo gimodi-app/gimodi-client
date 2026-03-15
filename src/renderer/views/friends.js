@@ -128,9 +128,17 @@ function renderConversationList() {
     const entry = document.createElement('div');
     entry.className = 'dm-conversation-entry' + (activeFingerprint === fp ? ' active' : '');
 
-    const indicator = document.createElement('span');
-    indicator.className = 'dm-conv-indicator ' + (online ? 'online' : 'offline');
-    entry.appendChild(indicator);
+    const avatar = document.createElement('div');
+    avatar.className = 'dm-conv-avatar ' + (online ? 'online' : 'offline');
+    const initials = displayName
+      .trim()
+      .split(/\s+/)
+      .map((w) => w[0])
+      .join('')
+      .substring(0, 2)
+      .toUpperCase();
+    avatar.textContent = initials;
+    entry.appendChild(avatar);
 
     const info = document.createElement('div');
     info.className = 'dm-conv-info';
