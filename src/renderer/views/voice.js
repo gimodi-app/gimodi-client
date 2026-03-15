@@ -31,6 +31,8 @@ const btnWebcam = document.getElementById('btn-webcam');
 const btnScreenShare = document.getElementById('btn-screen-share');
 const mediaGrid = document.getElementById('media-grid');
 const btnBackToGrid = document.getElementById('btn-back-to-grid');
+const selfPreview = document.getElementById('self-webcam-preview');
+const selfPreviewVideo = document.getElementById('self-webcam-preview-video');
 
 // eslint-disable-next-line no-unused-vars
 let voiceServerName = '';
@@ -168,6 +170,7 @@ export function initVoiceView(initialClients = [], serverName = '') {
   document.addEventListener('fullscreenchange', () => {
     updateScreenButtons();
     updateWebcamButtons();
+    repositionSelfPreviewForFullscreen();
   });
 
   // Watch stream from channel tree
@@ -657,6 +660,8 @@ function onLocalWebcamStarted(e) {
   playScreenSound(sndWebcamStart);
   const { track } = e.detail;
   createWebcamTile(serverService.clientId, 'You', track, true);
+  selfPreviewVideo.srcObject = new MediaStream([track]);
+  updateSelfPreviewVisibility();
 }
 
 function onPeerWebcamStopped(e) {
@@ -676,6 +681,118 @@ function onLocalWebcamStopped() {
     cleanupWcPopout();
   }
   removeWebcamTile(serverService.clientId);
+  selfPreviewVideo.srcObject = null;
+  updateSelfPreviewVisibility();
+}
+
+// --- Self Preview Drag & Resize ---
+
+const selfPreviewResizeHandle = document.getElementById('self-webcam-preview-resize');
+
+/**
+ * Initializes drag-to-reposition and resize behavior on the self webcam preview element.
+ */
+function initSelfPreviewDrag() {
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let origRight = 0;
+  let origBottom = 0;
+
+  selfPreview.addEventListener('mousedown', (e) => {
+    if (e.target === selfPreviewResizeHandle) {
+      return;
+    }
+    e.preventDefault();
+    const rect = selfPreview.getBoundingClientRect();
+    origRight = window.innerWidth - rect.right;
+    origBottom = window.innerHeight - rect.bottom;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    selfPreview.classList.add('dragging');
+
+    /**
+     * @param {MouseEvent} mv
+     */
+    function onMove(mv) {
+      const dx = mv.clientX - dragStartX;
+      const dy = mv.clientY - dragStartY;
+      const newRight = Math.max(0, origRight - dx);
+      const newBottom = Math.max(0, origBottom - dy);
+      selfPreview.style.right = `${newRight}px`;
+      selfPreview.style.bottom = `${newBottom}px`;
+    }
+
+    function onUp() {
+      selfPreview.classList.remove('dragging');
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+
+  selfPreviewResizeHandle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startWidth = selfPreview.offsetWidth;
+    const startHeight = selfPreview.offsetHeight;
+    const rect = selfPreview.getBoundingClientRect();
+    const startRight = window.innerWidth - rect.right;
+    const startBottom = window.innerHeight - rect.bottom;
+
+    /**
+     * @param {MouseEvent} mv
+     */
+    function onMove(mv) {
+      const dx = mv.clientX - startX;
+      const dy = mv.clientY - startY;
+      const newWidth = Math.max(100, startWidth - dx);
+      selfPreview.style.width = `${newWidth}px`;
+      selfPreview.style.height = `${newWidth * (9 / 16)}px`;
+      selfPreview.style.right = `${startRight}px`;
+      selfPreview.style.bottom = `${startBottom}px`;
+    }
+
+    function onUp() {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+}
+
+initSelfPreviewDrag();
+
+/**
+ * Shows or hides the self-preview based on webcam state and current focus mode.
+ * Hidden when own webcam is focused, visible otherwise (when webcam is active).
+ */
+function updateSelfPreviewVisibility() {
+  if (!isWebcamOn) {
+    selfPreview.classList.add('hidden');
+    return;
+  }
+  const ownFocused = focusMode && focusMode.type === 'webcam' && focusMode.clientId === serverService.clientId;
+  selfPreview.classList.toggle('hidden', ownFocused);
+}
+
+/**
+ * Moves the self-preview element into the active fullscreen container so it
+ * remains visible on top of the fullscreen video. When fullscreen exits, it is
+ * moved back to document.body.
+ */
+function repositionSelfPreviewForFullscreen() {
+  const fsElement = document.fullscreenElement;
+  if (fsElement) {
+    fsElement.appendChild(selfPreview);
+  } else {
+    document.body.appendChild(selfPreview);
+  }
 }
 
 // --- Tile Resize ---
@@ -890,6 +1007,7 @@ function focusStream(type, clientId) {
   isScreenResized = false;
 
   focusMode = { type, clientId };
+  updateSelfPreviewVisibility();
 
   if (type === 'webcam') {
     webcamViewMode = 'focused';
@@ -1001,6 +1119,7 @@ function buildFocusStrip() {
 
 function unfocus() {
   focusMode = null;
+  updateSelfPreviewVisibility();
 
   // Hide webcam viewer
   webcamViewMode = 'grid';
