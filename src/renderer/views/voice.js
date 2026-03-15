@@ -48,9 +48,11 @@ const webcamViewerLabel = document.getElementById('webcam-viewer-label');
 const btnBackToWebcamGrid = document.getElementById('btn-back-to-webcam-grid');
 const btnPopoutWebcam = document.getElementById('btn-popout-webcam');
 const btnMaximizeWebcam = document.getElementById('btn-maximize-webcam');
+const webcamResizeHandle = document.getElementById('webcam-resize-handle');
 let focusedWebcamStream = null; // stream currently in the viewer
 let focusedWebcamClientId = null; // clientId in the viewer
 let isWebcamMaximized = false;
+let isWebcamResized = false;
 
 // Screen share DOM elements
 const screenShareContainer = document.getElementById('screen-share-container');
@@ -156,6 +158,7 @@ export function initVoiceView(initialClients = [], serverName = '') {
   btnBackToWebcamGrid.addEventListener('click', onWebcamBackClick);
   btnMaximizeWebcam.addEventListener('click', toggleMaximizeWebcam);
   btnPopoutWebcam.addEventListener('click', onPopoutWebcamClick);
+  webcamResizeHandle.addEventListener('mousedown', onWebcamResizeHandleMouseDown);
 
   // Right-click context menu for fullscreen
   screenShareContainer.addEventListener('contextmenu', (e) => showMediaContextMenu(e, screenVideo));
@@ -236,6 +239,9 @@ export function cleanup() {
   screenResizeHandle.removeEventListener('mousedown', onResizeHandleMouseDown);
   window.removeEventListener('mousemove', onResizeHandleMouseMove);
   window.removeEventListener('mouseup', onResizeHandleMouseUp);
+  webcamResizeHandle.removeEventListener('mousedown', onWebcamResizeHandleMouseDown);
+  window.removeEventListener('mousemove', onWebcamResizeHandleMouseMove);
+  window.removeEventListener('mouseup', onWebcamResizeHandleMouseUp);
   window.removeEventListener('gimodi:watch-stream', onWatchStreamEvent);
   window.removeEventListener('mousemove', onTileResizeMove);
   window.removeEventListener('mouseup', onTileResizeUp);
@@ -873,8 +879,10 @@ function focusStream(type, clientId) {
 
   // Hide both viewers first
   webcamViewerContainer.classList.add('hidden');
-  webcamViewerContainer.classList.remove('maximized');
+  webcamViewerContainer.classList.remove('maximized', 'resized');
+  webcamViewerContainer.style.height = '';
   isWebcamMaximized = false;
+  isWebcamResized = false;
   screenShareContainer.classList.add('hidden');
   screenShareContainer.classList.remove('maximized', 'resized');
   screenShareContainer.style.height = '';
@@ -1002,8 +1010,10 @@ function unfocus() {
   webcamViewerVideo.classList.remove('mirrored');
   webcamViewerLabel.textContent = '';
   webcamViewerContainer.classList.add('hidden');
-  webcamViewerContainer.classList.remove('maximized');
+  webcamViewerContainer.classList.remove('maximized', 'resized');
+  webcamViewerContainer.style.height = '';
   isWebcamMaximized = false;
+  isWebcamResized = false;
   if (isInBrowserFullscreen(webcamViewerContainer)) {
     exitBrowserFullscreen();
   }
@@ -1606,6 +1616,40 @@ function onResizeHandleMouseMove(e) {
 function onResizeHandleMouseUp() {
   window.removeEventListener('mousemove', onResizeHandleMouseMove);
   window.removeEventListener('mouseup', onResizeHandleMouseUp);
+}
+
+// --- Webcam Resize Handle ---
+
+let webcamResizeStartY = 0;
+let webcamResizeStartHeight = 0;
+
+/**
+ * @param {MouseEvent} e
+ */
+function onWebcamResizeHandleMouseDown(e) {
+  e.preventDefault();
+  webcamResizeStartY = e.clientY;
+  webcamResizeStartHeight = webcamViewerContainer.offsetHeight;
+  window.addEventListener('mousemove', onWebcamResizeHandleMouseMove);
+  window.addEventListener('mouseup', onWebcamResizeHandleMouseUp);
+}
+
+/**
+ * @param {MouseEvent} e
+ */
+function onWebcamResizeHandleMouseMove(e) {
+  const delta = e.clientY - webcamResizeStartY;
+  const newHeight = Math.max(150, webcamResizeStartHeight + delta);
+  webcamViewerContainer.style.height = `${newHeight}px`;
+  if (!isWebcamResized) {
+    webcamViewerContainer.classList.add('resized');
+    isWebcamResized = true;
+  }
+}
+
+function onWebcamResizeHandleMouseUp() {
+  window.removeEventListener('mousemove', onWebcamResizeHandleMouseMove);
+  window.removeEventListener('mouseup', onWebcamResizeHandleMouseUp);
 }
 
 // --- Watch Stream (from channel tree) ---

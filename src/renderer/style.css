@@ -1847,7 +1847,7 @@ label:has(input[type='checkbox']) {
 .webcam-tile {
   position: relative;
   width: 240px;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 9;
   background: var(--bg-tertiary);
   border-radius: 8px;
   overflow: hidden;
@@ -2371,6 +2371,47 @@ label:has(input[type='checkbox']) {
 
 #screen-share-container.maximized #screen-resize-handle,
 #screen-share-container.popped-out #screen-resize-handle {
+  display: none;
+}
+
+#webcam-viewer-container.resized {
+  max-height: none;
+}
+
+#webcam-viewer-container.resized video {
+  height: 100%;
+  max-height: none;
+}
+
+#webcam-resize-handle {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
+  z-index: 1002;
+}
+
+#webcam-resize-handle::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 48px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.25);
+  transition: background 0.15s;
+}
+
+#webcam-resize-handle:hover::after {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+#webcam-viewer-container.maximized #webcam-resize-handle,
+#webcam-viewer-container.popped-out #webcam-resize-handle {
   display: none;
 }
 

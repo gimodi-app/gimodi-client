@@ -282,11 +282,14 @@ class VoiceService extends EventTarget {
       return;
     }
 
-    const videoConstraints = {};
+    const videoConstraints = {
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+    };
     if (this.selectedCameraId) {
       videoConstraints.deviceId = { exact: this.selectedCameraId };
     }
-    const constraints = { video: Object.keys(videoConstraints).length > 0 ? videoConstraints : true };
+    const constraints = { video: videoConstraints };
     log('Webcam getUserMedia with:', JSON.stringify(constraints));
 
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
