@@ -1830,17 +1830,6 @@ label:has(input[type='checkbox']) {
 
 .voice-controls #btn-leave-voice {
   margin-right: auto;
-  color: #e74c3c;
-}
-
-.voice-controls #btn-leave-voice i {
-  display: inline-block;
-  transform: rotate(90deg);
-}
-
-.voice-controls #btn-leave-voice:hover {
-  background: rgba(231, 76, 60, 0.15);
-  color: #e74c3c;
 }
 
 /* --- Webcam Grid --- */
