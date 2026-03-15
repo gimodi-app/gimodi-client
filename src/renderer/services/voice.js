@@ -206,16 +206,17 @@ class VoiceService extends EventTarget {
       return;
     }
 
-    const audioConstraints = {};
+    const audioConstraints = {
+      autoGainControl: false,
+    };
     if (this.selectedMicId) {
       audioConstraints.deviceId = { exact: this.selectedMicId };
     }
     if (this.noiseSuppression) {
       audioConstraints.noiseSuppression = false;
       audioConstraints.echoCancellation = true;
-      audioConstraints.autoGainControl = true;
     }
-    const constraints = { audio: Object.keys(audioConstraints).length > 0 ? audioConstraints : true };
+    const constraints = { audio: audioConstraints };
     log('getUserMedia with:', JSON.stringify(constraints));
 
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
