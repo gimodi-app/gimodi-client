@@ -5748,11 +5748,26 @@ input.is-invalid {
 
 .dm-sidebar {
   width: 220px;
+  min-width: 160px;
+  max-width: 480px;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
+}
+
+.dm-sidebar-resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.dm-sidebar-resize-handle:hover,
+.dm-sidebar-resize-handle.active {
+  background: var(--accent);
+  opacity: 0.3;
 }
 
 .server-sidebar-dm:before {

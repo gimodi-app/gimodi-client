@@ -365,6 +365,14 @@ async function loadSettings() {
       voiceService.setUserVolume(userId, vol);
     }
   }
+  if (appSettings.sidebarWidth) {
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) sidebar.style.width = appSettings.sidebarWidth + 'px';
+  }
+  if (appSettings.dmSidebarWidth) {
+    const dmSidebar = document.querySelector('.dm-sidebar');
+    if (dmSidebar) dmSidebar.style.width = appSettings.dmSidebarWidth + 'px';
+  }
 }
 
 function saveSettings() {
@@ -1805,11 +1813,6 @@ async function populateDeviceSelectors() {
   const sidebar = document.querySelector('.sidebar');
   const handle = document.querySelector('.sidebar-resize-handle');
   if (sidebar && handle) {
-    // Restore saved width
-    if (appSettings.sidebarWidth) {
-      sidebar.style.width = appSettings.sidebarWidth + 'px';
-    }
-
     let startX, startWidth;
 
     handle.addEventListener('mousedown', (e) => {
@@ -1832,6 +1835,41 @@ async function populateDeviceSelectors() {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
         appSettings.sidebarWidth = Math.round(sidebar.getBoundingClientRect().width);
+        saveSettings();
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+  }
+}
+
+{
+  const dmSidebar = document.querySelector('.dm-sidebar');
+  const dmHandle = document.querySelector('.dm-sidebar-resize-handle');
+  if (dmSidebar && dmHandle) {
+    let startX, startWidth;
+
+    dmHandle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      startX = e.clientX;
+      startWidth = dmSidebar.getBoundingClientRect().width;
+      dmHandle.classList.add('active');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      const onMouseMove = (e) => {
+        const newWidth = Math.min(480, Math.max(160, startWidth + e.clientX - startX));
+        dmSidebar.style.width = newWidth + 'px';
+      };
+
+      const onMouseUp = () => {
+        dmHandle.classList.remove('active');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        appSettings.dmSidebarWidth = Math.round(dmSidebar.getBoundingClientRect().width);
         saveSettings();
       };
 
