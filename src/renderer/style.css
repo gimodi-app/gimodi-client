@@ -810,7 +810,8 @@ body {
   user-select: none;
 }
 
-.dm-conv-avatar::after {
+.dm-conv-avatar.online::after,
+.dm-conv-avatar.offline::after {
   content: '';
   position: absolute;
   bottom: -1px;
@@ -826,7 +827,7 @@ body {
 }
 
 .dm-conv-avatar.offline::after {
-  background: #747f8d;
+  background: #b9bbbe;
 }
 
 .dm-conv-info {
@@ -5758,6 +5759,9 @@ input.is-invalid {
   cursor: pointer;
   border-bottom: 1px solid var(--border);
   transition: background 0.1s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .dm-friend-item {

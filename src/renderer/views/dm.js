@@ -247,9 +247,30 @@ function buildConvItem(conv) {
   const name = conversationDisplayName(conv);
 
   const isGroup = conv.type === 'group';
-  const icon = isGroup ? '<i class="bi bi-people-fill dm-conv-group-icon"></i> ' : '';
 
-  item.innerHTML = `<div class="dm-conv-name">${icon}${escapeHtml(name)}</div>`;
+  const avatar = document.createElement('div');
+  if (isGroup) {
+    avatar.className = 'dm-conv-avatar dm-conv-avatar-group';
+    avatar.innerHTML = '<i class="bi bi-people-fill"></i>';
+  } else {
+    const otherFp = conv.participants?.find((p) => p.fingerprint !== dmService._fingerprint)?.fingerprint;
+    const online = otherFp ? (friendsService?.isOnline(otherFp) ?? false) : false;
+    avatar.className = 'dm-conv-avatar ' + (online ? 'online' : 'offline');
+    avatar.textContent = name
+      .trim()
+      .split(/\s+/)
+      .map((w) => w[0])
+      .join('')
+      .substring(0, 2)
+      .toUpperCase();
+  }
+
+  const nameEl = document.createElement('div');
+  nameEl.className = 'dm-conv-name';
+  nameEl.textContent = name;
+
+  item.appendChild(avatar);
+  item.appendChild(nameEl);
 
   item.addEventListener('click', () => openConversation(conv.id));
   item.addEventListener('contextmenu', (e) => showConvContextMenu(e, conv.id));
