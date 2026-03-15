@@ -33,6 +33,7 @@ import {
   restoreState as restoreChatState,
   initUnreadState,
   getViewingChannelId,
+  isServerChatActive,
 } from './views/chat.js';
 import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoiceServerName, syncVoiceControlsUI } from './views/voice.js';
 import { setTimeFormat } from './services/timeFormat.js';
@@ -454,16 +455,22 @@ async function switchToServer(key, options) {
   const prevKey = connectionManager.activeKey;
   if (prevKey === key) {
     if (viewDm.classList.contains('active')) {
-      cleanupChat();
-      const saved = connectionManager.getServerState(key);
-      if (saved?.chat) {
-        restoreChatState(saved.chat, new ServerChatProvider(saved.chat.currentChannelId || null));
+      if (isServerChatActive()) {
+        setActiveServer(key);
+        rerenderSidebar();
+        showView('view-server');
       } else {
-        initChatView(null, new ServerChatProvider(null));
+        cleanupChat();
+        const saved = connectionManager.getServerState(key);
+        if (saved?.chat) {
+          restoreChatState(saved.chat, new ServerChatProvider(saved.chat.currentChannelId || null));
+        } else {
+          initChatView(null, new ServerChatProvider(null));
+        }
+        setActiveServer(key);
+        rerenderSidebar();
+        showView('view-server');
       }
-      setActiveServer(key);
-      rerenderSidebar();
-      showView('view-server');
     }
     return;
   }

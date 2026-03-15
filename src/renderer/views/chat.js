@@ -767,7 +767,6 @@ function toggleNotificationDropdown() {
  */
 export function initChatView(channelId, chatProvider, container) {
   console.log('[chat] initChatView channelId=', channelId, 'provider:', chatProvider?.constructor?.name, 'container:', !!container);
-  provider = chatProvider;
   currentChannelId = channelId;
 
   // Resolve DOM elements from container or fallback to document-level IDs
@@ -811,8 +810,9 @@ export function initChatView(channelId, chatProvider, container) {
   clientNicknameMap.clear();
   cancelReply();
 
-  // Remove any previously attached DOM listeners to avoid duplicates on reconnect
+  // Remove listeners from the previous provider before switching to the new one
   cleanup();
+  provider = chatProvider;
 
   if (provider.supportsNotifications) {
     notificationService.clearAll();
@@ -1016,6 +1016,15 @@ export function cleanup() {
   channelViewMessagesPending.clear();
   channelPinnedMessages.clear();
   unreadChannels.clear();
+}
+
+/**
+ * Returns true if the server chat provider is currently active (not a DM provider).
+ * Used to determine whether chat state needs to be restored when returning from the DM view.
+ * @returns {boolean}
+ */
+export function isServerChatActive() {
+  return !!(provider?.supportsTabs);
 }
 
 export function saveState() {
