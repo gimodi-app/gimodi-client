@@ -1648,8 +1648,9 @@ async function startMicLoopback() {
     const constraints = { audio: micId ? { deviceId: { exact: micId } } : true };
     _micLoopbackStream = await navigator.mediaDevices.getUserMedia(constraints);
 
-    // Create AudioContext, connect mic to a destination stream
-    _micLoopbackCtx = new AudioContext();
+    // Create AudioContext matching the mic's sample rate to avoid pitch distortion
+    const micTrackSettings = _micLoopbackStream.getAudioTracks()[0]?.getSettings();
+    _micLoopbackCtx = new AudioContext(micTrackSettings?.sampleRate ? { sampleRate: micTrackSettings.sampleRate } : undefined);
     const source = _micLoopbackCtx.createMediaStreamSource(_micLoopbackStream);
     const dest = _micLoopbackCtx.createMediaStreamDestination();
     source.connect(dest);
