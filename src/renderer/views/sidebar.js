@@ -10,6 +10,119 @@ let servers = [];
 let activeServerKey = null;
 let contextMenuEl = null;
 
+export const PRESENCE_STATUSES = [
+  { key: 'online', label: 'Online', color: '#0aaf30' },
+  { key: 'afk', label: 'AFK', color: '#f59e0b' },
+  { key: 'busy', label: 'Busy', color: '#ef4444' },
+  { key: 'offline', label: 'Offline', color: '#6b7280' },
+];
+
+let currentPresence = localStorage.getItem('gimodi:presence') || 'online';
+let statusPickerEl = null;
+
+/**
+ * Returns the effective presence status, falling back to 'offline' when no
+ * server connection is active regardless of the chosen presence.
+ * @returns {string}
+ */
+export function getEffectivePresence() {
+  const hasConnection = [...connectionManager._connections.values()].some((c) => c.connected);
+  if (!hasConnection) return 'offline';
+  return currentPresence;
+}
+
+/** Updates the self-status dot to reflect the current effective presence. */
+function updateSelfStatusDot() {
+  const effective = getEffectivePresence();
+  const dot = document.getElementById('self-status-dot');
+  if (!dot) return;
+  dot.className = 'self-status-dot status-' + effective;
+  const entry = PRESENCE_STATUSES.find((s) => s.key === effective);
+  const btn = document.getElementById('btn-self-user');
+  if (btn && entry) {
+    btn.title = 'Status: ' + entry.label;
+  }
+}
+
+/** Removes the status picker popup from the DOM. */
+function dismissStatusPicker() {
+  if (statusPickerEl) {
+    statusPickerEl.remove();
+    statusPickerEl = null;
+  }
+}
+
+/**
+ * Shows the status picker popup above the self-user button.
+ * @param {MouseEvent} e
+ */
+function showStatusPicker(e) {
+  e.stopPropagation();
+  if (statusPickerEl) {
+    dismissStatusPicker();
+    return;
+  }
+
+  statusPickerEl = document.createElement('div');
+  statusPickerEl.className = 'status-picker';
+
+  for (const status of PRESENCE_STATUSES) {
+    const item = document.createElement('div');
+    item.className = 'status-picker-item' + (status.key === getEffectivePresence() ? ' active' : '');
+
+    const dot = document.createElement('span');
+    dot.className = 'status-picker-dot';
+    dot.style.background = status.color;
+
+    const label = document.createElement('span');
+    label.textContent = status.label;
+
+    item.appendChild(dot);
+    item.appendChild(label);
+    item.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      currentPresence = status.key;
+      localStorage.setItem('gimodi:presence', currentPresence);
+      updateSelfStatusDot();
+      dismissStatusPicker();
+      window.dispatchEvent(new CustomEvent('gimodi:presence-changed', { detail: { status: currentPresence } }));
+    });
+    statusPickerEl.appendChild(item);
+  }
+
+  document.body.appendChild(statusPickerEl);
+
+  const btnRect = document.getElementById('btn-self-user').getBoundingClientRect();
+  statusPickerEl.style.left = btnRect.right + 8 + 'px';
+  const pickerHeight = statusPickerEl.offsetHeight;
+  statusPickerEl.style.top = Math.max(4, btnRect.bottom - pickerHeight) + 'px';
+}
+
+/** Initializes the self-user avatar and status button at the bottom of the sidebar. */
+function initSelfUser() {
+  updateSelfStatusDot();
+  const btn = document.getElementById('btn-self-user');
+  if (btn) {
+    btn.addEventListener('click', showStatusPicker);
+  }
+  connectionManager.addEventListener('connection-status-changed', () => {
+    updateSelfStatusDot();
+    window.dispatchEvent(new CustomEvent('gimodi:presence-changed', { detail: { status: getEffectivePresence() } }));
+  });
+  connectionManager.addEventListener('all-disconnected', () => {
+    updateSelfStatusDot();
+    window.dispatchEvent(new CustomEvent('gimodi:presence-changed', { detail: { status: 'offline' } }));
+  });
+}
+
+/**
+ * Returns the current presence status key.
+ * @returns {string}
+ */
+export function getCurrentPresence() {
+  return currentPresence;
+}
+
 let dragData = null;
 let dropTarget = null;
 
@@ -926,6 +1039,8 @@ export async function initSidebar(connectCallback, onAddServer, onEditServer) {
 
   document.getElementById('btn-add-server').addEventListener('click', onAddServer);
 
+  initSelfUser();
+
   sidebarList.addEventListener('dragover', (e) => {
     e.preventDefault();
     if (!dragData) {
@@ -970,4 +1085,5 @@ export async function initSidebar(connectCallback, onAddServer, onEditServer) {
   });
 
   document.addEventListener('click', dismissContextMenu);
+  document.addEventListener('click', dismissStatusPicker);
 }

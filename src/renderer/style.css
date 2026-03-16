@@ -631,6 +631,90 @@ body {
   display: none;
 }
 
+.server-sidebar-spacer {
+  flex: 1;
+}
+
+.server-sidebar-self {
+  margin-bottom: 2px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.server-sidebar-self:hover {
+  background: var(--bg-hover, var(--bg-tertiary));
+  color: var(--text-primary);
+}
+
+.server-sidebar-self::before {
+  display: none;
+}
+
+.self-status-dot {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-secondary);
+  z-index: 1;
+}
+
+.self-status-dot.status-online {
+  background: #0aaf30;
+}
+
+.self-status-dot.status-afk {
+  background: #f59e0b;
+}
+
+.self-status-dot.status-busy {
+  background: #ef4444;
+}
+
+.self-status-dot.status-offline {
+  background: #6b7280;
+}
+
+.status-picker {
+  position: fixed;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 10001;
+  overflow: hidden;
+  min-width: 160px;
+}
+
+.status-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition: background 0.1s;
+}
+
+.status-picker-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.status-picker-item.active {
+  color: var(--text-primary);
+}
+
+.status-picker-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 /* DM button */
 .server-sidebar-dm {
   background: var(--accent, #5865f2);
@@ -811,13 +895,15 @@ body {
 }
 
 .dm-conv-avatar.online::after,
-.dm-conv-avatar.offline::after {
+.dm-conv-avatar.offline::after,
+.dm-conv-avatar.afk::after,
+.dm-conv-avatar.busy::after {
   content: '';
   position: absolute;
-  bottom: -1px;
-  right: -1px;
-  width: 8px;
-  height: 8px;
+  bottom: -2px;
+  right: -2px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   border: 2px solid var(--bg-secondary);
 }
@@ -828,6 +914,50 @@ body {
 
 .dm-conv-avatar.offline::after {
   background: #b9bbbe;
+}
+
+.dm-conv-avatar.afk::after {
+  background: #f59e0b;
+}
+
+.dm-conv-avatar.busy::after {
+  background: #ef4444;
+}
+
+.dm-self-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+  background: var(--bg-tertiary, var(--bg-secondary));
+  flex-shrink: 0;
+}
+
+.dm-self-avatar {
+  cursor: default;
+  flex-shrink: 0;
+}
+
+.dm-self-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.dm-self-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dm-self-status {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 1px;
 }
 
 .dm-conv-info {

@@ -39,6 +39,11 @@
         <button id="btn-add-server" class="server-sidebar-btn server-sidebar-add" title="Add Server">
           <i class="bi bi-plus-lg"></i>
         </button>
+        <div class="server-sidebar-spacer"></div>
+        <button id="btn-self-user" class="server-sidebar-btn server-sidebar-self" title="Your Status">
+          <i class="bi bi-person-fill"></i>
+          <span id="self-status-dot" class="self-status-dot"></span>
+        </button>
       </div>
 
       <div class="app-main">
@@ -195,6 +200,7 @@
               </div>
               <div id="dm-conversation-list" class="dm-conversation-list"></div>
               <div id="dm-friends-list" class="dm-conversation-list" style="display: none"></div>
+              <div id="dm-self-user" class="dm-self-user"></div>
             </aside>
             <div class="dm-sidebar-resize-handle"></div>
             <main class="dm-main" id="dm-chat-container">

@@ -2,6 +2,8 @@ import dmService from '../services/dm.js';
 import { renderDmMessageEl, maybeInsertDaySeparator, createLinkPreviewEl } from './chat-renderer.js';
 import { formatRelativeTime } from '../services/timeFormat.js';
 import { customConfirm, customPrompt } from '../services/dialogs.js';
+import connectionManager from '../services/connectionManager.js';
+import { getEffectivePresence, PRESENCE_STATUSES } from './sidebar.js';
 
 let friendsList = [];
 let conversations = [];
@@ -11,15 +13,74 @@ let dmPagination = { oldestTs: null, allLoaded: false, loading: false };
 const HISTORY_PAGE_SIZE = 50;
 
 /**
+ * Returns the own display name from the active or any connected server.
+ * @returns {string}
+ */
+function getOwnNickname() {
+  const active = connectionManager.getActive();
+  if (active?.nickname) return active.nickname;
+  for (const [key] of connectionManager._connections) {
+    const creds = connectionManager.getCredentials(key);
+    if (creds?.nickname) return creds.nickname;
+  }
+  return 'You';
+}
+
+/**
+ * Renders or updates the self-user card at the bottom of the DM sidebar.
+ */
+export function renderDmSelfUser() {
+  const container = document.getElementById('dm-self-user');
+  if (!container) return;
+
+  const presence = getEffectivePresence();
+  const entry = PRESENCE_STATUSES.find((s) => s.key === presence);
+  const nickname = getOwnNickname();
+
+  container.innerHTML = '';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'dm-conv-avatar dm-self-avatar ' + presence;
+  const initials = nickname
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase();
+  avatar.textContent = initials;
+
+  const info = document.createElement('div');
+  info.className = 'dm-self-info';
+
+  const nameEl = document.createElement('div');
+  nameEl.className = 'dm-self-name';
+  nameEl.textContent = nickname;
+  info.appendChild(nameEl);
+
+  const statusEl = document.createElement('div');
+  statusEl.className = 'dm-self-status';
+  statusEl.textContent = entry?.label || presence;
+  info.appendChild(statusEl);
+
+  container.appendChild(avatar);
+  container.appendChild(info);
+}
+
+/**
  * Initializes the DM view.
  */
 export function initDmView() {
   loadFriends();
+  renderDmSelfUser();
 
   dmService.addEventListener('dm-message', onDmMessage);
   dmService.addEventListener('dm-deleted', onDmDeleted);
   dmService.addEventListener('dm-link-preview', onDmLinkPreview);
   dmService.addEventListener('presence-update', onPresenceUpdate);
+
+  window.addEventListener('gimodi:presence-changed', renderDmSelfUser);
+  connectionManager.addEventListener('connection-status-changed', renderDmSelfUser);
 
   const sendBtn = document.getElementById('dm-btn-send');
   const input = document.getElementById('dm-chat-input');
