@@ -454,6 +454,7 @@ class VoiceService extends EventTarget {
 
     this._pttActive = true;
     this.micProducer.resume();
+    this._broadcastMuteState();
     log('PTT: key down, unmuted');
     this.dispatchEvent(new CustomEvent('ptt-changed', { detail: { active: true } }));
 
@@ -480,6 +481,7 @@ class VoiceService extends EventTarget {
     if (this.micProducer) {
       this.micProducer.pause();
     }
+    this._broadcastMuteState();
     log('PTT: key up, muted');
     this.dispatchEvent(new CustomEvent('ptt-changed', { detail: { active: false } }));
 
