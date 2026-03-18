@@ -304,6 +304,12 @@ async function startMicLevelMeter() {
       pct = Math.min(100, data.reduce((a, b) => a + b, 0) / data.length);
     }
     micLevelFill.style.width = pct + '%';
+    const threshold = voiceService.voiceActivationLevel;
+    if (threshold > 0) {
+      micLevelFill.classList.toggle('below-threshold', pct < threshold);
+    } else {
+      micLevelFill.classList.remove('below-threshold');
+    }
     micLevelRAF = requestAnimationFrame(update);
   }
   micLevelRAF = requestAnimationFrame(update);
@@ -324,6 +330,7 @@ function stopMicLevelMeter() {
     _micMeterAnalyser = null;
   }
   micLevelFill.style.width = '0%';
+  micLevelFill.classList.remove('below-threshold');
 }
 
 // --- Settings persistence ---
@@ -1639,6 +1646,7 @@ window.gimodi.onConnectServer(async (server) => {
 let _micLoopbackStream = null;
 let _micLoopbackCtx = null;
 let _micLoopbackAudio = null;
+let _micLoopbackGateRAF = null;
 
 btnTestMic.addEventListener('click', () => {
   if (_micLoopbackStream) {
@@ -1661,7 +1669,26 @@ async function startMicLoopback() {
     _micLoopbackCtx = new AudioContext(micTrackSettings?.sampleRate ? { sampleRate: micTrackSettings.sampleRate } : undefined);
     const source = _micLoopbackCtx.createMediaStreamSource(_micLoopbackStream);
     const dest = _micLoopbackCtx.createMediaStreamDestination();
-    source.connect(dest);
+    const gate = _micLoopbackCtx.createGain();
+    const analyser = _micLoopbackCtx.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    analyser.connect(gate);
+    gate.connect(dest);
+
+    const gateData = new Uint8Array(analyser.frequencyBinCount);
+    function updateGate() {
+      const threshold = voiceService.voiceActivationLevel;
+      if (threshold > 0) {
+        analyser.getByteFrequencyData(gateData);
+        const level = Math.min(100, gateData.reduce((a, b) => a + b, 0) / gateData.length);
+        gate.gain.value = level >= threshold ? 1 : 0;
+      } else {
+        gate.gain.value = 1;
+      }
+      _micLoopbackGateRAF = requestAnimationFrame(updateGate);
+    }
+    _micLoopbackGateRAF = requestAnimationFrame(updateGate);
 
     // Play through an audio element so we can use setSinkId
     _micLoopbackAudio = new Audio();
@@ -1684,6 +1711,10 @@ async function startMicLoopback() {
 }
 
 function stopMicLoopback() {
+  if (_micLoopbackGateRAF) {
+    cancelAnimationFrame(_micLoopbackGateRAF);
+    _micLoopbackGateRAF = null;
+  }
   if (_micLoopbackAudio) {
     _micLoopbackAudio.pause();
     _micLoopbackAudio.srcObject = null;
