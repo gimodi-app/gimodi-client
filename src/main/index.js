@@ -12,6 +12,7 @@ const iconCacheDir = path.join(app.getPath('userData'), 'icon-cache');
 
 const GRS_URL = 'https://releases.gimodi.com';
 let updateChannel = 'stable';
+let updateNotifications = true;
 
 if (require('electron-squirrel-startup')) {
   app.quit();
@@ -600,6 +601,9 @@ app.whenReady().then(async () => {
   if (savedSettings.notificationMode) {
     notificationMode = savedSettings.notificationMode;
   }
+  if (savedSettings.updateNotifications === false) {
+    updateNotifications = false;
+  }
 
   const trayExt = process.platform === 'win32' ? 'ico' : 'png';
   trayDefault = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', `tray-32x32.${trayExt}`));
@@ -619,7 +623,7 @@ app.whenReady().then(async () => {
   // Check for updates once the window is ready
   mainWindow.webContents.once('did-finish-load', () => {
     buildMenu(false, false);
-    checkForUpdates();
+    if (updateNotifications) checkForUpdates();
 
     // Flush any protocol URL received before the window was ready
     if (pendingProtocolUrl) {
@@ -730,6 +734,10 @@ ipcMain.handle('settings:set-update-channel', (_, channel) => {
   if (valid.includes(channel)) {
     updateChannel = channel;
   }
+});
+
+ipcMain.handle('settings:set-update-notifications', (_, enabled) => {
+  updateNotifications = !!enabled;
 });
 
 // --- Identity Manager Window ---

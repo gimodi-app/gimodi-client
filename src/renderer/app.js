@@ -232,6 +232,7 @@ const settingsPanels = document.querySelectorAll('.settings-panel');
 const themeGrid = document.getElementById('theme-grid');
 const checkboxDevMode = document.getElementById('checkbox-dev-mode');
 const selectNotificationMode = document.getElementById('select-notification-mode');
+const checkboxUpdateNotifications = document.getElementById('checkbox-update-notifications');
 const selectUpdateChannel = document.getElementById('select-update-channel');
 const btnCheckUpdates = document.getElementById('btn-check-updates');
 // Audio/Video tab
@@ -1079,6 +1080,7 @@ async function openSettings(tab = 'audio') {
   document.getElementById('select-time-format').value = appSettings.timeFormat || 'locale';
   document.getElementById('select-chat-display').value = appSettings.chatDisplay || 'default';
   checkboxDevMode.checked = !!appSettings.devMode;
+  checkboxUpdateNotifications.checked = appSettings.updateNotifications !== false;
   selectUpdateChannel.value = appSettings.updateChannel || 'stable';
   selectNotificationMode.value = appSettings.notificationMode || 'mentions';
   document.getElementById('checkbox-media-embed-privacy').checked = appSettings.mediaEmbedPrivacy !== false;
@@ -1144,6 +1146,12 @@ checkboxDevMode.addEventListener('change', () => {
   appSettings.devMode = checkboxDevMode.checked;
   saveSettings();
   window.gimodi.setDevMode(checkboxDevMode.checked);
+});
+
+checkboxUpdateNotifications.addEventListener('change', () => {
+  appSettings.updateNotifications = checkboxUpdateNotifications.checked;
+  saveSettings();
+  window.gimodi.setUpdateNotifications(checkboxUpdateNotifications.checked);
 });
 
 selectUpdateChannel.addEventListener('change', () => {

@@ -62,6 +62,7 @@ contextBridge.exposeInMainWorld('gimodi', {
   onOpenUnifiedSettings: (cb) => ipcRenderer.on('menu:open-unified-settings', () => cb()),
   setDevMode: (enabled) => ipcRenderer.invoke('settings:set-dev-mode', enabled),
   setUpdateChannel: (channel) => ipcRenderer.invoke('settings:set-update-channel', channel),
+  setUpdateNotifications: (enabled) => ipcRenderer.invoke('settings:set-update-notifications', enabled),
   removeMenuListeners: () => {
     ipcRenderer.removeAllListeners('server-admin:list-users');
     ipcRenderer.removeAllListeners('server-admin:manage-bans');
