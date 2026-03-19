@@ -188,25 +188,26 @@ The biggest file. It mixes channel tree rendering, event handlers, admin dialogs
 - [x] Verify build passes (`npm run build`)
 - Note: `views/server-channels.js` deferred — channel rendering is tightly coupled to server.js state
 
-### Phase 2: chat.js — modules prepared, integration pending
-- [x] Extract `views/chat-mentions.js` (410 lines) — factory module created
+### Phase 2: chat.js (3844 → 2263 lines + 5 factory modules)
+- [x] Extract `views/chat-mentions.js` (414 lines) — factory module created
 - [x] Extract `views/chat-tabs.js` (528 lines) — factory module created
 - [x] Extract `views/chat-input.js` (486 lines) — factory module created
 - [x] Extract `views/chat-messages.js` (733 lines) — factory module created
 - [x] Extract `views/chat-notifications.js` (167 lines) — factory module created
-- [ ] Integrate factory modules into chat.js (replace inline functions with imports)
-- [ ] Verify build passes
+- [x] Integrate factory modules into chat.js (replace inline functions with imports)
+- [x] Verify build passes
+- Integration approach: factories initialized at module level with getter deps and arrow wrappers for cross-factory circular dependencies. Tab state shared via proxy object with defineProperty getters/setters.
 
-### Phase 3: app.js — modules prepared, integration pending
+### Phase 3: app.js (2065 → 1304 lines + 1 extracted module)
 - [x] Extract `views/settings-modal.js` (830 lines) — factory module created
-- [ ] Integrate into app.js
-- [ ] Verify build passes
+- [x] Integrate into app.js (initSettingsModal pattern with { appSettings, saveSettings } deps)
+- [x] Verify build passes
 
-### Phase 4: voice.js — modules prepared, integration pending
+### Phase 4: voice.js (1792 → 1481 lines + 2 factory modules)
 - [x] Extract `views/voice-consumers.js` (272 lines) — factory module created
 - [x] Extract `views/voice-webcam.js` (238 lines) — factory module created
-- [ ] Integrate into voice.js
-- [ ] Verify build passes
+- [x] Integrate into voice.js (consumer factory with shared Maps by ref, webcam factory with defineProperty state proxy)
+- [x] Verify build passes
 
 ### Phase 5: Remaining
 - [x] Extract `views/emoji-data.js` (1249 lines) — integrated, build passes
@@ -216,11 +217,14 @@ The biggest file. It mixes channel tree rendering, event handlers, admin dialogs
 
 ### Completed integrations (build verified)
 - server.js: 6726 → 3020 lines (7 extracted modules)
+- chat.js: 3844 → 2263 lines (5 factory modules)
+- app.js: 2065 → 1304 lines (settings-modal.js)
+- voice.js: 1792 → 1481 lines (voice-consumers.js, voice-webcam.js)
 - emoji-picker.js: 1520 → 278 lines (emoji-data.js)
 - dm.js: 1158 → 1069 lines (dm-storage.js)
 
 ### Summary
-- **9 modules fully integrated** (5746 lines extracted, build passes)
-- **9 factory modules prepared** (3949 lines) for future integration into chat.js, voice.js, app.js, main/index.js
+- **18 modules fully integrated** (8778 lines extracted, build passes)
+- **1 factory module prepared** (309 lines) for future integration into main/index.js (updater.js — deferred due to interleaved references)
 - Total new files: 18
-- Largest remaining files: chat.js (3844), server.js (3020), app.js (2065), voice.js (1792)
+- Largest remaining files: server.js (3020), chat.js (2263), voice.js (1481), app.js (1304)

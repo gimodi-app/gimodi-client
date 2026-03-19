@@ -3,6 +3,8 @@ import voiceService from '../services/voice.js';
 import screenShareService from '../services/screen.js';
 import { customAlert, customConfirm } from '../services/dialogs.js';
 import { getFeedbackVolume } from './server.js';
+import { createConsumerHandlers } from './voice-consumers.js';
+import createWebcamHandlers from './voice-webcam.js';
 
 const log = (...args) => console.log('[voice-view]', ...args);
 
@@ -93,6 +95,51 @@ let screenAudioGain = parseInt(rangeScreenVolume.value, 10); // screen audio gai
 let isScreenMaximized = false;
 let isScreenResized = false;
 
+const consumerH = createConsumerHandlers({
+  audioElements,
+  webcamConsumers,
+  screenVideoConsumers,
+  clientUserMap,
+  getIsDeafened: () => isDeafened,
+  getScreenAudioGain: () => screenAudioGain,
+  getWatchingScreenClientId: () => watchingScreenClientId,
+  log,
+  voiceService,
+  screenVolumeControl,
+  createWebcamTile,
+  removeWebcamTile,
+  createScreenTile,
+  removeScreenTile,
+  unwatchScreen,
+  backToGrid,
+});
+
+const webcamState = {};
+Object.defineProperty(webcamState, 'isWebcamOn', {
+  get() { return isWebcamOn; },
+  set(v) { isWebcamOn = v; },
+});
+webcamState.webcamConsumers = webcamConsumers;
+Object.defineProperty(webcamState, 'focusMode', {
+  get() { return focusMode; },
+});
+Object.defineProperty(webcamState, 'wcPopoutClientId', {
+  get() { return wcPopoutClientId; },
+});
+
+const webcamH = createWebcamHandlers({
+  log,
+  updateMediaGridVisibility,
+  playScreenSound: (name) => {
+    const map = { webcamStart: sndWebcamStart, webcamStop: sndWebcamStop };
+    playScreenSound(map[name]);
+  },
+  createWebcamTile,
+  removeWebcamTile,
+  cleanupWcPopout,
+  getState: () => webcamState,
+});
+
 function updateMediaGridVisibility() {
   mediaGrid.classList.toggle('hidden', mediaGrid.children.length === 0);
 }
@@ -141,7 +188,7 @@ export function initVoiceView(initialClients = [], serverName = '') {
 
   window.gimodi.onTrayToggleMute(toggleMute);
   window.gimodi.onTrayToggleDeafen(toggleDeafen);
-  btnWebcam.addEventListener('click', handleWebcamClick);
+  btnWebcam.addEventListener('click', webcamH.handleWebcamClick);
   btnScreenShare.addEventListener('click', handleScreenShareClick);
 
   // Enable voice controls when user joins a channel
@@ -170,25 +217,25 @@ export function initVoiceView(initialClients = [], serverName = '') {
   document.addEventListener('fullscreenchange', () => {
     updateScreenButtons();
     updateWebcamButtons();
-    repositionSelfPreviewForFullscreen();
+    webcamH.repositionSelfPreviewForFullscreen();
   });
 
   // Watch stream from channel tree
   window.addEventListener('gimodi:watch-stream', onWatchStreamEvent);
 
-  voiceService.addEventListener('new-consumer', onNewConsumer);
-  voiceService.addEventListener('consumer-removed', onConsumerRemoved);
-  voiceService.addEventListener('consumer-closed', onConsumerClosed);
-  voiceService.addEventListener('speaker-changed', onSpeakerChanged);
-  voiceService.addEventListener('webcam-started', onLocalWebcamStarted);
-  voiceService.addEventListener('webcam-stopped', onLocalWebcamStopped);
+  voiceService.addEventListener('new-consumer', consumerH.onNewConsumer);
+  voiceService.addEventListener('consumer-removed', consumerH.onConsumerRemoved);
+  voiceService.addEventListener('consumer-closed', consumerH.onConsumerClosed);
+  voiceService.addEventListener('speaker-changed', consumerH.onSpeakerChanged);
+  voiceService.addEventListener('webcam-started', webcamH.onLocalWebcamStarted);
+  voiceService.addEventListener('webcam-stopped', webcamH.onLocalWebcamStopped);
   voiceService.addEventListener('ptt-changed', onPTTChanged);
-  voiceService.addEventListener('user-volume-changed', onUserVolumeChanged);
+  voiceService.addEventListener('user-volume-changed', consumerH.onUserVolumeChanged);
   screenShareService.addEventListener('started', onLocalScreenStarted);
   screenShareService.addEventListener('stopped', onLocalScreenStopped);
   serverService.addEventListener('server:client-joined', onClientJoined);
   serverService.addEventListener('server:client-left', onClientLeft);
-  serverService.addEventListener('webcam:stopped', onPeerWebcamStopped);
+  serverService.addEventListener('webcam:stopped', webcamH.onPeerWebcamStopped);
   serverService.addEventListener('screen:stopped', onPeerScreenStopped);
 
   // Set up screen picker IPC listener
@@ -228,7 +275,7 @@ export function cleanup() {
   // Remove DOM listeners
   btnMute.removeEventListener('click', toggleMute);
   btnDeafen.removeEventListener('click', toggleDeafen);
-  btnWebcam.removeEventListener('click', handleWebcamClick);
+  btnWebcam.removeEventListener('click', webcamH.handleWebcamClick);
   btnScreenShare.removeEventListener('click', handleScreenShareClick);
   webcamViewerVideo.removeEventListener('click', onWebcamViewerVideoClick);
   btnBackToWebcamGrid.removeEventListener('click', onWebcamBackClick);
@@ -252,19 +299,19 @@ export function cleanup() {
   btnCancelScreen.removeEventListener('click', cancelScreenPicker);
 
   // Remove service listeners
-  voiceService.removeEventListener('new-consumer', onNewConsumer);
-  voiceService.removeEventListener('consumer-removed', onConsumerRemoved);
-  voiceService.removeEventListener('consumer-closed', onConsumerClosed);
-  voiceService.removeEventListener('speaker-changed', onSpeakerChanged);
-  voiceService.removeEventListener('webcam-started', onLocalWebcamStarted);
-  voiceService.removeEventListener('webcam-stopped', onLocalWebcamStopped);
+  voiceService.removeEventListener('new-consumer', consumerH.onNewConsumer);
+  voiceService.removeEventListener('consumer-removed', consumerH.onConsumerRemoved);
+  voiceService.removeEventListener('consumer-closed', consumerH.onConsumerClosed);
+  voiceService.removeEventListener('speaker-changed', consumerH.onSpeakerChanged);
+  voiceService.removeEventListener('webcam-started', webcamH.onLocalWebcamStarted);
+  voiceService.removeEventListener('webcam-stopped', webcamH.onLocalWebcamStopped);
   voiceService.removeEventListener('ptt-changed', onPTTChanged);
-  voiceService.removeEventListener('user-volume-changed', onUserVolumeChanged);
+  voiceService.removeEventListener('user-volume-changed', consumerH.onUserVolumeChanged);
   screenShareService.removeEventListener('started', onLocalScreenStarted);
   screenShareService.removeEventListener('stopped', onLocalScreenStopped);
   serverService.removeEventListener('server:client-joined', onClientJoined);
   serverService.removeEventListener('server:client-left', onClientLeft);
-  serverService.removeEventListener('webcam:stopped', onPeerWebcamStopped);
+  serverService.removeEventListener('webcam:stopped', webcamH.onPeerWebcamStopped);
   serverService.removeEventListener('screen:stopped', onPeerScreenStopped);
   window.gimodi.screen.removePickerListener();
   window.gimodi.removeTrayVoiceListeners();
@@ -346,19 +393,6 @@ function onClientJoined(e) {
 
 function onClientLeft(e) {
   clientUserMap.delete(e.detail.clientId);
-}
-
-function onUserVolumeChanged(e) {
-  const { userId, volume } = e.detail;
-  for (const entry of audioElements.values()) {
-    if (!entry.screenAudio && clientUserMap.get(entry.clientId) === userId) {
-      if (entry.gainNode) {
-        entry.gainNode.gain.value = volume / 100;
-      } else {
-        entry.audio.volume = Math.min(volume / 100, 1.0);
-      }
-    }
-  }
 }
 
 function toggleMute() {
@@ -447,351 +481,6 @@ function onPTTChanged(e) {
     btnMute.classList.add('ptt-active');
   } else {
     btnMute.classList.remove('ptt-active');
-  }
-}
-
-async function onNewConsumer(e) {
-  const { consumer, clientId, nickname, kind, screen, screenAudio, webcam } = e.detail;
-  log(`New consumer: kind=${kind} screen=${!!screen} webcam=${!!webcam} screenAudio=${!!screenAudio} from=${nickname} (${clientId})`);
-
-  // Webcam video consumer
-  if (kind === 'video' && webcam) {
-    webcamConsumers.set(clientId, { consumer, nickname });
-    createWebcamTile(clientId, nickname, consumer.track, false);
-    return;
-  }
-
-  // Screen video consumer
-  if (kind === 'video' && screen) {
-    const track = consumer.track;
-    screenVideoConsumers.set(clientId, { consumer, nickname, track });
-    log('Screen video consumer from', nickname);
-    createScreenTile(clientId, nickname, track, false);
-    return;
-  }
-
-  // Screen audio consumer - route through AudioContext + GainNode for volume control
-  if (kind === 'audio' && screenAudio) {
-    const track = consumer.track;
-    const stream = new MediaStream([track]);
-
-    const audioCtx = new AudioContext();
-    if (audioCtx.state === 'suspended') {
-      await audioCtx.resume();
-    }
-
-    // Use MediaStreamAudioSourceNode directly - no <audio> element needed
-    const source = audioCtx.createMediaStreamSource(stream);
-    const gainNode = audioCtx.createGain();
-    gainNode.gain.setValueAtTime(screenAudioGain / 100, audioCtx.currentTime);
-    source.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-
-    // Set output device on AudioContext if supported (Chromium 110+)
-    if (voiceService.selectedSpeakerId) {
-      try {
-        if (typeof audioCtx.setSinkId === 'function') {
-          await audioCtx.setSinkId(voiceService.selectedSpeakerId);
-        }
-      } catch (err) {
-        log(`Failed to set screen audio output device:`, err.message);
-      }
-    }
-
-    // For deafen: mute by setting gain to 0
-    if (isDeafened) {
-      gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-    }
-
-    audioElements.set(consumer.id, { clientId, track, screenAudio: true, audioCtx, gainNode, source });
-
-    // Show volume control if we're currently watching a remote screen
-    if (watchingScreenClientId && watchingScreenClientId !== '__local__') {
-      screenVolumeControl.classList.remove('hidden');
-    }
-    return;
-  }
-
-  // Voice audio consumer
-  if (kind === 'audio' && !screenAudio) {
-    const track = consumer.track;
-    const audio = new Audio();
-    audio.volume = 1.0;
-
-    // Apply stored per-user volume if available
-    const userId = clientUserMap.get(clientId);
-    if (userId) {
-      const vol = voiceService.getUserVolume(userId);
-      if (vol !== 100) {
-        audio.volume = Math.min(vol / 100, 1.0);
-      }
-    }
-
-    // Set audio output device if specified
-    if (voiceService.selectedSpeakerId && typeof audio.setSinkId === 'function') {
-      try {
-        await audio.setSinkId(voiceService.selectedSpeakerId);
-      } catch (err) {
-        log(`Failed to set audio output device:`, err.message);
-      }
-    }
-
-    // Respect current deafen state
-    if (isDeafened) {
-      audio.muted = true;
-    }
-
-    // Start muted, assign the stream, then fade in after a short delay
-    // to avoid the initial crackle from empty WebRTC buffers
-    const origVolume = audio.volume;
-    audio.volume = 0;
-    audio.srcObject = new MediaStream([track]);
-    audio.autoplay = true;
-    document.body.appendChild(audio);
-    audioElements.set(consumer.id, { audio, clientId, track });
-    setTimeout(() => {
-      audio.volume = origVolume;
-    }, 150);
-  }
-}
-
-function cleanupAudioEntry(consumerId, entry) {
-  if (entry.audioCtx) {
-    entry.audioCtx.close().catch(() => {});
-  }
-  if (entry.audio) {
-    entry.audio.srcObject = null;
-    entry.audio.remove();
-  }
-  audioElements.delete(consumerId);
-}
-
-function onConsumerRemoved(e) {
-  const { clientId } = e.detail;
-  for (const [consumerId, entry] of audioElements) {
-    if (entry.clientId === clientId) {
-      cleanupAudioEntry(consumerId, entry);
-    }
-  }
-  // Clean up webcam consumer for this client
-  if (webcamConsumers.has(clientId)) {
-    webcamConsumers.delete(clientId);
-    removeWebcamTile(clientId);
-  }
-  // Clean up screen consumer for this client
-  if (screenVideoConsumers.has(clientId)) {
-    screenVideoConsumers.delete(clientId);
-    removeScreenTile(clientId);
-    if (watchingScreenClientId === clientId) {
-      unwatchScreen();
-      backToGrid();
-    }
-  }
-}
-
-function onConsumerClosed(e) {
-  const { consumerId, clientId, kind, screen, webcam } = e.detail;
-  const entry = audioElements.get(consumerId);
-  if (entry) {
-    cleanupAudioEntry(consumerId, entry);
-  }
-  // Clean up webcam consumer
-  if (kind === 'video' && webcam && webcamConsumers.has(clientId)) {
-    webcamConsumers.delete(clientId);
-    removeWebcamTile(clientId);
-  }
-  // Clean up screen video consumer
-  if (kind === 'video' && screen && screenVideoConsumers.has(clientId)) {
-    screenVideoConsumers.delete(clientId);
-    removeScreenTile(clientId);
-    if (watchingScreenClientId === clientId) {
-      unwatchScreen();
-      backToGrid();
-    }
-  }
-}
-
-async function onSpeakerChanged(e) {
-  const { deviceId } = e.detail;
-  log(`Speaker changed to: ${deviceId || 'default'}`);
-
-  // Update all existing audio elements
-  for (const [consumerId, entry] of audioElements) {
-    try {
-      if (entry.audioCtx && typeof entry.audioCtx.setSinkId === 'function') {
-        // Screen audio routed through AudioContext - set sink on the context
-        await entry.audioCtx.setSinkId(deviceId || '');
-        log(`Updated audio output (AudioContext) for consumer ${consumerId}`);
-      } else if (typeof entry.audio.setSinkId === 'function') {
-        await entry.audio.setSinkId(deviceId || '');
-        log(`Updated audio output for consumer ${consumerId}`);
-      }
-    } catch (err) {
-      log(`Failed to update audio output for consumer ${consumerId}:`, err.message);
-    }
-  }
-}
-
-// --- Webcam ---
-
-async function handleWebcamClick() {
-  if (isWebcamOn) {
-    voiceService.stopWebcam();
-    return;
-  }
-
-  if (!(await customConfirm('Do you want to share your webcam?'))) {
-    return;
-  }
-
-  try {
-    await voiceService.startWebcam();
-  } catch (err) {
-    console.error('Webcam start failed:', err);
-    if (err.name !== 'NotAllowedError') {
-      await customAlert('Failed to start webcam: ' + err.message);
-    }
-  }
-}
-
-function onLocalWebcamStarted(e) {
-  isWebcamOn = true;
-  btnWebcam.classList.add('active');
-  playScreenSound(sndWebcamStart);
-  const { track } = e.detail;
-  createWebcamTile(serverService.clientId, 'You', track, true);
-  selfPreviewVideo.srcObject = new MediaStream([track]);
-  updateSelfPreviewVisibility();
-}
-
-function onPeerWebcamStopped(e) {
-  const { clientId } = e.detail;
-  log('Peer webcam stopped (server event):', clientId);
-  if (webcamConsumers.has(clientId)) {
-    webcamConsumers.delete(clientId);
-    removeWebcamTile(clientId);
-  }
-}
-
-function onLocalWebcamStopped() {
-  isWebcamOn = false;
-  btnWebcam.classList.remove('active');
-  playScreenSound(sndWebcamStop);
-  if (wcPopoutClientId === serverService.clientId) {
-    cleanupWcPopout();
-  }
-  removeWebcamTile(serverService.clientId);
-  selfPreviewVideo.srcObject = null;
-  updateSelfPreviewVisibility();
-}
-
-// --- Self Preview Drag & Resize ---
-
-const selfPreviewResizeHandle = document.getElementById('self-webcam-preview-resize');
-
-/**
- * Initializes drag-to-reposition and resize behavior on the self webcam preview element.
- */
-function initSelfPreviewDrag() {
-  let dragStartX = 0;
-  let dragStartY = 0;
-  let origRight = 0;
-  let origBottom = 0;
-
-  selfPreview.addEventListener('mousedown', (e) => {
-    if (e.target === selfPreviewResizeHandle) {
-      return;
-    }
-    e.preventDefault();
-    const rect = selfPreview.getBoundingClientRect();
-    origRight = window.innerWidth - rect.right;
-    origBottom = window.innerHeight - rect.bottom;
-    dragStartX = e.clientX;
-    dragStartY = e.clientY;
-    selfPreview.classList.add('dragging');
-
-    /**
-     * @param {MouseEvent} mv
-     */
-    function onMove(mv) {
-      const dx = mv.clientX - dragStartX;
-      const dy = mv.clientY - dragStartY;
-      const newRight = Math.max(0, origRight - dx);
-      const newBottom = Math.max(0, origBottom - dy);
-      selfPreview.style.right = `${newRight}px`;
-      selfPreview.style.bottom = `${newBottom}px`;
-    }
-
-    function onUp() {
-      selfPreview.classList.remove('dragging');
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    }
-
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  });
-
-  selfPreviewResizeHandle.addEventListener('mousedown', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const startWidth = selfPreview.offsetWidth;
-    const startHeight = selfPreview.offsetHeight;
-    const rect = selfPreview.getBoundingClientRect();
-    const startRight = window.innerWidth - rect.right;
-    const startBottom = window.innerHeight - rect.bottom;
-
-    /**
-     * @param {MouseEvent} mv
-     */
-    function onMove(mv) {
-      const dx = mv.clientX - startX;
-      const dy = mv.clientY - startY;
-      const newWidth = Math.max(100, startWidth - dx);
-      selfPreview.style.width = `${newWidth}px`;
-      selfPreview.style.height = `${newWidth * (9 / 16)}px`;
-      selfPreview.style.right = `${startRight}px`;
-      selfPreview.style.bottom = `${startBottom}px`;
-    }
-
-    function onUp() {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    }
-
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  });
-}
-
-initSelfPreviewDrag();
-
-/**
- * Shows or hides the self-preview based on webcam state and current focus mode.
- * Hidden when own webcam is focused, visible otherwise (when webcam is active).
- */
-function updateSelfPreviewVisibility() {
-  if (!isWebcamOn) {
-    selfPreview.classList.add('hidden');
-    return;
-  }
-  const ownFocused = focusMode && focusMode.type === 'webcam' && focusMode.clientId === serverService.clientId;
-  selfPreview.classList.toggle('hidden', ownFocused);
-}
-
-/**
- * Moves the self-preview element into the active fullscreen container so it
- * remains visible on top of the fullscreen video. When fullscreen exits, it is
- * moved back to document.body.
- */
-function repositionSelfPreviewForFullscreen() {
-  const fsElement = document.fullscreenElement;
-  if (fsElement) {
-    fsElement.appendChild(selfPreview);
-  } else {
-    document.body.appendChild(selfPreview);
   }
 }
 
@@ -1007,7 +696,7 @@ function focusStream(type, clientId) {
   isScreenResized = false;
 
   focusMode = { type, clientId };
-  updateSelfPreviewVisibility();
+  webcamH.updateSelfPreviewVisibility();
 
   if (type === 'webcam') {
     webcamViewMode = 'focused';
@@ -1119,7 +808,7 @@ function buildFocusStrip() {
 
 function unfocus() {
   focusMode = null;
-  updateSelfPreviewVisibility();
+  webcamH.updateSelfPreviewVisibility();
 
   // Hide webcam viewer
   webcamViewMode = 'grid';

@@ -1,20 +1,21 @@
 /**
  * Factory that creates notification bell and dropdown handlers.
+ * DOM elements are accessed through getter functions to allow lazy resolution.
  *
  * @param {object} deps
  * @param {object} deps.notificationService - The notification service instance
- * @param {HTMLElement} deps.btnNotifications - The notification bell button element
- * @param {HTMLElement} deps.notificationBadge - The badge element showing unread count
- * @param {HTMLElement} deps.notificationDropdown - The dropdown container element
+ * @param {Function} deps.getBtnNotifications - Returns the notification bell button element
+ * @param {Function} deps.getNotificationBadge - Returns the badge element showing unread count
+ * @param {Function} deps.getNotificationDropdown - Returns the dropdown container element
  * @param {Function} deps.switchToTab - Function to switch the active chat tab
  * @returns {{ updateNotificationBell: Function, renderNotificationDropdown: Function, openNotificationDropdown: Function, closeNotificationDropdown: Function, toggleNotificationDropdown: Function }}
  */
 export default function createNotificationHandlers(deps) {
   const {
     notificationService,
-    btnNotifications,
-    notificationBadge,
-    notificationDropdown,
+    getBtnNotifications,
+    getNotificationBadge,
+    getNotificationDropdown,
     switchToTab,
   } = deps;
 
@@ -27,6 +28,12 @@ export default function createNotificationHandlers(deps) {
    * @returns {void}
    */
   function updateNotificationBell() {
+    const notificationBadge = getNotificationBadge();
+    const btnNotifications = getBtnNotifications();
+    const notificationDropdown = getNotificationDropdown();
+    if (!notificationBadge || !btnNotifications) {
+      return;
+    }
     const count = notificationService.count;
     if (count === 0) {
       notificationBadge.classList.add('hidden');
@@ -38,7 +45,7 @@ export default function createNotificationHandlers(deps) {
       void btnNotifications.offsetWidth;
       btnNotifications.classList.add('bell-shake');
     }
-    if (!notificationDropdown.classList.contains('hidden')) {
+    if (notificationDropdown && !notificationDropdown.classList.contains('hidden')) {
       renderNotificationDropdown();
     }
   }
@@ -50,6 +57,10 @@ export default function createNotificationHandlers(deps) {
    * @returns {void}
    */
   function renderNotificationDropdown() {
+    const notificationDropdown = getNotificationDropdown();
+    if (!notificationDropdown) {
+      return;
+    }
     notificationDropdown.innerHTML = '';
     const entries = notificationService.entries;
 
@@ -118,6 +129,11 @@ export default function createNotificationHandlers(deps) {
    * @returns {void}
    */
   function openNotificationDropdown() {
+    const notificationDropdown = getNotificationDropdown();
+    const btnNotifications = getBtnNotifications();
+    if (!notificationDropdown) {
+      return;
+    }
     renderNotificationDropdown();
     notificationDropdown.classList.remove('hidden');
     _onClickOutsideDropdown = (e) => {
@@ -134,6 +150,7 @@ export default function createNotificationHandlers(deps) {
    * @returns {void}
    */
   function closeNotificationDropdown() {
+    const notificationDropdown = getNotificationDropdown();
     if (!notificationDropdown) {
       return;
     }
@@ -150,6 +167,10 @@ export default function createNotificationHandlers(deps) {
    * @returns {void}
    */
   function toggleNotificationDropdown() {
+    const notificationDropdown = getNotificationDropdown();
+    if (!notificationDropdown) {
+      return;
+    }
     if (notificationDropdown.classList.contains('hidden')) {
       openNotificationDropdown();
     } else {

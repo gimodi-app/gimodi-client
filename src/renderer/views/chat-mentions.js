@@ -406,5 +406,9 @@ export function createMentionHandlers(deps) {
     showEmojiShortcodeAutocomplete,
     selectEmojiShortcode,
     resolveStructuredMentions,
+    getSelectedMentions: () => selectedMentions,
+    getSelectedChannelMentions: () => selectedChannelMentions,
+    isMentionAutocompleteVisible: () => !!(mentionAutocomplete && !mentionAutocomplete.classList.contains('hidden')),
+    getMentionTriggerChar: () => mentionTriggerChar,
   };
 }
