@@ -1,9 +1,5 @@
 import connectionManager from './connectionManager.js';
-
-const MSG_STORAGE_PREFIX = 'dm_messages_';
-const CONV_STORAGE_PREFIX = 'dm_conversations_';
-const PURGE_LOG_PREFIX = 'dm_purged_';
-const REACTIONS_STORAGE_PREFIX = 'dm_reactions_';
+import { loadMessages, saveMessages, loadConversations, saveConversations, loadPurgeLog, savePurgeLog, loadReactions, saveReactions } from './dm-storage.js';
 
 /**
  * @typedef {'pending'|'sent'|'delivered'} DmStatus
@@ -33,91 +29,6 @@ const REACTIONS_STORAGE_PREFIX = 'dm_reactions_';
  * @property {string|null} sessionKey - Decrypted AES key (in-memory only)
  * @property {number} createdAt
  */
-
-/**
- * @param {string} ownFingerprint
- * @returns {DmMessage[]}
- */
-function loadMessages(ownFingerprint) {
-  try {
-    const raw = localStorage.getItem(`${MSG_STORAGE_PREFIX}${ownFingerprint}`);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * @param {string} ownFingerprint
- * @param {DmMessage[]} messages
- */
-function saveMessages(ownFingerprint, messages) {
-  localStorage.setItem(`${MSG_STORAGE_PREFIX}${ownFingerprint}`, JSON.stringify(messages));
-}
-
-/**
- * @param {string} ownFingerprint
- * @returns {Conversation[]}
- */
-function loadConversations(ownFingerprint) {
-  try {
-    const raw = localStorage.getItem(`${CONV_STORAGE_PREFIX}${ownFingerprint}`);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * @param {string} ownFingerprint
- * @param {Conversation[]} conversations
- */
-function saveConversations(ownFingerprint, conversations) {
-  const toSave = conversations.map((c) => ({ ...c, sessionKey: undefined }));
-  localStorage.setItem(`${CONV_STORAGE_PREFIX}${ownFingerprint}`, JSON.stringify(toSave));
-}
-
-/**
- * @param {string} ownFingerprint
- * @returns {Record<string, number>}
- */
-function loadPurgeLog(ownFingerprint) {
-  try {
-    const raw = localStorage.getItem(`${PURGE_LOG_PREFIX}${ownFingerprint}`);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-/**
- * @param {string} ownFingerprint
- * @param {Record<string, number>} log
- */
-function savePurgeLog(ownFingerprint, log) {
-  localStorage.setItem(`${PURGE_LOG_PREFIX}${ownFingerprint}`, JSON.stringify(log));
-}
-
-/**
- * @param {string} ownFingerprint
- * @returns {Record<string, string[]>}
- */
-function loadReactions(ownFingerprint) {
-  try {
-    const raw = localStorage.getItem(`${REACTIONS_STORAGE_PREFIX}${ownFingerprint}`);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-/**
- * @param {string} ownFingerprint
- * @param {Record<string, string[]>} data
- */
-function saveReactions(ownFingerprint, data) {
-  localStorage.setItem(`${REACTIONS_STORAGE_PREFIX}${ownFingerprint}`, JSON.stringify(data));
-}
 
 /**
  * Manages direct messages and group conversations for a single identity.
