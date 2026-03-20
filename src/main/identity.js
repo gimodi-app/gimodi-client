@@ -4,6 +4,8 @@ const os = require('os');
 
 let openpgp;
 
+// --- Legacy paths (used only for migration) ---
+
 function getConfigDir() {
   const platform = process.platform;
   if (platform === 'win32') {
@@ -15,24 +17,30 @@ function getConfigDir() {
   }
 }
 
-function getIdentitiesPath() {
+function getLegacyIdentitiesPath() {
   return path.join(getConfigDir(), 'identities.json');
 }
 
-function loadIdentities() {
-  try {
-    const data = fs.readFileSync(getIdentitiesPath(), 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
+// --- Database access (lazy, set after db module initializes) ---
+
+let _appSettingsRepo = null;
+
+/**
+ * @param {object} repo
+ */
+function setAppSettingsRepo(repo) {
+  _appSettingsRepo = repo;
 }
 
-function saveIdentities(identities) {
-  const dir = getConfigDir();
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(getIdentitiesPath(), JSON.stringify(identities, null, 2));
+/**
+ * @returns {object}
+ */
+function repo() {
+  if (!_appSettingsRepo) throw new Error('Identity module not initialized. Call setAppSettingsRepo first.');
+  return _appSettingsRepo;
 }
+
+// --- OpenPGP lazy loading ---
 
 async function getOpenpgp() {
   if (!openpgp) {
@@ -73,6 +81,12 @@ function patchAesKw() {
   };
 }
 
+// --- Identity CRUD (uses database) ---
+
+/**
+ * @param {string} name
+ * @returns {Promise<{fingerprint: string, name: string, public_key: string, created_at: number}>}
+ */
 async function createIdentity(name) {
   const pgp = await getOpenpgp();
   const { privateKey, publicKey } = await pgp.generateKey({
@@ -86,171 +100,83 @@ async function createIdentity(name) {
   const fingerprint = parsed.getFingerprint();
 
   const identity = {
-    name,
-    publicKeyArmored: publicKey,
-    privateKeyArmored: privateKey,
     fingerprint,
-    isDefault: false,
-    createdAt: Date.now(),
+    name,
+    public_key: publicKey,
+    private_key: privateKey,
+    created_at: Date.now(),
   };
 
-  const identities = loadIdentities();
-  if (identities.length === 0) {
-    identity.isDefault = true;
-  }
-  identities.push(identity);
-  saveIdentities(identities);
+  repo().insertIdentity(identity);
 
-  return sanitizeIdentity(identity);
-}
-
-function deleteIdentity(fingerprint) {
-  const identities = loadIdentities();
-  if (identities.length <= 1) {
-    throw new Error('Cannot delete the last identity.');
-  }
-
-  const idx = identities.findIndex((i) => i.fingerprint === fingerprint);
-  if (idx === -1) {
-    throw new Error('Identity not found.');
-  }
-
-  const wasDefault = identities[idx].isDefault;
-  identities.splice(idx, 1);
-
-  // If we deleted the default, assign a new one
-  if (wasDefault && identities.length > 0) {
-    identities[0].isDefault = true;
-  }
-
-  saveIdentities(identities);
+  return {
+    fingerprint: identity.fingerprint,
+    name: identity.name,
+    public_key: identity.public_key,
+    created_at: identity.created_at,
+  };
 }
 
 /**
- * @param {string} fingerprint
- * @param {string} newName
+ * @param {object} data - Parsed identity export file
+ * @returns {Promise<{fingerprint: string, name: string, public_key: string, created_at: number}>}
  */
-function renameIdentity(fingerprint, newName) {
-  const identities = loadIdentities();
-  const identity = identities.find((i) => i.fingerprint === fingerprint);
-  if (!identity) {
-    throw new Error('Identity not found.');
+async function importIdentity(data) {
+  if (!data || typeof data !== 'object') {
+    throw new Error('Invalid identity file.');
   }
-  identity.name = newName;
-  saveIdentities(identities);
-  return sanitizeIdentity(identity);
-}
-
-function setDefaultIdentity(fingerprint) {
-  const identities = loadIdentities();
-  let found = false;
-  for (const id of identities) {
-    if (id.fingerprint === fingerprint) {
-      id.isDefault = true;
-      found = true;
-    } else {
-      id.isDefault = false;
-    }
-  }
-  if (!found) {
-    throw new Error('Identity not found.');
-  }
-  saveIdentities(identities);
-}
-
-function getDefaultIdentity() {
-  const identities = loadIdentities();
-  const def = identities.find((i) => i.isDefault);
-  return def ? sanitizeIdentity(def) : identities[0] ? sanitizeIdentity(identities[0]) : null;
-}
-
-async function ensureDefaultIdentity() {
-  await migrateIdentities();
-  const identities = loadIdentities();
-  if (identities.length === 0) {
-    return await createIdentity('Default');
-  }
-  return sanitizeIdentity(identities.find((i) => i.isDefault) || identities[0]);
-}
-
-/**
- * Migrate identities generated with curve25519 (IETF/v6) to curve25519Legacy.
- * Detects by checking if the public key packet uses the new format.
- */
-async function migrateIdentities() {
-  let raw;
-  try {
-    raw = JSON.parse(fs.readFileSync(getIdentitiesPath(), 'utf-8'));
-  } catch {
-    return;
+  const { name, fingerprint, publicKeyArmored, privateKeyArmored } = data;
+  if (!name || !fingerprint || !publicKeyArmored || !privateKeyArmored) {
+    throw new Error('Identity file is missing required fields.');
   }
 
   const pgp = await getOpenpgp();
-  let changed = false;
-
-  for (let i = 0; i < raw.length; i++) {
-    const id = raw[i];
-    try {
-      const key = await pgp.readKey({ armoredKey: id.publicKeyArmored });
-      await pgp.encrypt({
-        message: await pgp.createMessage({ text: 'test' }),
-        encryptionKeys: key,
-        format: 'armored',
-      });
-    } catch {
-      // This key is broken - regenerate with the same name
-      console.log(`[identity] Migrating identity "${id.name}" to curve25519Legacy...`);
-      const { privateKey, publicKey } = await pgp.generateKey({
-        type: 'ecc',
-        curve: 'curve25519Legacy',
-        userIDs: [{ name: id.name }],
-        format: 'armored',
-      });
-      const parsed = await pgp.readKey({ armoredKey: publicKey });
-      raw[i] = {
-        ...id,
-        publicKeyArmored: publicKey,
-        privateKeyArmored: privateKey,
-        fingerprint: parsed.getFingerprint(),
-      };
-      changed = true;
-    }
+  let parsedKey;
+  try {
+    parsedKey = await pgp.readKey({ armoredKey: publicKeyArmored });
+  } catch {
+    throw new Error('Invalid public key in identity file.');
+  }
+  try {
+    await pgp.readPrivateKey({ armoredKey: privateKeyArmored });
+  } catch {
+    throw new Error('Invalid private key in identity file.');
   }
 
-  if (changed) {
-    saveIdentities(raw);
-    console.log('[identity] Migration complete.');
+  const actualFingerprint = parsedKey.getFingerprint();
+  if (actualFingerprint !== fingerprint) {
+    throw new Error('Fingerprint mismatch - identity file may be corrupt.');
   }
-}
 
-/**
- * Returns identity data safe to send to renderer (includes public key but not private key).
- */
-function sanitizeIdentity(identity) {
+  const existing = repo().getIdentity(fingerprint);
+  if (existing) {
+    throw new Error('This identity is already imported.');
+  }
+
+  const identity = {
+    fingerprint,
+    name,
+    public_key: publicKeyArmored,
+    private_key: privateKeyArmored,
+    created_at: data.createdAt || Date.now(),
+  };
+
+  repo().insertIdentity(identity);
+
   return {
-    name: identity.name,
     fingerprint: identity.fingerprint,
-    publicKeyArmored: identity.publicKeyArmored,
-    isDefault: identity.isDefault,
-    createdAt: identity.createdAt,
+    name: identity.name,
+    public_key: identity.public_key,
+    created_at: identity.created_at,
   };
 }
 
-function loadAllSanitized() {
-  return loadIdentities().map(sanitizeIdentity);
-}
+// --- Encryption / Decryption ---
 
 /**
- * Get the full identity (including private key) - only used internally in main process.
- */
-function getFullIdentity(fingerprint) {
-  const identities = loadIdentities();
-  return identities.find((i) => i.fingerprint === fingerprint) || null;
-}
-
-/**
- * Encrypt plaintext for a recipient (and optionally the sender) using openpgp.
- * recipientPublicKeys: array of armored public key strings.
+ * @param {string[]} recipientPublicKeys - Array of armored public key strings
+ * @param {string} plaintext
+ * @returns {Promise<string>}
  */
 async function encryptMessage(recipientPublicKeys, plaintext) {
   const pgp = await getOpenpgp();
@@ -270,20 +196,20 @@ async function encryptMessage(recipientPublicKeys, plaintext) {
 }
 
 /**
- * Decrypt an armored PGP message using all available identities' private keys.
  * @param {string} armoredMessage
  * @returns {Promise<string>}
  */
 async function decryptMessage(armoredMessage) {
   const pgp = await getOpenpgp();
 
-  const rawIdentities = JSON.parse(require('fs').readFileSync(getIdentitiesPath(), 'utf-8'));
-  const keyed = rawIdentities.filter((i) => i.privateKeyArmored);
-  if (keyed.length === 0) {
+  const identities = repo().listIdentitiesWithPrivateKeys();
+  if (identities.length === 0) {
     throw new Error('No identity available for decryption.');
   }
 
-  const decryptionKeys = await Promise.all(keyed.map((i) => pgp.readPrivateKey({ armoredKey: i.privateKeyArmored })));
+  const decryptionKeys = await Promise.all(
+    identities.map((i) => pgp.readPrivateKey({ armoredKey: i.private_key }))
+  );
 
   const message = await pgp.readMessage({ armoredMessage });
 
@@ -296,94 +222,7 @@ async function decryptMessage(armoredMessage) {
 }
 
 /**
- * Export a single identity (including private key) as a JSON object.
- * Returns null if not found.
- */
-function exportIdentity(fingerprint) {
-  // Load full (private key) from raw file
-  let raw;
-  try {
-    raw = JSON.parse(fs.readFileSync(getIdentitiesPath(), 'utf-8'));
-  } catch {
-    raw = [];
-  }
-  const full = raw.find((i) => i.fingerprint === fingerprint);
-  if (!full) {
-    throw new Error('Identity not found.');
-  }
-  return {
-    version: 1,
-    name: full.name,
-    fingerprint: full.fingerprint,
-    publicKeyArmored: full.publicKeyArmored,
-    privateKeyArmored: full.privateKeyArmored,
-    createdAt: full.createdAt,
-  };
-}
-
-/**
- * Import an identity from a parsed JSON object.
- * Returns sanitized identity. Throws if invalid or duplicate.
- */
-async function importIdentity(data) {
-  if (!data || typeof data !== 'object') {
-    throw new Error('Invalid identity file.');
-  }
-  const { name, fingerprint, publicKeyArmored, privateKeyArmored } = data;
-  if (!name || !fingerprint || !publicKeyArmored || !privateKeyArmored) {
-    throw new Error('Identity file is missing required fields.');
-  }
-
-  // Validate key pair
-  const pgp = await getOpenpgp();
-  let parsedKey;
-  try {
-    parsedKey = await pgp.readKey({ armoredKey: publicKeyArmored });
-  } catch {
-    throw new Error('Invalid public key in identity file.');
-  }
-  try {
-    await pgp.readPrivateKey({ armoredKey: privateKeyArmored });
-  } catch {
-    throw new Error('Invalid private key in identity file.');
-  }
-
-  const actualFingerprint = parsedKey.getFingerprint();
-  if (actualFingerprint !== fingerprint) {
-    throw new Error('Fingerprint mismatch - identity file may be corrupt.');
-  }
-
-  // Check for duplicate
-  const existing = loadIdentities(); // sanitized
-  if (existing.some((i) => i.fingerprint === fingerprint)) {
-    throw new Error('This identity is already imported.');
-  }
-
-  // Load raw and append
-  let raw;
-  try {
-    raw = JSON.parse(fs.readFileSync(getIdentitiesPath(), 'utf-8'));
-  } catch {
-    raw = [];
-  }
-
-  const identity = {
-    name,
-    fingerprint,
-    publicKeyArmored,
-    privateKeyArmored,
-    isDefault: raw.length === 0,
-    createdAt: data.createdAt || Date.now(),
-  };
-  raw.push(identity);
-  saveIdentities(raw);
-
-  return sanitizeIdentity(identity);
-}
-
-/**
- * Generates a random 256-bit AES session key.
- * @returns {string} Base64-encoded 32-byte key
+ * @returns {string}
  */
 function generateSessionKey() {
   const crypto = require('crypto');
@@ -391,10 +230,9 @@ function generateSessionKey() {
 }
 
 /**
- * Encrypts plaintext with an AES-256-GCM session key.
- * @param {string} base64Key - Base64-encoded 32-byte AES key
+ * @param {string} base64Key
  * @param {string} plaintext
- * @returns {string} Base64-encoded iv + ciphertext + authTag
+ * @returns {string}
  */
 function encryptWithSessionKey(base64Key, plaintext) {
   const crypto = require('crypto');
@@ -407,10 +245,9 @@ function encryptWithSessionKey(base64Key, plaintext) {
 }
 
 /**
- * Decrypts AES-256-GCM ciphertext with a session key.
- * @param {string} base64Key - Base64-encoded 32-byte AES key
- * @param {string} ciphertext - Base64-encoded iv + ciphertext + authTag
- * @returns {string} Decrypted plaintext
+ * @param {string} base64Key
+ * @param {string} ciphertext
+ * @returns {string}
  */
 function decryptWithSessionKey(base64Key, ciphertext) {
   const crypto = require('crypto');
@@ -425,10 +262,9 @@ function decryptWithSessionKey(base64Key, ciphertext) {
 }
 
 /**
- * PGP-encrypts a session key individually for each participant's public key.
- * @param {string} base64Key - The session key to distribute
- * @param {Array<{ fingerprint: string, publicKeyArmored: string }>} participants
- * @returns {Promise<Record<string, string>>} fingerprint → armored PGP message
+ * @param {string} base64Key
+ * @param {Array<{fingerprint: string, publicKeyArmored: string}>} participants
+ * @returns {Promise<Record<string, string>>}
  */
 async function encryptSessionKeyForParticipants(base64Key, participants) {
   const pgp = await getOpenpgp();
@@ -446,23 +282,90 @@ async function encryptSessionKeyForParticipants(base64Key, participants) {
 }
 
 /**
- * PGP-decrypts a session key using the current default identity's private key.
- * @param {string} encryptedKey - Armored PGP message containing the session key
- * @returns {Promise<string>} Base64-encoded session key
+ * @param {string} encryptedKey
+ * @returns {Promise<string>}
  */
 async function decryptSessionKey(encryptedKey) {
   return decryptMessage(encryptedKey);
 }
 
+// --- Legacy Migration ---
+
+/**
+ * @returns {Array<object>|null}
+ */
+function loadLegacyIdentities() {
+  try {
+    const data = fs.readFileSync(getLegacyIdentitiesPath(), 'utf-8');
+    return JSON.parse(data);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {Array<object>} identities
+ */
+async function migrateLegacyIdentities(identities) {
+  const pgp = await getOpenpgp();
+
+  for (const id of identities) {
+    let publicKeyArmored = id.publicKeyArmored;
+    let privateKeyArmored = id.privateKeyArmored;
+    let fingerprint = id.fingerprint;
+
+    try {
+      const key = await pgp.readKey({ armoredKey: publicKeyArmored });
+      await pgp.encrypt({
+        message: await pgp.createMessage({ text: 'test' }),
+        encryptionKeys: key,
+        format: 'armored',
+      });
+    } catch {
+      console.log(`[identity] Migrating identity "${id.name}" to curve25519Legacy...`);
+      const regen = await pgp.generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: id.name }],
+        format: 'armored',
+      });
+      publicKeyArmored = regen.publicKey;
+      privateKeyArmored = regen.privateKey;
+      const parsed = await pgp.readKey({ armoredKey: regen.publicKey });
+      fingerprint = parsed.getFingerprint();
+    }
+
+    const existing = repo().getIdentity(fingerprint);
+    if (!existing) {
+      repo().insertIdentity({
+        fingerprint,
+        name: id.name,
+        public_key: publicKeyArmored,
+        private_key: privateKeyArmored,
+        created_at: id.createdAt || Date.now(),
+      });
+    }
+  }
+}
+
+/**
+ * @returns {string}
+ */
+function backupLegacyFile() {
+  const src = getLegacyIdentitiesPath();
+  const dest = src + '.bak';
+  try {
+    fs.renameSync(src, dest);
+    return dest;
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
-  loadIdentities: loadAllSanitized,
+  setAppSettingsRepo,
   createIdentity,
-  deleteIdentity,
-  renameIdentity,
-  setDefaultIdentity,
-  getDefaultIdentity,
-  ensureDefaultIdentity,
-  getFullIdentity,
+  importIdentity,
   encryptMessage,
   decryptMessage,
   generateSessionKey,
@@ -470,6 +373,7 @@ module.exports = {
   decryptWithSessionKey,
   encryptSessionKeyForParticipants,
   decryptSessionKey,
-  exportIdentity,
-  importIdentity,
+  loadLegacyIdentities,
+  migrateLegacyIdentities,
+  backupLegacyFile,
 };

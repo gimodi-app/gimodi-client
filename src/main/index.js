@@ -6,6 +6,12 @@ const crypto = require('crypto');
 const identity = require('./identity');
 const venmic = require('./venmic');
 
+// Database modules
+const database = require('./db/database');
+const appSettingsRepo = require('./db/app-settings-repo');
+const dbIpc = require('./db/ipc');
+const migrateJson = require('./db/migrate-json');
+
 const iconCacheDir = path.join(app.getPath('userData'), 'icon-cache');
 
 // --- Auto-Updater ---
@@ -582,7 +588,36 @@ function buildMenu(isAdmin, connected) {
 }
 
 app.whenReady().then(async () => {
-  await identity.ensureDefaultIdentity();
+  // Initialize database
+  try {
+    database.openAppDb();
+    identity.setAppSettingsRepo(appSettingsRepo);
+
+    // Migrate legacy JSON files to SQLite on first run
+    await migrateJson.migrateJsonFiles();
+
+    // Ensure at least one identity exists
+    const identities = appSettingsRepo.listIdentities();
+    if (identities.length === 0) {
+      await identity.createIdentity('Default');
+    }
+
+    // Auto-login to last active identity
+    const activeIdentityFp = appSettingsRepo.getAppSetting('activeIdentity');
+    if (activeIdentityFp && appSettingsRepo.getIdentity(activeIdentityFp)) {
+      database.switchIdentity(activeIdentityFp);
+    } else {
+      const defaultIdent = appSettingsRepo.listIdentities()[0];
+      if (defaultIdent) {
+        database.switchIdentity(defaultIdent.fingerprint);
+      }
+    }
+
+    // Register new db:* IPC handlers
+    dbIpc.registerIpcHandlers(sendToMain);
+  } catch (err) {
+    console.error('[db] Failed to initialize database:', err.stack || err);
+  }
 
   // Handle protocol URL from cold start (Windows/Linux pass it as argv)
   const launchUrl = process.argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
@@ -590,18 +625,31 @@ app.whenReady().then(async () => {
     pendingProtocolUrl = parseProtocolUrl(launchUrl);
   }
 
-  // Restore saved settings before building the first menu
+  // Restore saved settings from database
+  const devModeSetting = appSettingsRepo.getAppSetting('devMode');
+  if (devModeSetting === '1') {
+    lastDevMode = true;
+  }
+  const updateChannelSetting = appSettingsRepo.getAppSetting('updateChannel');
+  if (updateChannelSetting) {
+    updateChannel = updateChannelSetting;
+  }
+  const updateNotifSetting = appSettingsRepo.getAppSetting('updateNotifications');
+  if (updateNotifSetting === '0') {
+    updateNotifications = false;
+  }
+  // Also try loading from legacy settings.json as fallback
   const savedSettings = loadSettingsSync();
   if (savedSettings.devMode) {
     lastDevMode = true;
   }
-  if (savedSettings.updateChannel) {
+  if (savedSettings.updateChannel && !updateChannelSetting) {
     updateChannel = savedSettings.updateChannel;
   }
   if (savedSettings.notificationMode) {
     notificationMode = savedSettings.notificationMode;
   }
-  if (savedSettings.updateNotifications === false) {
+  if (savedSettings.updateNotifications === false && !updateNotifSetting) {
     updateNotifications = false;
   }
 
@@ -635,6 +683,10 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   // Don't quit - stay in tray
+});
+
+app.on('will-quit', () => {
+  database.closeAll();
 });
 
 function sendToMain(channel, data) {
@@ -726,6 +778,7 @@ ipcMain.on('menu:action', (_, action, data) => {
 // Dev mode toggle - rebuild menu to show/hide reload/devtools items
 ipcMain.handle('settings:set-dev-mode', (_, enabled) => {
   lastDevMode = !!enabled;
+  appSettingsRepo.setAppSetting('devMode', enabled ? '1' : '0');
   buildMenu(lastAdminStatus, lastConnected);
 });
 
@@ -733,11 +786,13 @@ ipcMain.handle('settings:set-update-channel', (_, channel) => {
   const valid = ['stable', 'beta', 'nightly'];
   if (valid.includes(channel)) {
     updateChannel = channel;
+    appSettingsRepo.setAppSetting('updateChannel', channel);
   }
 });
 
 ipcMain.handle('settings:set-update-notifications', (_, enabled) => {
   updateNotifications = !!enabled;
+  appSettingsRepo.setAppSetting('updateNotifications', enabled ? '1' : '0');
 });
 
 // --- Identity Manager Window ---
@@ -1030,13 +1085,46 @@ ipcMain.handle('settings:save', (event, settings) => {
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 });
 
-// Identities
-ipcMain.handle('identity:load-all', () => identity.loadIdentities());
-ipcMain.handle('identity:create', (event, name) => identity.createIdentity(name));
-ipcMain.handle('identity:delete', (event, fingerprint) => identity.deleteIdentity(fingerprint));
-ipcMain.handle('identity:rename', (event, fingerprint, newName) => identity.renameIdentity(fingerprint, newName));
-ipcMain.handle('identity:set-default', (event, fingerprint) => identity.setDefaultIdentity(fingerprint));
-ipcMain.handle('identity:get-default', () => identity.getDefaultIdentity());
+// Identities (legacy handlers, delegate to db)
+ipcMain.handle('identity:load-all', () => {
+  return appSettingsRepo.listIdentities().map((i) => ({
+    name: i.name,
+    fingerprint: i.fingerprint,
+    publicKeyArmored: i.public_key,
+    isDefault: database.getActiveFingerprint() === i.fingerprint,
+    createdAt: i.created_at,
+  }));
+});
+ipcMain.handle('identity:create', async (event, name) => {
+  const result = await identity.createIdentity(name);
+  database.createIdentityDb(result.fingerprint);
+  return { name: result.name, fingerprint: result.fingerprint, publicKeyArmored: result.public_key, isDefault: false, createdAt: result.created_at };
+});
+ipcMain.handle('identity:delete', (event, fingerprint) => {
+  const identities = appSettingsRepo.listIdentities();
+  if (identities.length <= 1) throw new Error('Cannot delete the last identity.');
+  database.deleteIdentityDb(fingerprint);
+  appSettingsRepo.deleteIdentity(fingerprint);
+});
+ipcMain.handle('identity:rename', (event, fingerprint, newName) => {
+  appSettingsRepo.renameIdentity(fingerprint, newName);
+  const i = appSettingsRepo.getIdentity(fingerprint);
+  return { name: i.name, fingerprint: i.fingerprint, publicKeyArmored: i.public_key, isDefault: database.getActiveFingerprint() === i.fingerprint, createdAt: i.created_at };
+});
+ipcMain.handle('identity:set-default', (event, fingerprint) => {
+  database.switchIdentity(fingerprint);
+});
+ipcMain.handle('identity:get-default', () => {
+  const fp = database.getActiveFingerprint();
+  if (!fp) {
+    const first = appSettingsRepo.listIdentities()[0];
+    if (!first) return null;
+    return { name: first.name, fingerprint: first.fingerprint, publicKeyArmored: first.public_key, isDefault: true, createdAt: first.created_at };
+  }
+  const i = appSettingsRepo.getIdentity(fp);
+  if (!i) return null;
+  return { name: i.name, fingerprint: i.fingerprint, publicKeyArmored: i.public_key, isDefault: true, createdAt: i.created_at };
+});
 ipcMain.handle('identity:encrypt', (event, recipientPublicKeys, plaintext) => identity.encryptMessage(recipientPublicKeys, plaintext));
 ipcMain.handle('identity:decrypt', (event, armoredMessage) => identity.decryptMessage(armoredMessage));
 ipcMain.handle('identity:generate-session-key', () => identity.generateSessionKey());
@@ -1047,7 +1135,16 @@ ipcMain.handle('identity:decrypt-symmetric', (event, base64Key, ciphertext) => i
 
 ipcMain.handle('identity:export', async (event, fingerprint) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  const data = identity.exportIdentity(fingerprint);
+  const ident = appSettingsRepo.getIdentity(fingerprint);
+  if (!ident) throw new Error('Identity not found.');
+  const data = {
+    version: 1,
+    name: ident.name,
+    fingerprint: ident.fingerprint,
+    publicKeyArmored: ident.public_key,
+    privateKeyArmored: ident.private_key,
+    createdAt: ident.created_at,
+  };
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
     title: 'Export Identity',
     defaultPath: `${data.name.replace(/[^a-z0-9_-]/gi, '_')}.gimodi-identity`,
@@ -1072,7 +1169,8 @@ ipcMain.handle('identity:import', async (event) => {
   }
   const raw = JSON.parse(fs.readFileSync(filePaths[0], 'utf-8'));
   const imported = await identity.importIdentity(raw);
-  return { canceled: false, identity: imported };
+  database.createIdentityDb(imported.fingerprint);
+  return { canceled: false, identity: { name: imported.name, fingerprint: imported.fingerprint, publicKeyArmored: imported.public_key, isDefault: false, createdAt: imported.created_at } };
 });
 
 // Open external URLs in system browser

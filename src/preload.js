@@ -2,6 +2,83 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('gimodi', {
   getVersion: () => ipcRenderer.invoke('get-version'),
+  db: {
+    // --- Global (app.db) ---
+    listIdentities: () => ipcRenderer.invoke('db:identities:list'),
+    createIdentity: (name) => ipcRenderer.invoke('db:identities:create', name),
+    deleteIdentity: (fp) => ipcRenderer.invoke('db:identities:delete', fp),
+    renameIdentity: (fp, name) => ipcRenderer.invoke('db:identities:rename', fp, name),
+    switchIdentity: (fp) => ipcRenderer.invoke('db:identities:switch', fp),
+    getActiveIdentity: () => ipcRenderer.invoke('db:identities:active'),
+    logout: () => ipcRenderer.invoke('db:identities:logout'),
+    exportIdentity: (fp) => ipcRenderer.invoke('db:identities:export', fp),
+    importIdentity: () => ipcRenderer.invoke('db:identities:import'),
+
+    // App-level settings
+    getAppSetting: (key) => ipcRenderer.invoke('db:app-setting:get', key),
+    setAppSetting: (key, value) => ipcRenderer.invoke('db:app-setting:set', key, value),
+
+    // --- Identity-scoped ---
+    getSetting: (key) => ipcRenderer.invoke('db:setting:get', key),
+    setSetting: (key, value) => ipcRenderer.invoke('db:setting:set', key, value),
+    getSettings: () => ipcRenderer.invoke('db:settings:all'),
+
+    // Servers
+    listServers: () => ipcRenderer.invoke('db:servers:list'),
+    addServer: (server) => ipcRenderer.invoke('db:servers:add', server),
+    removeServer: (id) => ipcRenderer.invoke('db:servers:remove', id),
+    reorderServer: (id, newPosition) => ipcRenderer.invoke('db:servers:reorder', id, newPosition),
+    updateServer: (id, updates) => ipcRenderer.invoke('db:servers:update', id, updates),
+
+    // Server groups
+    listGroups: () => ipcRenderer.invoke('db:groups:list'),
+    createGroup: (group) => ipcRenderer.invoke('db:groups:create', group),
+    deleteGroup: (id) => ipcRenderer.invoke('db:groups:delete', id),
+    updateGroup: (id, updates) => ipcRenderer.invoke('db:groups:update', id, updates),
+
+    // Friends
+    listFriends: () => ipcRenderer.invoke('db:friends:list'),
+    addFriend: (friend) => ipcRenderer.invoke('db:friends:add', friend),
+    removeFriend: (fp) => ipcRenderer.invoke('db:friends:remove', fp),
+    updateFriend: (fp, updates) => ipcRenderer.invoke('db:friends:update', fp, updates),
+
+    // Blocked/Ignored
+    listBlocked: (type) => ipcRenderer.invoke('db:blocked:list', type),
+    addBlocked: (fp, type) => ipcRenderer.invoke('db:blocked:add', fp, type),
+    removeBlocked: (fp, type) => ipcRenderer.invoke('db:blocked:remove', fp, type),
+
+    // DM Messages
+    getMessages: (peerFp, opts) => ipcRenderer.invoke('db:dm:messages', peerFp, opts),
+    saveMessage: (msg) => ipcRenderer.invoke('db:dm:save-message', msg),
+    purgeMessage: (id) => ipcRenderer.invoke('db:dm:purge', id),
+
+    // DM Conversations
+    listConversations: () => ipcRenderer.invoke('db:dm:conversations'),
+    upsertConversation: (conv) => ipcRenderer.invoke('db:dm:upsert-conversation', conv),
+
+    // DM Reactions
+    getReactions: (messageId) => ipcRenderer.invoke('db:dm:reactions', messageId),
+    addReaction: (messageId, emoji) => ipcRenderer.invoke('db:dm:add-reaction', messageId, emoji),
+    removeReaction: (messageId, emoji) => ipcRenderer.invoke('db:dm:remove-reaction', messageId, emoji),
+
+    // Last Read
+    getLastRead: (serverAddress) => ipcRenderer.invoke('db:last-read:get', serverAddress),
+    setLastRead: (serverAddress, channelId, ts) => ipcRenderer.invoke('db:last-read:set', serverAddress, channelId, ts),
+
+    // Crypto
+    encrypt: (recipientPublicKeys, plaintext) => ipcRenderer.invoke('db:identity:encrypt', recipientPublicKeys, plaintext),
+    decrypt: (armoredMessage) => ipcRenderer.invoke('db:identity:decrypt', armoredMessage),
+    generateSessionKey: () => ipcRenderer.invoke('db:identity:generate-session-key'),
+    encryptSessionKey: (base64Key, participants) => ipcRenderer.invoke('db:identity:encrypt-session-key', base64Key, participants),
+    decryptSessionKey: (encryptedKey) => ipcRenderer.invoke('db:identity:decrypt-session-key', encryptedKey),
+    encryptSymmetric: (base64Key, plaintext) => ipcRenderer.invoke('db:identity:encrypt-symmetric', base64Key, plaintext),
+    decryptSymmetric: (base64Key, ciphertext) => ipcRenderer.invoke('db:identity:decrypt-symmetric', base64Key, ciphertext),
+
+    // Events
+    onIdentitySwitched: (cb) => ipcRenderer.on('identity:switched', (_, data) => cb(data)),
+    onIdentityLoggedOut: (cb) => ipcRenderer.on('identity:logged-out', () => cb()),
+  },
+  // --- Legacy APIs (kept for backward compatibility during migration) ---
   history: {
     load: () => ipcRenderer.invoke('history:load'),
     save: (entries) => ipcRenderer.invoke('history:save', entries),
