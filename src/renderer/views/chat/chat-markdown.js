@@ -1,4 +1,4 @@
-import { replaceEmojiShortcodes } from '../services/emoji-shortcodes.js';
+import { replaceEmojiShortcodes } from '../../services/emoji-shortcodes.js';
 import { marked } from 'marked';
 import { markedHighlight } from 'marked-highlight';
 import hljs from 'highlight.js/lib/core';
@@ -18,7 +18,7 @@ import css from 'highlight.js/lib/languages/css';
 import json from 'highlight.js/lib/languages/json';
 import markdown from 'highlight.js/lib/languages/markdown';
 import typescript from 'highlight.js/lib/languages/typescript';
-import { getCachedNickname } from '../services/nicknameCache.js';
+import { getCachedNickname } from '../../services/nicknameCache.js';
 
 hljs.registerLanguage('javascript', javascript);
 hljs.registerLanguage('js', javascript);

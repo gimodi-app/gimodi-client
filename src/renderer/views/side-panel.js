@@ -1,8 +1,8 @@
 import serverService from '../services/server.js';
 import { resolveNicknames, getCachedNickname } from '../services/nicknameCache.js';
 import { formatDateTime } from '../services/timeFormat.js';
-import { escapeHtml, highlightMentions } from './chat-markdown.js';
-import { scrollToMessage } from './chat.js';
+import { escapeHtml, highlightMentions } from './chat/chat-markdown.js';
+import { scrollToMessage } from './chat/chat.js';
 
 const panel = document.getElementById('side-panel');
 const btnClose = document.getElementById('btn-close-side-panel');

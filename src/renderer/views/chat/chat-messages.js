@@ -1,6 +1,6 @@
 import { escapeHtml, renderMarkdown } from './chat-markdown.js';
-import { formatDateTime, formatRelativeTime } from '../services/timeFormat.js';
-import { getCachedNickname, resolveNicknames } from '../services/nicknameCache.js';
+import { formatDateTime, formatRelativeTime } from '../../services/timeFormat.js';
+import { getCachedNickname, resolveNicknames } from '../../services/nicknameCache.js';
 
 /**
  * @typedef {Object} MessageHandlerDeps

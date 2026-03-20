@@ -1,6 +1,6 @@
-import serverService from '../services/server.js';
-import { customAlert, customConfirm } from '../services/dialogs.js';
-import { escapeHtml } from './chat-markdown.js';
+import serverService from '../../services/server.js';
+import { customAlert, customConfirm } from '../../services/dialogs.js';
+import { escapeHtml } from '../chat/chat-markdown.js';
 
 /**
  * Formats a byte count into a human-readable file size string.

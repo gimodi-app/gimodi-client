@@ -1,7 +1,7 @@
-import { customAlert, customConfirm, customPrompt } from '../services/dialogs.js';
-import connectionManager from '../services/connectionManager.js';
-import DmChatProvider from '../services/chat-providers/dm.js';
-import { initChatView, cleanup as cleanupChat } from './chat.js';
+import { customAlert, customConfirm, customPrompt } from '../../services/dialogs.js';
+import connectionManager from '../../services/connectionManager.js';
+import DmChatProvider from '../../services/chat-providers/dm.js';
+import { initChatView, cleanup as cleanupChat } from '../chat/chat.js';
 
 /** @type {import('../services/dm.js').DmService|null} */
 let dmService = null;

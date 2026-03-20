@@ -1,6 +1,6 @@
-import { showEmojiPicker, closeEmojiPicker, isPickerOpen } from './emoji-picker.js';
-import { tryHandleCommand, isSlashCommand } from '../services/commands.js';
-import { customConfirm } from '../services/dialogs.js';
+import { showEmojiPicker, closeEmojiPicker, isPickerOpen } from '../emoji/emoji-picker.js';
+import { tryHandleCommand, isSlashCommand } from '../../services/commands.js';
+import { customConfirm } from '../../services/dialogs.js';
 
 const MAX_MESSAGE_LENGTH = 4000;
 const TYPING_SEND_INTERVAL = 2000;

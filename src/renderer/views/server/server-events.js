@@ -1,7 +1,7 @@
-import serverService from '../services/server.js';
-import voiceService from '../services/voice.js';
-import screenShareService from '../services/screen.js';
-import { openChannelViewTab, updateChatBadges, updateChatNickColors } from './chat.js';
+import serverService from '../../services/server.js';
+import voiceService from '../../services/voice.js';
+import screenShareService from '../../services/screen.js';
+import { openChannelViewTab, updateChatBadges, updateChatNickColors } from '../chat/chat.js';
 
 /**
  * Creates event handler functions bound to the shared server view state.

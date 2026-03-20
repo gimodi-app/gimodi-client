@@ -1,4 +1,4 @@
-import { searchEmoji, getEmoji } from '../services/emoji-shortcodes.js';
+import { searchEmoji, getEmoji } from '../../services/emoji-shortcodes.js';
 
 /**
  * Creates mention/autocomplete handler functions for the chat input.

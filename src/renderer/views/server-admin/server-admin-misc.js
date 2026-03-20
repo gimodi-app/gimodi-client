@@ -1,5 +1,5 @@
-import serverService from '../services/server.js';
-import { customAlert } from '../services/dialogs.js';
+import serverService from '../../services/server.js';
+import { customAlert } from '../../services/dialogs.js';
 
 /**
  * Formats a Unix timestamp into a human-readable relative time string.

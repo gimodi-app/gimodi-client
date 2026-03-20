@@ -1,17 +1,17 @@
-import serverService from '../services/server.js';
-import connectionManager from '../services/connectionManager.js';
-import voiceService from '../services/voice.js';
-import screenShareService from '../services/screen.js';
-import { getServerIcon } from '../services/iconCache.js';
-import { setChannelName, openChannelViewTab, setVoiceChannel, switchToChannelTab, updateChatBadges, updateChatNickColors, isChannelUnread } from './chat.js';
-import { setNickname } from '../services/nicknameCache.js';
-import { customAlert, customConfirm, customPrompt } from '../services/dialogs.js';
+import serverService from '../../services/server.js';
+import connectionManager from '../../services/connectionManager.js';
+import voiceService from '../../services/voice.js';
+import screenShareService from '../../services/screen.js';
+import { getServerIcon } from '../../services/iconCache.js';
+import { setChannelName, openChannelViewTab, setVoiceChannel, switchToChannelTab, updateChatBadges, updateChatNickColors, isChannelUnread } from '../chat/chat.js';
+import { setNickname } from '../../services/nicknameCache.js';
+import { customAlert, customConfirm, customPrompt } from '../../services/dialogs.js';
 import { renderAnalyticsPanel } from './server-analytics.js';
 import { showFileBrowserModal } from './server-file-browser.js';
-import { renderRolesPanel } from './server-admin-roles.js';
-import { renderUsersPanel } from './server-admin-users.js';
-import { renderTokensPanel, renderBansPanel, showRedeemTokenModal, renderAuditLogPanel } from './server-admin-misc.js';
-import { renderSettingsPanel } from './server-admin-settings.js';
+import { renderRolesPanel } from '../server-admin/server-admin-roles.js';
+import { renderUsersPanel } from '../server-admin/server-admin-users.js';
+import { renderTokensPanel, renderBansPanel, showRedeemTokenModal, renderAuditLogPanel } from '../server-admin/server-admin-misc.js';
+import { renderSettingsPanel } from '../server-admin/server-admin-settings.js';
 import { createEventHandlers } from './server-events.js';
 
 function formatTimeAgo(timestamp) {

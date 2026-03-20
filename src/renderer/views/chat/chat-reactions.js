@@ -1,7 +1,7 @@
-import chatService from '../services/chat.js';
-import serverService from '../services/server.js';
+import chatService from '../../services/chat.js';
+import serverService from '../../services/server.js';
 import { escapeHtml } from './chat-markdown.js';
-import { showEmojiPicker, closeEmojiPicker } from './emoji-picker.js';
+import { showEmojiPicker, closeEmojiPicker } from '../emoji/emoji-picker.js';
 
 /** @type {object|null} */
 let _activeProvider = null;

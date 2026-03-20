@@ -17,7 +17,7 @@ import {
   saveState as saveServerState,
   restoreState as restoreServerState,
   syncLocalVoiceIndicators,
-} from './views/server.js';
+} from './views/server/server.js';
 import {
   initChatView,
   cleanup as cleanupChat,
@@ -34,16 +34,16 @@ import {
   initUnreadState,
   getViewingChannelId,
   isServerChatActive,
-} from './views/chat.js';
-import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoiceServerName, syncVoiceControlsUI } from './views/voice.js';
+} from './views/chat/chat.js';
+import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoiceServerName, syncVoiceControlsUI } from './views/voice/voice.js';
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
 import { initSidePanel } from './views/side-panel.js';
-import { initDmView, updateDmServices, refreshDmView, openDmConversation } from './views/dm.js';
+import { initDmView, updateDmServices, refreshDmView, openDmConversation } from './views/direct-messages/dm.js';
 import { DmService } from './services/dm.js';
 import { FriendsService } from './services/friends.js';
 import ServerChatProvider from './services/chat-providers/server.js';
-import { initSettingsModal, openSettings, closeSettings, stopMicLevelMeter, loadSettingsIdentities } from './views/settings-modal.js';
+import { initSettingsModal, openSettings, closeSettings, stopMicLevelMeter, loadSettingsIdentities } from './views/settings/settings-modal.js';
 
 const log = (...args) => console.log('[app]', ...args);
 

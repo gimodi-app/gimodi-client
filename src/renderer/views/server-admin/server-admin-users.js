@@ -1,5 +1,5 @@
-import serverService from '../services/server.js';
-import { customAlert, customConfirm, customPrompt } from '../services/dialogs.js';
+import serverService from '../../services/server.js';
+import { customAlert, customConfirm, customPrompt } from '../../services/dialogs.js';
 
 /**
  * Escapes HTML special characters in a string to prevent XSS.

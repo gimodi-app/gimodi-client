@@ -1,8 +1,8 @@
-import dmService from '../services/dm.js';
-import { renderDmMessageEl, maybeInsertDaySeparator, createLinkPreviewEl } from './chat-renderer.js';
-import { formatRelativeTime } from '../services/timeFormat.js';
-import { customConfirm, customPrompt } from '../services/dialogs.js';
-import connectionManager from '../services/connectionManager.js';
+import dmService from '../../services/dm.js';
+import { renderDmMessageEl, maybeInsertDaySeparator, createLinkPreviewEl } from '../chat/chat-renderer.js';
+import { formatRelativeTime } from '../../services/timeFormat.js';
+import { customConfirm, customPrompt } from '../../services/dialogs.js';
+import connectionManager from '../../services/connectionManager.js';
 import { getEffectivePresence, PRESENCE_STATUSES } from './sidebar.js';
 
 let friendsList = [];

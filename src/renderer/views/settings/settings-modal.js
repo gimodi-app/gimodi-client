@@ -1,10 +1,10 @@
-import voiceService from '../services/voice.js';
-import { applyTheme, refreshIdentitySelects } from './connect.js';
-import { setFeedbackVolume } from './server.js';
-import { refreshTimestamps, setChatDisplayMode, setMediaEmbedPrivacy } from './chat.js';
-import { setTimeFormat } from '../services/timeFormat.js';
-import { customConfirm } from '../services/dialogs.js';
-import notificationService from '../services/notifications.js';
+import voiceService from '../../services/voice.js';
+import { applyTheme, refreshIdentitySelects } from '../connect.js';
+import { setFeedbackVolume } from '../server/server.js';
+import { refreshTimestamps, setChatDisplayMode, setMediaEmbedPrivacy } from '../chat/chat.js';
+import { setTimeFormat } from '../../services/timeFormat.js';
+import { customConfirm } from '../../services/dialogs.js';
+import notificationService from '../../services/notifications.js';
 
 const log = (...args) => console.log('[settings-modal]', ...args);
 

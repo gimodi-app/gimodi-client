@@ -1,6 +1,6 @@
-import serverService from '../services/server.js';
-import { getServerIcon } from '../services/iconCache.js';
-import { escapeHtml, getChannels } from './server.js';
+import serverService from '../../services/server.js';
+import { getServerIcon } from '../../services/iconCache.js';
+import { escapeHtml, getChannels } from '../server/server.js';
 
 /**
  * Flattens a nested configuration object into dot-separated key-value pairs.

@@ -1,6 +1,6 @@
-import serverService from '../services/server.js';
-import { customAlert, customConfirm, customPrompt } from '../services/dialogs.js';
-import { getClients } from './server.js';
+import serverService from '../../services/server.js';
+import { customAlert, customConfirm, customPrompt } from '../../services/dialogs.js';
+import { getClients } from '../server/server.js';
 
 /**
  * Renders the roles management panel inside the given container element.

@@ -1,8 +1,8 @@
-import serverService from '../services/server.js';
-import voiceService from '../services/voice.js';
-import screenShareService from '../services/screen.js';
-import { customAlert, customConfirm } from '../services/dialogs.js';
-import { getFeedbackVolume } from './server.js';
+import serverService from '../../services/server.js';
+import voiceService from '../../services/voice.js';
+import screenShareService from '../../services/screen.js';
+import { customAlert, customConfirm } from '../../services/dialogs.js';
+import { getFeedbackVolume } from '../server/server.js';
 import { createConsumerHandlers } from './voice-consumers.js';
 import createWebcamHandlers from './voice-webcam.js';
 

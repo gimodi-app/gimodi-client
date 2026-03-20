@@ -1,6 +1,6 @@
-import voiceService from '../services/voice.js';
-import serverService from '../services/server.js';
-import { customAlert, customConfirm } from '../services/dialogs.js';
+import voiceService from '../../services/voice.js';
+import serverService from '../../services/server.js';
+import { customAlert, customConfirm } from '../../services/dialogs.js';
 
 const selfPreview = document.getElementById('self-webcam-preview');
 const selfPreviewVideo = document.getElementById('self-webcam-preview-video');
