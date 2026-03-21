@@ -230,7 +230,9 @@ let appSettings = {};
 
 async function loadSettings() {
   const raw = await window.gimodi.db.getAppSetting('appSettings');
-  appSettings = raw ? JSON.parse(raw) : {};
+  const loaded = raw ? JSON.parse(raw) : {};
+  Object.keys(appSettings).forEach((k) => { if (!(k in loaded)) delete appSettings[k]; });
+  Object.assign(appSettings, loaded);
   notificationService.updateSettings(appSettings);
   if (appSettings.voiceActivationLevel !== null && appSettings.voiceActivationLevel !== undefined) {
     voiceService.setVoiceActivationLevel(appSettings.voiceActivationLevel);
@@ -299,8 +301,9 @@ voiceService.addEventListener('user-volume-changed', (e) => {
 // Init connect view and sidebar
 initConnectView();
 initSidebar();
-loadSettings();
-initSettingsModal({ appSettings, saveSettings });
+loadSettings().then(() => {
+  initSettingsModal({ appSettings, saveSettings });
+});
 
 /**
  * Starts the main app flow after an identity is active.
