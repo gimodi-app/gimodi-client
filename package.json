@@ -5,6 +5,7 @@
   "private": true,
   "main": "src/main/index.js",
   "scripts": {
+    "postinstall": "electron-rebuild",
     "build": "esbuild src/renderer/app.js --bundle --outfile=dist/bundle.js --platform=browser --format=iife --external:electron",
     "start": "npm run build && electron .",
     "package": "npm run build && electron-forge package",
