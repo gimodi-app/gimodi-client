@@ -1,22 +1,11 @@
 import connectionManager, { connKey } from '../services/connectionManager.js';
 import { initSidebar as _initSidebar, renderSidebar, setActiveServer, clearActiveServer, updateServerInList, addOrUpdateServer, replaceServerInPlace, removeServerByIdentity } from './sidebar.js';
 
-export { renderSidebar, setActiveServer, clearActiveServer, refreshIdentitySelects, removeServerByIdentity };
-
-/**
- * Reloads identities and repopulates both add/edit server identity dropdowns.
- */
-async function refreshIdentitySelects() {
-  await loadIdentities();
-  populateIdentitySelect(addServerIdentity, addServerIdentityGroup);
-  populateIdentitySelect(editServerIdentity, editServerIdentityGroup);
-}
+export { renderSidebar, setActiveServer, clearActiveServer, removeServerByIdentity };
 
 const addServerAddress = document.getElementById('add-server-address');
 const addServerNickname = document.getElementById('add-server-nickname');
 const addServerPassword = document.getElementById('add-server-password');
-const addServerIdentityGroup = document.getElementById('add-server-identity-group');
-const addServerIdentity = document.getElementById('add-server-identity');
 const addServerError = document.getElementById('add-server-error');
 const btnConfirmAddServer = document.getElementById('btn-confirm-add-server');
 const btnCancelAddServer = document.getElementById('btn-cancel-add-server');
@@ -26,8 +15,6 @@ const modalEditServer = document.getElementById('modal-edit-server');
 const editServerAddress = document.getElementById('edit-server-address');
 const editServerNickname = document.getElementById('edit-server-nickname');
 const editServerPassword = document.getElementById('edit-server-password');
-const editServerIdentityGroup = document.getElementById('edit-server-identity-group');
-const editServerIdentity = document.getElementById('edit-server-identity');
 const editServerError = document.getElementById('edit-server-error');
 const btnConfirmEditServer = document.getElementById('btn-confirm-edit-server');
 const btnCancelEditServer = document.getElementById('btn-cancel-edit-server');
@@ -43,8 +30,6 @@ btnConnectErrorOk.addEventListener('click', () => {
   modalConnectError.classList.add('hidden');
 });
 
-let identities = [];
-
 /**
  * @param {string} themeId
  */
@@ -58,8 +43,6 @@ export function applyTheme(themeId) {
 
 /** Initializes the connect view and auto-updater banner. */
 export async function initConnectView() {
-  await loadIdentities();
-
   const updateBanner = document.getElementById('update-banner');
   const updateBannerText = document.getElementById('update-banner-text');
   const btnUpdateDownload = document.getElementById('btn-update-download');
@@ -123,7 +106,6 @@ export async function initConnectView() {
 
 /** Initializes the server sidebar with connect callback and modal. */
 export async function initSidebar() {
-  await loadIdentities();
   await _initSidebar(connectToServer, openAddServerModal, openEditServerModal);
 
   btnConfirmAddServer.addEventListener('click', handleAddServer);
@@ -163,44 +145,12 @@ export async function initSidebar() {
   });
 }
 
-/** Loads all available identities from the main process. */
-async function loadIdentities() {
-  identities = (await window.gimodi.identity.loadAll()) || [];
-}
-
 /**
- * @param {HTMLSelectElement} selectEl
- * @param {HTMLElement} groupEl
- * @param {string} [selectedFingerprint]
+ * Returns the active identity from the DB.
+ * @returns {Promise<{ fingerprint: string, name: string, public_key: string } | null>}
  */
-function populateIdentitySelect(selectEl, groupEl, selectedFingerprint) {
-  selectEl.innerHTML = '';
-  for (const id of identities) {
-    const opt = document.createElement('option');
-    opt.value = id.fingerprint;
-    const fpShort = id.fingerprint.toUpperCase().slice(0, 8);
-    opt.textContent = `${id.name} (${fpShort})`;
-    if (selectedFingerprint ? id.fingerprint === selectedFingerprint : id.isDefault) {
-      opt.selected = true;
-    }
-    selectEl.appendChild(opt);
-  }
-  groupEl.style.display = identities.length > 1 ? '' : 'none';
-}
-
-/**
- * @param {HTMLSelectElement} selectEl
- * @returns {Object|null}
- */
-function getSelectedIdentityFrom(selectEl) {
-  if (identities.length === 0) {
-    return null;
-  }
-  if (identities.length === 1) {
-    return identities[0];
-  }
-  const fp = selectEl.value;
-  return identities.find((i) => i.fingerprint === fp) || identities[0];
+async function getActiveIdentity() {
+  return window.gimodi.db.getActiveIdentity();
 }
 
 /**
@@ -212,7 +162,6 @@ function openAddServerModal(prefill) {
   addServerNickname.value = prefill?.nickname || '';
   addServerPassword.value = prefill?.password || '';
   addServerError.textContent = '';
-  populateIdentitySelect(addServerIdentity, addServerIdentityGroup);
   modalAddServer.classList.remove('hidden');
   if (prefill?.address) {
     addServerNickname.focus();
@@ -251,20 +200,18 @@ async function handleAddServer() {
   btnConfirmAddServer.disabled = true;
   btnConfirmAddServer.textContent = 'Adding...';
 
-  const selectedIdentity = getSelectedIdentityFrom(addServerIdentity);
-  const identityFingerprint = selectedIdentity ? selectedIdentity.fingerprint : null;
+  const activeIdentity = await getActiveIdentity();
 
   const server = {
     name: address,
     address,
     nickname,
     password: password || null,
-    identityFingerprint,
   };
 
   try {
-    const publicKey = selectedIdentity ? selectedIdentity.publicKeyArmored : undefined;
-    const key = connKey(address, identityFingerprint);
+    const publicKey = activeIdentity?.public_key || undefined;
+    const key = connKey(address);
     const data = await connectionManager.connect(key, address, nickname, password || undefined, publicKey);
 
     server.name = data.serverName || address;
@@ -272,7 +219,7 @@ async function handleAddServer() {
     await window.gimodi.servers.add(server);
     addOrUpdateServer(server);
 
-    await saveToHistory(address, nickname, password, data.serverName, identityFingerprint);
+    await saveToHistory(address, nickname, password, data.serverName);
 
     closeAddServerModal();
     data._connKey = key;
@@ -297,7 +244,6 @@ function openEditServerModal(server, isConnected) {
   editServerNickname.value = server.nickname || '';
   editServerPassword.value = server.password || '';
   editServerError.textContent = '';
-  populateIdentitySelect(editServerIdentity, editServerIdentityGroup, server.identityFingerprint);
   modalEditServer.classList.remove('hidden');
   editServerAddress.focus();
 }
@@ -331,13 +277,9 @@ async function handleEditServer() {
 
   const oldAddress = editingServer.address;
   const oldNickname = editingServer.nickname;
-  const oldIdentityFingerprint = editingServer.identityFingerprint || null;
   const wasConnected = editingServerWasConnected;
 
-  const selectedIdentity = getSelectedIdentityFrom(editServerIdentity);
-  const identityFingerprint = selectedIdentity ? selectedIdentity.fingerprint : null;
-
-  const oldKey = connKey(oldAddress, oldIdentityFingerprint);
+  const oldKey = connKey(oldAddress);
   if (wasConnected || connectionManager.getStatus(oldKey) === 'reconnecting') {
     const oldConn = connectionManager.getConnection(oldKey);
     if (oldConn) {
@@ -355,12 +297,10 @@ async function handleEditServer() {
     address,
     nickname,
     password: password || null,
-    identityFingerprint,
   };
 
-  const oldFp = oldIdentityFingerprint;
-  const matchesOld = (s) => s.address === oldAddress && s.nickname === oldNickname && (s.identityFingerprint || null) === oldFp;
-  replaceServerInPlace(oldAddress, oldNickname, oldIdentityFingerprint, updatedServer);
+  const matchesOld = (s) => s.address === oldAddress && s.nickname === oldNickname;
+  replaceServerInPlace(oldAddress, oldNickname, null, updatedServer);
   const items = await window.gimodi.servers.list();
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
@@ -391,7 +331,7 @@ async function handleEditServer() {
  * @param {boolean} [options.autoJoin=false]
  */
 async function connectToServer(server, { autoJoin = false } = {}) {
-  const key = connKey(server.address, server.identityFingerprint);
+  const key = connKey(server.address);
   if (connectionManager.isConnected(key)) {
     window.dispatchEvent(
       new CustomEvent('gimodi:switch-server', {
@@ -401,15 +341,8 @@ async function connectToServer(server, { autoJoin = false } = {}) {
     return;
   }
 
-  let publicKey;
-  if (server.identityFingerprint) {
-    const match = identities.find((i) => i.fingerprint === server.identityFingerprint);
-    publicKey = match ? match.publicKeyArmored : undefined;
-  }
-  if (!publicKey) {
-    const defaultId = identities.find((i) => i.isDefault) || identities[0];
-    publicKey = defaultId ? defaultId.publicKeyArmored : undefined;
-  }
+  const activeIdentity = await getActiveIdentity();
+  const publicKey = activeIdentity?.public_key || undefined;
 
   try {
     const data = await connectionManager.connect(key, server.address, server.nickname, server.password || undefined, publicKey);
@@ -420,10 +353,10 @@ async function connectToServer(server, { autoJoin = false } = {}) {
       updateServerInList(server);
     }
 
-    await saveToHistory(server.address, server.nickname, server.password, data.serverName, server.identityFingerprint);
+    await saveToHistory(server.address, server.nickname, server.password, data.serverName);
 
     data._connKey = key;
-    window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: { ...data, autoJoin, identityFingerprint: server.identityFingerprint || null } }));
+    window.dispatchEvent(new CustomEvent('gimodi:connected', { detail: { ...data, autoJoin } }));
   } catch (err) {
     console.error('[connect] Failed to connect:', err.message);
     showConnectError(err.message || 'Connection failed.');
@@ -435,22 +368,19 @@ async function connectToServer(server, { autoJoin = false } = {}) {
  * @param {string} nickname
  * @param {string} password
  * @param {string} serverName
- * @param {string} identityFingerprint
  */
-async function saveToHistory(address, nickname, password, serverName, identityFingerprint) {
+async function saveToHistory(address, nickname, password, serverName) {
   const history = (await window.gimodi.history.load()) || [];
   const existing = history.findIndex((b) => b.address === address && b.nickname === nickname);
   if (existing >= 0) {
     history[existing].name = serverName || address;
     history[existing].password = password || null;
-    history[existing].identityFingerprint = identityFingerprint || null;
   } else {
     history.push({
       name: serverName || address,
       address,
       nickname,
       password: password || null,
-      identityFingerprint: identityFingerprint || null,
     });
   }
   await window.gimodi.history.save(history);

@@ -18,7 +18,6 @@ export const PRESENCE_STATUSES = [
 ];
 
 let currentPresence = 'online';
-let statusPickerEl = null;
 
 /**
  * Returns the effective presence status, falling back to 'offline' when no
@@ -44,67 +43,21 @@ function updateSelfStatusDot() {
   }
 }
 
-/** Removes the status picker popup from the DOM. */
-function dismissStatusPicker() {
-  if (statusPickerEl) {
-    statusPickerEl.remove();
-    statusPickerEl = null;
-  }
-}
 
 /**
- * Shows the status picker popup above the self-user button.
- * @param {MouseEvent} e
+ * Sets the presence status and persists it.
+ * @param {string} status
  */
-function showStatusPicker(e) {
-  e.stopPropagation();
-  if (statusPickerEl) {
-    dismissStatusPicker();
-    return;
-  }
-
-  statusPickerEl = document.createElement('div');
-  statusPickerEl.className = 'status-picker';
-
-  for (const status of PRESENCE_STATUSES) {
-    const item = document.createElement('div');
-    item.className = 'status-picker-item' + (status.key === getEffectivePresence() ? ' active' : '');
-
-    const dot = document.createElement('span');
-    dot.className = 'status-picker-dot';
-    dot.style.background = status.color;
-
-    const label = document.createElement('span');
-    label.textContent = status.label;
-
-    item.appendChild(dot);
-    item.appendChild(label);
-    item.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      currentPresence = status.key;
-      window.gimodi.db.setSetting('presence', currentPresence);
-      updateSelfStatusDot();
-      dismissStatusPicker();
-      window.dispatchEvent(new CustomEvent('gimodi:presence-changed', { detail: { status: currentPresence } }));
-    });
-    statusPickerEl.appendChild(item);
-  }
-
-  document.body.appendChild(statusPickerEl);
-
-  const btnRect = document.getElementById('btn-self-user').getBoundingClientRect();
-  statusPickerEl.style.left = btnRect.right + 8 + 'px';
-  const pickerHeight = statusPickerEl.offsetHeight;
-  statusPickerEl.style.top = Math.max(4, btnRect.bottom - pickerHeight) + 'px';
+export function setPresence(status) {
+  currentPresence = status;
+  window.gimodi.db.setSetting('presence', currentPresence);
+  updateSelfStatusDot();
+  window.dispatchEvent(new CustomEvent('gimodi:presence-changed', { detail: { status: currentPresence } }));
 }
 
 /** Initializes the self-user avatar and status button at the bottom of the sidebar. */
 function initSelfUser() {
   updateSelfStatusDot();
-  const btn = document.getElementById('btn-self-user');
-  if (btn) {
-    btn.addEventListener('click', showStatusPicker);
-  }
   connectionManager.addEventListener('connection-status-changed', () => {
     updateSelfStatusDot();
     window.dispatchEvent(new CustomEvent('gimodi:presence-changed', { detail: { status: getEffectivePresence() } }));
@@ -1087,5 +1040,4 @@ export async function initSidebar(connectCallback, onAddServer, onEditServer) {
   });
 
   document.addEventListener('click', dismissContextMenu);
-  document.addEventListener('click', dismissStatusPicker);
 }

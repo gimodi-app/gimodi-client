@@ -29,6 +29,28 @@
       </div>
     </div>
 
+    <!-- Identity Login Screen (shown when no active identity) -->
+    <div id="view-identity-login" class="identity-login hidden">
+      <div class="identity-login-card">
+        <img src="../../assets/logo.png" class="identity-login-logo" alt="Gimodi" />
+        <h1 class="identity-login-title">Welcome to Gimodi</h1>
+        <p class="identity-login-subtitle">Select an identity to continue</p>
+        <div id="identity-login-list" class="identity-login-list"></div>
+        <div id="identity-login-create" class="identity-login-create hidden">
+          <input type="text" id="identity-login-name" placeholder="Identity name" maxlength="64" />
+          <div class="identity-login-create-actions">
+            <button id="btn-identity-login-confirm" class="btn-primary">Create</button>
+            <button id="btn-identity-login-cancel" class="btn-secondary">Cancel</button>
+          </div>
+        </div>
+        <div class="identity-login-actions">
+          <button id="btn-identity-login-new" class="btn-primary">New Identity</button>
+          <button id="btn-identity-login-import" class="btn-secondary">Import</button>
+        </div>
+        <div id="identity-login-status" class="identity-login-status"></div>
+      </div>
+    </div>
+
     <div class="app-layout">
       <!-- Server Sidebar -->
       <div id="server-sidebar" class="server-sidebar">
@@ -237,10 +259,6 @@
           <label for="add-server-nickname">Nickname</label>
           <input type="text" id="add-server-nickname" placeholder="Player" maxlength="32" autocomplete="off" />
         </div>
-        <div class="form-group" id="add-server-identity-group" style="display: none">
-          <label for="add-server-identity">Identity</label>
-          <select id="add-server-identity"></select>
-        </div>
         <div class="form-group">
           <label for="add-server-password">Password (optional)</label>
           <input type="password" id="add-server-password" placeholder="" />
@@ -263,10 +281,6 @@
         <div class="form-group">
           <label for="edit-server-nickname">Nickname</label>
           <input type="text" id="edit-server-nickname" placeholder="Player" maxlength="32" autocomplete="off" />
-        </div>
-        <div class="form-group" id="edit-server-identity-group" style="display: none">
-          <label for="edit-server-identity">Identity</label>
-          <select id="edit-server-identity"></select>
         </div>
         <div class="form-group">
           <label for="edit-server-password">Password (optional)</label>
@@ -403,7 +417,6 @@
             <button class="settings-nav-item active" data-tab="general">General</button>
             <button class="settings-nav-item" data-tab="appearance">Appearance</button>
             <button class="settings-nav-item" data-tab="audio">Audio / Video</button>
-            <button class="settings-nav-item" data-tab="identities">Identities</button>
             <button class="settings-nav-item" data-tab="advanced">Advanced</button>
           </nav>
           <div class="settings-panels">
@@ -500,21 +513,6 @@
                   <input type="text" id="input-ptt-key" placeholder="Press a key..." readonly />
                   <small style="color: var(--text-muted)">Click and press a key to set your push-to-talk keybind</small>
                 </div>
-              </div>
-            </div>
-
-            <!-- Identities Panel -->
-            <div id="settings-panel-identities" class="settings-panel">
-              <div id="identity-status" class="settings-status-text"></div>
-              <div id="identity-create-form" class="identity-create-form hidden">
-                <input type="text" id="input-identity-name" placeholder="Identity name" maxlength="64" autocomplete="off" />
-                <button id="btn-identity-create-confirm" class="btn-primary">Create</button>
-                <button id="btn-identity-create-cancel" class="btn-secondary">Cancel</button>
-              </div>
-              <div id="settings-identity-list" class="settings-identity-list"></div>
-              <div class="modal-buttons">
-                <button id="btn-identity-new" class="btn-primary">New Identity</button>
-                <button id="btn-identity-import" class="btn-secondary">Import...</button>
               </div>
             </div>
 

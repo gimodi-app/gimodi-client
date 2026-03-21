@@ -111,6 +111,7 @@ function logout() {
     if (identityDb) identityDb.close();
     identityDb = null;
     activeFingerprint = null;
+    appDb.prepare('DELETE FROM app_settings WHERE key = ?').run('activeIdentity');
 }
 
 /**

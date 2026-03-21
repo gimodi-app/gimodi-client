@@ -2,7 +2,7 @@ import serverService from './services/server.js';
 import connectionManager, { connKey } from './services/connectionManager.js';
 import voiceService from './services/voice.js';
 import notificationService from './services/notifications.js';
-import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects, removeServerByIdentity } from './views/connect.js';
+import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, removeServerByIdentity } from './views/connect.js';
 import {
   initServerView,
   cleanup as cleanupServer,
@@ -43,7 +43,9 @@ import { initDmView, updateDmServices, refreshDmView, openDmConversation } from 
 import { DmService } from './services/dm.js';
 import { FriendsService } from './services/friends.js';
 import ServerChatProvider from './services/chat-providers/server.js';
-import { initSettingsModal, openSettings, closeSettings, stopMicLevelMeter, loadSettingsIdentities } from './views/settings/settings-modal.js';
+import { initSettingsModal, openSettings, closeSettings, stopMicLevelMeter } from './views/settings/settings-modal.js';
+import { initIdentityLogin, showIdentityLogin, hideIdentityLogin } from './views/identity-login.js';
+import { initIdentitySwitcher, setActiveIdentity } from './views/identity-switcher.js';
 
 const log = (...args) => console.log('[app]', ...args);
 
@@ -299,14 +301,78 @@ initSidebar();
 loadSettings();
 initSettingsModal({ appSettings, saveSettings });
 
-// Auto-connect to all saved servers on startup
-(async () => {
+/**
+ * Starts the main app flow after an identity is active.
+ * Initializes DM services and auto-connects to saved servers.
+ * @param {{ fingerprint: string, name: string, public_key: string }} identity
+ */
+async function startApp(identity) {
+  setActiveIdentity(identity);
+  await ensureDmServices(identity.fingerprint);
+  rerenderSidebar();
   const servers = (await window.gimodi.servers.list()) || [];
-  const identities = (await window.gimodi.identity.loadAll()) || [];
   connectionManager.connectAll(
     servers.flatMap((s) => (s.type === 'group' ? s.servers : [s])),
-    identities,
+    identity.public_key || undefined,
   );
+}
+
+/**
+ * Tears down all active connections and services before switching identity or logging out.
+ */
+function teardownApp() {
+  voiceService.cleanup();
+  connectionManager.clearVoiceServer();
+  connectionManager.disconnectAll();
+  dmService = null;
+  friendsService = null;
+  dmViewInitialized = false;
+  setActiveIdentity(null);
+  clearActiveServer();
+  showView('view-connect');
+  rerenderSidebar();
+}
+
+/**
+ * Switches to a different identity: tear down, switch DB, rebuild.
+ * @param {string} fingerprint
+ */
+async function switchIdentity(fingerprint) {
+  teardownApp();
+  const identity = await window.gimodi.db.switchIdentity(fingerprint);
+  await startApp(identity);
+}
+
+/**
+ * Logs out the current identity: tear down, clear DB, show login.
+ */
+async function logoutIdentity() {
+  teardownApp();
+  await window.gimodi.db.logout();
+  showIdentityLogin();
+}
+
+// Identity login screen — shown when no active identity
+initIdentityLogin((identity) => {
+  log('Identity selected:', identity.name);
+  startApp(identity);
+});
+
+// Identity switcher in sidebar — switch or logout
+initIdentitySwitcher({
+  onSwitch: switchIdentity,
+  onLogout: logoutIdentity,
+});
+
+// Check for active identity on startup
+(async () => {
+  const active = await window.gimodi.db.getActiveIdentity();
+  if (active) {
+    hideIdentityLogin();
+    startApp(active);
+  } else {
+    showIdentityLogin();
+  }
 })();
 
 // Menu: Disconnect (leave voice on the currently viewed server)
@@ -1244,23 +1310,6 @@ window.addEventListener('gimodi:add-friend', async (e) => {
   }
 });
 
-window.addEventListener(
-  'gimodi:connected',
-  (e) => {
-    let identityFingerprint = e.detail.identityFingerprint;
-    if (!identityFingerprint) {
-      const key = e.detail._connKey;
-      if (key) {
-        const idx = key.indexOf('\0');
-        identityFingerprint = idx >= 0 ? key.slice(idx + 1) : null;
-      }
-    }
-    if (identityFingerprint) {
-      ensureDmServices(identityFingerprint);
-    }
-  },
-  true,
-);
 
 /**
  * DevTools utilities. Callable via gimodiDebug.clearAllFriends() in the console.

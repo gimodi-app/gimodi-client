@@ -1,5 +1,5 @@
 import voiceService from '../../services/voice.js';
-import { applyTheme, refreshIdentitySelects } from '../connect.js';
+import { applyTheme } from '../connect.js';
 import { setFeedbackVolume } from '../server/server.js';
 import { refreshTimestamps, setChatDisplayMode, setMediaEmbedPrivacy } from '../chat/chat.js';
 import { setTimeFormat } from '../../services/timeFormat.js';
@@ -45,14 +45,6 @@ const btnTestSpeaker = document.getElementById('btn-test-speaker');
 const inputPTTKey = document.getElementById('input-ptt-key');
 const pttKeyConfig = document.getElementById('ptt-key-config');
 const micLevelFill = document.getElementById('mic-level-fill');
-const identityStatus = document.getElementById('identity-status');
-const identityCreateForm = document.getElementById('identity-create-form');
-const inputIdentityName = document.getElementById('input-identity-name');
-const btnIdentityCreateConfirm = document.getElementById('btn-identity-create-confirm');
-const btnIdentityCreateCancel = document.getElementById('btn-identity-create-cancel');
-const settingsIdentityList = document.getElementById('settings-identity-list');
-const btnIdentityNew = document.getElementById('btn-identity-new');
-const btnIdentityImport = document.getElementById('btn-identity-import');
 const btnSettings = document.getElementById('btn-settings');
 const btnCloseSettings = document.getElementById('btn-close-settings');
 
@@ -132,9 +124,6 @@ export function switchSettingsTab(tab) {
   if (tab === 'appearance') {
     renderThemeGrid();
   }
-  if (tab === 'identities') {
-    loadSettingsIdentities();
-  }
 }
 
 /**
@@ -175,116 +164,6 @@ export function closeSettings() {
   stopCameraPreview();
   stopTestTone();
   stopMicLoopback();
-  identityCreateForm.classList.add('hidden');
-  inputIdentityName.value = '';
-  identityStatus.textContent = '';
-}
-
-/**
- * Loads and renders the list of identities in the identities settings tab.
- */
-export async function loadSettingsIdentities() {
-  identityStatus.textContent = '';
-  settingsIdentityList.innerHTML = '';
-  const identities = (await window.gimodi.identity.loadAll()) || [];
-  if (identities.length === 0) {
-    identityStatus.textContent = 'No identities yet. Create one to get started.';
-    return;
-  }
-  for (const id of identities) {
-    const item = document.createElement('div');
-    item.className = 'settings-identity-item';
-    const info = document.createElement('div');
-    info.className = 'identity-info';
-    const name = document.createElement('div');
-    name.className = 'identity-name';
-    const nameText = document.createElement('span');
-    nameText.className = 'identity-name-text';
-    nameText.textContent = id.name;
-    name.appendChild(nameText);
-    if (id.isDefault) {
-      const badge = document.createElement('span');
-      badge.className = 'identity-default-badge';
-      badge.textContent = ' \u2713 Default';
-      name.appendChild(badge);
-    }
-    nameText.addEventListener('click', () => {
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.value = id.name;
-      input.maxLength = 64;
-      input.className = 'identity-rename-input';
-      nameText.replaceWith(input);
-      input.focus();
-      input.select();
-      let done = false;
-      async function finish(save) {
-        if (done) {
-          return;
-        }
-        done = true;
-        const newName = input.value.trim();
-        if (save && newName && newName !== id.name) {
-          try {
-            await window.gimodi.identity.rename(id.fingerprint, newName);
-            refreshIdentitySelects();
-          } catch (err) {
-            identityStatus.textContent = err.message || 'Rename failed.';
-          }
-        }
-        loadSettingsIdentities();
-      }
-      input.addEventListener('blur', () => finish(true));
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          input.blur();
-        }
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          finish(false);
-        }
-      });
-    });
-    const fp = document.createElement('div');
-    fp.className = 'identity-fingerprint';
-    fp.textContent = id.fingerprint;
-    info.appendChild(name);
-    info.appendChild(fp);
-    const actions = document.createElement('div');
-    actions.className = 'identity-actions';
-    if (!id.isDefault) {
-      const btnDefault = document.createElement('button');
-      btnDefault.className = 'btn-secondary';
-      btnDefault.textContent = 'Set Default';
-      btnDefault.addEventListener('click', async () => {
-        await window.gimodi.identity.setDefault(id.fingerprint);
-        loadSettingsIdentities();
-      });
-      actions.appendChild(btnDefault);
-    }
-    const btnExport = document.createElement('button');
-    btnExport.className = 'btn-secondary';
-    btnExport.textContent = 'Export';
-    btnExport.addEventListener('click', async () => {
-      await window.gimodi.identity.export(id.fingerprint);
-    });
-    actions.appendChild(btnExport);
-    const btnDelete = document.createElement('button');
-    btnDelete.className = 'btn-danger';
-    btnDelete.textContent = 'Delete';
-    btnDelete.addEventListener('click', async () => {
-      if (!(await customConfirm(`Delete identity "${id.name}"? This cannot be undone.`))) {
-        return;
-      }
-      await window.gimodi.identity.delete(id.fingerprint);
-      loadSettingsIdentities();
-    });
-    actions.appendChild(btnDelete);
-    item.appendChild(info);
-    item.appendChild(actions);
-    settingsIdentityList.appendChild(item);
-  }
 }
 
 /**
@@ -634,60 +513,6 @@ function bindEventListeners() {
     getDeps().appSettings.notificationMode = mode;
     notificationService.updateSettings(getDeps().appSettings);
     selectNotificationMode.value = mode;
-  });
-
-  btnIdentityNew.addEventListener('click', () => {
-    identityCreateForm.classList.remove('hidden');
-    inputIdentityName.focus();
-  });
-
-  btnIdentityCreateCancel.addEventListener('click', () => {
-    identityCreateForm.classList.add('hidden');
-    inputIdentityName.value = '';
-  });
-
-  btnIdentityCreateConfirm.addEventListener('click', async () => {
-    const name = inputIdentityName.value.trim();
-    if (!name) {
-      return;
-    }
-    btnIdentityCreateConfirm.disabled = true;
-    identityStatus.textContent = 'Creating...';
-    try {
-      await window.gimodi.identity.create(name);
-      identityCreateForm.classList.add('hidden');
-      inputIdentityName.value = '';
-      identityStatus.textContent = '';
-      loadSettingsIdentities();
-    } catch (e) {
-      identityStatus.textContent = `Error: ${e.message}`;
-    } finally {
-      btnIdentityCreateConfirm.disabled = false;
-    }
-  });
-
-  inputIdentityName.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      btnIdentityCreateConfirm.click();
-    }
-    if (e.key === 'Escape') {
-      btnIdentityCreateCancel.click();
-    }
-  });
-
-  btnIdentityImport.addEventListener('click', async () => {
-    identityStatus.textContent = 'Importing...';
-    try {
-      const result = await window.gimodi.identity.import();
-      if (!result.canceled) {
-        identityStatus.textContent = `Imported: ${result.identity.name}`;
-        loadSettingsIdentities();
-      } else {
-        identityStatus.textContent = '';
-      }
-    } catch (e) {
-      identityStatus.textContent = `Error: ${e.message}`;
-    }
   });
 
   selectMic.addEventListener('change', () => {

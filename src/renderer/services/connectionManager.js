@@ -2,11 +2,10 @@ import { ServerService } from './serverConnection.js';
 
 /**
  * @param {string} address
- * @param {string|null} [identityFingerprint]
  * @returns {string}
  */
-export function connKey(address, identityFingerprint) {
-  return identityFingerprint ? address + '\0' + identityFingerprint : address;
+export function connKey(address) {
+  return address;
 }
 
 /**
@@ -14,8 +13,7 @@ export function connKey(address, identityFingerprint) {
  * @returns {string}
  */
 export function addressFromKey(key) {
-  const idx = key.indexOf('\0');
-  return idx >= 0 ? key.slice(0, idx) : key;
+  return key;
 }
 
 class ConnectionManager extends EventTarget {
@@ -85,22 +83,12 @@ class ConnectionManager extends EventTarget {
    * @param {Array} servers
    * @param {Array} identities
    */
-  async connectAll(servers, identities) {
+  async connectAll(servers, publicKey) {
     const pending = [];
     for (const server of servers) {
-      const key = connKey(server.address, server.identityFingerprint);
+      const key = connKey(server.address);
       if (this._connections.has(key)) {
         continue;
-      }
-
-      let publicKey;
-      if (server.identityFingerprint) {
-        const match = identities.find((i) => i.fingerprint === server.identityFingerprint);
-        publicKey = match ? match.publicKeyArmored : undefined;
-      }
-      if (!publicKey) {
-        const defaultId = identities.find((i) => i.isDefault) || identities[0];
-        publicKey = defaultId ? defaultId.publicKeyArmored : undefined;
       }
 
       this._connectionStatus.set(key, 'connecting');
