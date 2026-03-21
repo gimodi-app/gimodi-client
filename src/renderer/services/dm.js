@@ -1,9 +1,5 @@
 import connectionManager from './connectionManager.js';
-
-const MSG_STORAGE_PREFIX = 'dm_messages_';
-const CONV_STORAGE_PREFIX = 'dm_conversations_';
-const PURGE_LOG_PREFIX = 'dm_purged_';
-const REACTIONS_STORAGE_PREFIX = 'dm_reactions_';
+import * as storage from './dm-storage.js';
 
 /**
  * @typedef {'pending'|'sent'|'delivered'} DmStatus
@@ -35,91 +31,6 @@ const REACTIONS_STORAGE_PREFIX = 'dm_reactions_';
  */
 
 /**
- * @param {string} ownFingerprint
- * @returns {DmMessage[]}
- */
-function loadMessages(ownFingerprint) {
-  try {
-    const raw = localStorage.getItem(`${MSG_STORAGE_PREFIX}${ownFingerprint}`);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * @param {string} ownFingerprint
- * @param {DmMessage[]} messages
- */
-function saveMessages(ownFingerprint, messages) {
-  localStorage.setItem(`${MSG_STORAGE_PREFIX}${ownFingerprint}`, JSON.stringify(messages));
-}
-
-/**
- * @param {string} ownFingerprint
- * @returns {Conversation[]}
- */
-function loadConversations(ownFingerprint) {
-  try {
-    const raw = localStorage.getItem(`${CONV_STORAGE_PREFIX}${ownFingerprint}`);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * @param {string} ownFingerprint
- * @param {Conversation[]} conversations
- */
-function saveConversations(ownFingerprint, conversations) {
-  const toSave = conversations.map((c) => ({ ...c, sessionKey: undefined }));
-  localStorage.setItem(`${CONV_STORAGE_PREFIX}${ownFingerprint}`, JSON.stringify(toSave));
-}
-
-/**
- * @param {string} ownFingerprint
- * @returns {Record<string, number>}
- */
-function loadPurgeLog(ownFingerprint) {
-  try {
-    const raw = localStorage.getItem(`${PURGE_LOG_PREFIX}${ownFingerprint}`);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-/**
- * @param {string} ownFingerprint
- * @param {Record<string, number>} log
- */
-function savePurgeLog(ownFingerprint, log) {
-  localStorage.setItem(`${PURGE_LOG_PREFIX}${ownFingerprint}`, JSON.stringify(log));
-}
-
-/**
- * @param {string} ownFingerprint
- * @returns {Record<string, string[]>}
- */
-function loadReactions(ownFingerprint) {
-  try {
-    const raw = localStorage.getItem(`${REACTIONS_STORAGE_PREFIX}${ownFingerprint}`);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-/**
- * @param {string} ownFingerprint
- * @param {Record<string, string[]>} data
- */
-function saveReactions(ownFingerprint, data) {
-  localStorage.setItem(`${REACTIONS_STORAGE_PREFIX}${ownFingerprint}`, JSON.stringify(data));
-}
-
-/**
  * Manages direct messages and group conversations for a single identity.
  */
 export class DmService extends EventTarget {
@@ -148,6 +59,9 @@ export class DmService extends EventTarget {
     /** @type {Map<string, Function>} */
     this._keyUpdateListeners = new Map();
 
+    /** @type {Record<string, Array>} messageId → formatted reactions */
+    this._reactionCache = {};
+
     this._loadConversationsFromStorage();
 
     connectionManager.addEventListener('connection-status-changed', (e) => {
@@ -167,8 +81,8 @@ export class DmService extends EventTarget {
   /**
    * @private
    */
-  _loadConversationsFromStorage() {
-    const saved = loadConversations(this._fingerprint);
+  async _loadConversationsFromStorage() {
+    const saved = await storage.loadConversations();
     for (const conv of saved) {
       this._conversations.set(conv.id, { ...conv, sessionKey: null });
     }
@@ -182,7 +96,7 @@ export class DmService extends EventTarget {
     for (const conv of this._conversations.values()) {
       if (conv.type === 'group' && conv.encryptedSessionKey && !conv.sessionKey) {
         try {
-          conv.sessionKey = await window.gimodi.identity.decryptSessionKey(conv.encryptedSessionKey);
+          conv.sessionKey = await window.gimodi.db.decryptSessionKey(conv.encryptedSessionKey);
           this.dispatchEvent(new CustomEvent('session-key-restored', { detail: { conversationId: conv.id } }));
         } catch (err) {
           console.error('[DmService] Failed to decrypt stored session key for', conv.id, err);
@@ -192,10 +106,22 @@ export class DmService extends EventTarget {
   }
 
   /**
+   * Persists all in-memory conversations to the database.
    * @private
    */
   _saveConversationsToStorage() {
-    saveConversations(this._fingerprint, [...this._conversations.values()]);
+    for (const conv of this._conversations.values()) {
+      storage.saveConversation(conv);
+    }
+  }
+
+  /**
+   * Persists a single conversation to the database.
+   * @private
+   * @param {Conversation} conv
+   */
+  _saveConversation(conv) {
+    storage.saveConversation(conv);
   }
 
   /**
@@ -349,9 +275,9 @@ export class DmService extends EventTarget {
     let encryptedKeys = null;
 
     if (isGroup) {
-      const sessionKey = await window.gimodi.identity.generateSessionKey();
+      const sessionKey = await window.gimodi.db.generateSessionKey();
       const allParticipants = [{ fingerprint: this._fingerprint, publicKeyArmored: this._publicKey }, ...participants];
-      encryptedKeys = await window.gimodi.identity.encryptSessionKey(sessionKey, allParticipants);
+      encryptedKeys = await window.gimodi.db.encryptSessionKey(sessionKey, allParticipants);
     }
 
     const participantFingerprints = fingerprints;
@@ -387,7 +313,7 @@ export class DmService extends EventTarget {
     };
 
     if (isGroup && conv.encryptedSessionKey) {
-      conv.sessionKey = await window.gimodi.identity.decryptSessionKey(conv.encryptedSessionKey);
+      conv.sessionKey = await window.gimodi.db.decryptSessionKey(conv.encryptedSessionKey);
     }
 
     this._conversations.set(conv.id, conv);
@@ -436,7 +362,7 @@ export class DmService extends EventTarget {
         };
         if (conv.type === 'group' && conv.encryptedSessionKey) {
           try {
-            conv.sessionKey = await window.gimodi.identity.decryptSessionKey(conv.encryptedSessionKey);
+            conv.sessionKey = await window.gimodi.db.decryptSessionKey(conv.encryptedSessionKey);
           } catch (err) {
             console.error('[DmService] Failed to decrypt session key on fetch for', conv.id, err);
           }
@@ -451,7 +377,7 @@ export class DmService extends EventTarget {
         existing.serverKey = serverKey;
         if (!existing.sessionKey && existing.type === 'group' && raw.encryptedSessionKey) {
           try {
-            existing.sessionKey = await window.gimodi.identity.decryptSessionKey(raw.encryptedSessionKey);
+            existing.sessionKey = await window.gimodi.db.decryptSessionKey(raw.encryptedSessionKey);
             existing.encryptedSessionKey = raw.encryptedSessionKey;
             this.dispatchEvent(new CustomEvent('session-key-restored', { detail: { conversationId: existing.id } }));
           } catch (err) {
@@ -481,27 +407,19 @@ export class DmService extends EventTarget {
   /**
    * Returns messages for a conversation, sorted oldest-first.
    * @param {string} conversationId
-   * @returns {DmMessage[]}
+   * @param {Object} [opts]
+   * @returns {Promise<DmMessage[]>}
    */
-  getConversation(conversationId) {
-    return loadMessages(this._fingerprint)
-      .filter((m) => m.conversationId === conversationId)
-      .sort((a, b) => a.createdAt - b.createdAt);
+  async getConversation(conversationId, opts) {
+    return storage.loadMessages(conversationId, opts);
   }
 
   /**
    * Returns the last message for each conversation.
-   * @returns {Map<string, DmMessage>}
+   * @returns {Promise<Map<string, DmMessage>>}
    */
-  getLastMessages() {
-    const latest = new Map();
-    for (const msg of loadMessages(this._fingerprint)) {
-      const existing = latest.get(msg.conversationId);
-      if (!existing || msg.createdAt > existing.createdAt) {
-        latest.set(msg.conversationId, msg);
-      }
-    }
-    return latest;
+  async getLastMessages() {
+    return storage.getLastMessages();
   }
 
   /**
@@ -530,7 +448,7 @@ export class DmService extends EventTarget {
 
     await server.conn.request('conversation:leave', { conversationId });
     this._conversations.delete(conversationId);
-    this._saveConversationsToStorage();
+    storage.deleteConversation(conversationId);
     this.dispatchEvent(new CustomEvent('conversation-left', { detail: { conversationId } }));
   }
 
@@ -571,7 +489,7 @@ export class DmService extends EventTarget {
 
     let encryptedKey = null;
     if (conv.sessionKey && participant.publicKeyArmored) {
-      const keys = await window.gimodi.identity.encryptSessionKey(conv.sessionKey, [participant]);
+      const keys = await window.gimodi.db.encryptSessionKey(conv.sessionKey, [participant]);
       encryptedKey = keys[participant.fingerprint];
     }
 
@@ -626,12 +544,12 @@ export class DmService extends EventTarget {
       }
 
       recipientPubKeys.push(this._publicKey);
-      encryptedContent = await window.gimodi.identity.encrypt(recipientPubKeys, content);
+      encryptedContent = await window.gimodi.db.encrypt(recipientPubKeys, content);
     } else {
       if (!conv.sessionKey) {
         throw new Error('Session key not available');
       }
-      encryptedContent = await window.gimodi.identity.encryptSymmetric(conv.sessionKey, content);
+      encryptedContent = await window.gimodi.db.encryptSymmetric(conv.sessionKey, content);
     }
 
     /** @type {DmMessage} */
@@ -703,12 +621,12 @@ export class DmService extends EventTarget {
         }
       }
       recipientPubKeys.push(this._publicKey);
-      encryptedContent = await window.gimodi.identity.encrypt(recipientPubKeys, msg.content);
+      encryptedContent = await window.gimodi.db.encrypt(recipientPubKeys, msg.content);
     } else {
       if (!conv.sessionKey) {
         throw new Error('Session key not available');
       }
-      encryptedContent = await window.gimodi.identity.encryptSymmetric(conv.sessionKey, msg.content);
+      encryptedContent = await window.gimodi.db.encryptSymmetric(conv.sessionKey, msg.content);
     }
 
     await conn.request('dm:send', { id: msg.id, conversationId: msg.conversationId, content: encryptedContent, keyIndex: msg.keyIndex ?? 0 });
@@ -738,11 +656,9 @@ export class DmService extends EventTarget {
     }
 
     const { messages: rawMessages } = await conn.request('dm:history', { conversationId, before, limit });
-    const stored = loadMessages(this._fingerprint);
-    const knownIds = new Set(stored.map((m) => m.id));
 
     for (const raw of rawMessages) {
-      if (knownIds.has(raw.id)) {
+      if (await storage.hasMessage(conversationId, raw.id)) {
         continue;
       }
 
@@ -753,7 +669,7 @@ export class DmService extends EventTarget {
         plaintext = '[Decryption failed]';
       }
 
-      stored.push({
+      await storage.saveMessage({
         id: raw.id,
         conversationId,
         direction: raw.sender_fingerprint === this._fingerprint ? 'sent' : 'received',
@@ -768,7 +684,6 @@ export class DmService extends EventTarget {
       });
     }
 
-    saveMessages(this._fingerprint, stored);
     this.dispatchEvent(new CustomEvent('history-loaded', { detail: { conversationId } }));
   }
 
@@ -786,15 +701,12 @@ export class DmService extends EventTarget {
       return;
     }
 
-    const purgeLog = loadPurgeLog(this._fingerprint);
-    const purgedAt = purgeLog[conversationId];
-    if (purgedAt && createdAt <= purgedAt) {
+    if (conv.purgedAt && createdAt <= conv.purgedAt) {
       this._sendAck(id, senderFingerprint);
       return;
     }
 
-    const messages = loadMessages(this._fingerprint);
-    if (messages.some((m) => m.id === id)) {
+    if (await storage.hasMessage(conversationId, id)) {
       this._sendAck(id, senderFingerprint);
       return;
     }
@@ -821,8 +733,7 @@ export class DmService extends EventTarget {
       replyToContent: replyToContent ?? null,
     };
 
-    messages.push(message);
-    saveMessages(this._fingerprint, messages);
+    await storage.saveMessage(message);
 
     this._sendAck(id, senderFingerprint);
     this.dispatchEvent(new CustomEvent('message-received', { detail: message }));
@@ -852,7 +763,7 @@ export class DmService extends EventTarget {
       }
       if (!existing.sessionKey && existing.type === 'group' && encryptedKey) {
         try {
-          existing.sessionKey = await window.gimodi.identity.decryptSessionKey(encryptedKey);
+          existing.sessionKey = await window.gimodi.db.decryptSessionKey(encryptedKey);
           existing.encryptedSessionKey = encryptedKey;
           this.dispatchEvent(new CustomEvent('session-key-restored', { detail: { conversationId } }));
         } catch (err) {
@@ -866,7 +777,7 @@ export class DmService extends EventTarget {
     let sessionKey = null;
     if (type === 'group' && encryptedKey) {
       try {
-        sessionKey = await window.gimodi.identity.decryptSessionKey(encryptedKey);
+        sessionKey = await window.gimodi.db.decryptSessionKey(encryptedKey);
       } catch (err) {
         console.error('[DmService] Failed to decrypt session key for conversation', conversationId, err);
       }
@@ -928,7 +839,7 @@ export class DmService extends EventTarget {
 
     if (fingerprint === this._fingerprint) {
       this._conversations.delete(conversationId);
-      this._saveConversationsToStorage();
+      storage.deleteConversation(conversationId);
       this.dispatchEvent(new CustomEvent('conversation-left', { detail: { conversationId } }));
       return;
     }
@@ -954,7 +865,7 @@ export class DmService extends EventTarget {
     }
 
     try {
-      conv.sessionKey = await window.gimodi.identity.decryptSessionKey(encryptedKey);
+      conv.sessionKey = await window.gimodi.db.decryptSessionKey(encryptedKey);
       conv.encryptedSessionKey = encryptedKey;
       conv.keyIndex = keyIndex ?? 0;
       this._saveConversationsToStorage();
@@ -995,8 +906,8 @@ export class DmService extends EventTarget {
       }
     }
 
-    const newKey = await window.gimodi.identity.generateSessionKey();
-    const encryptedKeys = await window.gimodi.identity.encryptSessionKey(newKey, allParticipants);
+    const newKey = await window.gimodi.db.generateSessionKey();
+    const encryptedKeys = await window.gimodi.db.encryptSessionKey(newKey, allParticipants);
     const keyIndex = (conv.keyIndex ?? 0) + 1;
 
     await server.conn.request('conversation:key-update', {
@@ -1021,12 +932,12 @@ export class DmService extends EventTarget {
    */
   async _decryptContent(conv, encryptedContent) {
     if (conv.type === 'direct') {
-      return window.gimodi.identity.decrypt(encryptedContent);
+      return window.gimodi.db.decrypt(encryptedContent);
     }
     if (!conv.sessionKey) {
       throw new Error('No session key');
     }
-    return window.gimodi.identity.decryptSymmetric(conv.sessionKey, encryptedContent);
+    return window.gimodi.db.decryptSymmetric(conv.sessionKey, encryptedContent);
   }
 
   // ── Storage helpers ─────────────────────────────────────────────────────
@@ -1048,10 +959,8 @@ export class DmService extends EventTarget {
    * @private
    * @param {DmMessage} message
    */
-  _storeMessage(message) {
-    const messages = loadMessages(this._fingerprint);
-    messages.push(message);
-    saveMessages(this._fingerprint, messages);
+  async _storeMessage(message) {
+    await storage.saveMessage(message);
   }
 
   /**
@@ -1059,34 +968,29 @@ export class DmService extends EventTarget {
    * @param {string} id
    * @param {DmStatus} status
    */
-  _updateStatus(id, status) {
-    const messages = loadMessages(this._fingerprint);
-    const msg = messages.find((m) => m.id === id);
+  async _updateStatus(id, status) {
+    await storage.updateMessageStatus(id, status);
+    const msg = await storage.getMessage(id);
     if (msg) {
-      msg.status = status;
-      saveMessages(this._fingerprint, messages);
-      this.dispatchEvent(new CustomEvent('message-updated', { detail: { ...msg } }));
+      this.dispatchEvent(new CustomEvent('message-updated', { detail: msg }));
     }
   }
 
   /**
    * @param {string} conversationId
    */
-  purgeConversation(conversationId) {
-    const purgedAt = Date.now();
-    const all = loadMessages(this._fingerprint);
+  async purgeConversation(conversationId) {
+    const messages = await storage.loadMessages(conversationId, { limit: 10000 });
 
-    saveMessages(
-      this._fingerprint,
-      all.filter((m) => m.conversationId !== conversationId),
-    );
+    const purgedAt = await storage.purgeConversationMessages(conversationId);
 
-    const log = loadPurgeLog(this._fingerprint);
-    log[conversationId] = purgedAt;
-    savePurgeLog(this._fingerprint, log);
+    const conv = this._conversations.get(conversationId);
+    if (conv) {
+      conv.purgedAt = purgedAt;
+    }
 
-    for (const msg of all) {
-      if (msg.conversationId === conversationId && msg.direction === 'received') {
+    for (const msg of messages) {
+      if (msg.direction === 'received') {
         try {
           this._sendAck(msg.id, msg.senderFingerprint);
         } catch {
@@ -1103,56 +1007,52 @@ export class DmService extends EventTarget {
    * @returns {Array<{emoji: string, count: number, userIds: string[], currentUser: boolean}>}
    */
   getReactions(messageId) {
-    const data = loadReactions(this._fingerprint);
-    return (data[messageId] || []).map((emoji) => ({
-      emoji,
+    return this._reactionCache[messageId] || [];
+  }
+
+  /**
+   * Loads reactions for a message from the database into the cache.
+   * @param {string} messageId
+   * @returns {Promise<Array>}
+   */
+  async loadReactions(messageId) {
+    const rows = await storage.getReactions(messageId);
+    const formatted = (rows || []).map((r) => ({
+      emoji: r.emoji,
       count: 1,
       userIds: [this._fingerprint],
       currentUser: true,
     }));
+    this._reactionCache[messageId] = formatted;
+    return formatted;
   }
 
   /**
    * @param {string} messageId
    * @param {string} emoji
    */
-  addReaction(messageId, emoji) {
-    const data = loadReactions(this._fingerprint);
-    const emojis = data[messageId] || [];
-    if (!emojis.includes(emoji)) {
-      emojis.push(emoji);
-      data[messageId] = emojis;
-      saveReactions(this._fingerprint, data);
-      this.dispatchEvent(new CustomEvent('reaction-changed', { detail: { messageId } }));
-    }
+  async addReaction(messageId, emoji) {
+    await storage.addReaction(messageId, emoji);
+    await this.loadReactions(messageId);
+    this.dispatchEvent(new CustomEvent('reaction-changed', { detail: { messageId } }));
   }
 
   /**
    * @param {string} messageId
    * @param {string} emoji
    */
-  removeReaction(messageId, emoji) {
-    const data = loadReactions(this._fingerprint);
-    const emojis = data[messageId] || [];
-    const idx = emojis.indexOf(emoji);
-    if (idx !== -1) {
-      emojis.splice(idx, 1);
-      if (emojis.length === 0) {
-        delete data[messageId];
-      } else {
-        data[messageId] = emojis;
-      }
-      saveReactions(this._fingerprint, data);
-      this.dispatchEvent(new CustomEvent('reaction-changed', { detail: { messageId } }));
-    }
+  async removeReaction(messageId, emoji) {
+    await storage.removeReaction(messageId, emoji);
+    await this.loadReactions(messageId);
+    this.dispatchEvent(new CustomEvent('reaction-changed', { detail: { messageId } }));
   }
 
   /**
    * @private
    * @param {string} id
-   * @returns {DmMessage|null}
+   * @returns {Promise<DmMessage|null>}
    */
-  _getMessage(id) {
-    return loadMessages(this._fingerprint).find((m) => m.id === id) ?? null;
+  async _getMessage(id) {
+    return storage.getMessage(id);
   }
 }

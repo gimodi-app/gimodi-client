@@ -6502,3 +6502,293 @@ input.is-invalid {
 #webcam-viewer-container #self-webcam-preview {
   position: absolute;
 }
+
+/* ── Identity Login Screen ─────────────────────────────────────────────── */
+
+.identity-login {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  background: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.identity-login.hidden {
+  display: none;
+}
+
+.identity-login-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 380px;
+  max-height: 80vh;
+  padding: 32px;
+}
+
+.identity-login-logo {
+  width: 72px;
+  height: 60px;
+  opacity: 0.5;
+}
+
+.identity-login-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.identity-login-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+
+.identity-login-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.identity-login-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.identity-login-item:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+}
+
+.identity-login-item-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.identity-login-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.identity-login-item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.identity-login-item-fp {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.identity-login-item-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.identity-login-item:hover .identity-login-item-actions {
+  opacity: 1;
+}
+
+.identity-login-item-actions button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1;
+  transition: background 0.1s, color 0.1s;
+}
+
+.identity-login-item-actions button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.identity-login-item-actions button.danger:hover {
+  background: rgba(237, 66, 69, 0.15);
+  color: var(--danger, #ed4245);
+}
+
+.identity-login-rename-input {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 1px 4px;
+  outline: none;
+  width: 100%;
+}
+
+.identity-login-create {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.identity-login-create.hidden {
+  display: none;
+}
+
+.identity-login-create input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.identity-login-create input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.identity-login-create-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.identity-login-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.identity-login-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-height: 16px;
+}
+
+/* ── Identity Switcher (sidebar) ───────────────────────────────────────── */
+
+/* Combined identity/status popup menu (self-user button) */
+.self-menu {
+  position: fixed;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 10001;
+  min-width: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.self-menu-header {
+  padding: 8px 10px 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.self-menu-label {
+  padding: 6px 10px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.self-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: background 0.1s;
+}
+
+.self-menu-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.self-menu-item.active {
+  color: var(--text-primary);
+}
+
+.self-menu-item.danger {
+  color: var(--danger, #ed4245);
+}
+
+.self-menu-item.danger:hover {
+  background: rgba(237, 66, 69, 0.1);
+}
+
+.self-menu-identity-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent, #5865f2);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.self-menu-identity-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.self-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 2px;
+}

@@ -1,7 +1,7 @@
-import { customAlert, customConfirm, customPrompt } from '../services/dialogs.js';
-import connectionManager from '../services/connectionManager.js';
-import DmChatProvider from '../services/chat-providers/dm.js';
-import { initChatView, cleanup as cleanupChat } from './chat.js';
+import { customAlert, customConfirm, customPrompt } from '../../services/dialogs.js';
+import connectionManager from '../../services/connectionManager.js';
+import DmChatProvider from '../../services/chat-providers/dm.js';
+import { initChatView, cleanup as cleanupChat } from '../chat/chat.js';
 
 /** @type {import('../services/dm.js').DmService|null} */
 let dmService = null;
@@ -208,7 +208,7 @@ function showConvContextMenu(e, conversationId) {
     if (!confirmed) {
       return;
     }
-    dmService.purgeConversation(conversationId);
+    await dmService.purgeConversation(conversationId);
     if (activeConversationId === conversationId) {
       activeConversationId = null;
     }
@@ -336,14 +336,14 @@ function buildFriendRequestItem(req) {
 /**
  * Renders the conversation list in the left panel.
  */
-function renderConversationList() {
+async function renderConversationList() {
   const list = el('dm-conversation-list');
   if (!list || !dmService) {
     return;
   }
 
   const conversations = dmService.getConversationList();
-  const lastMessages = dmService.getLastMessages();
+  const lastMessages = await dmService.getLastMessages();
 
   list.innerHTML = '';
 
@@ -498,7 +498,7 @@ async function startDirectConversation(fingerprint) {
 /**
  * Initializes the chat component for the active DM conversation.
  */
-function initDmChat() {
+async function initDmChat() {
   const container = el('dm-chat-container');
   const header = el('dm-chat-header');
   const chatMessagesEl = el('dm-chat-messages');
@@ -567,12 +567,11 @@ function initDmChat() {
     dmChatProvider = null;
   }
 
-  const ownNicknameKey = `gimodi:ownNickname:${dmService._fingerprint}`;
   const serverNickname = connectionManager.getCredentials(connectionManager.activeKey)?.nickname;
   if (serverNickname) {
-    localStorage.setItem(ownNicknameKey, serverNickname);
+    window.gimodi.db.setSetting('ownNickname', serverNickname);
   }
-  const ownNickname = serverNickname || localStorage.getItem(ownNicknameKey);
+  const ownNickname = serverNickname || (await window.gimodi.db.getSetting('ownNickname'));
   dmChatProvider = new DmChatProvider(dmService, activeConversationId, name, ownNickname);
   initChatView(null, dmChatProvider, container);
 }

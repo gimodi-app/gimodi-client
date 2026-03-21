@@ -1,41 +1,5 @@
 import connectionManager from './connectionManager.js';
 
-const STORAGE_KEY_PREFIX = 'dm_friends_';
-const IGNORED_KEY_PREFIX = 'dm_ignored_';
-const BLOCKED_KEY_PREFIX = 'dm_blocked_';
-
-/**
- * Returns the localStorage key for the friends list of a given identity fingerprint.
- * @param {string} ownFingerprint
- * @returns {string}
- */
-function storageKey(ownFingerprint) {
-  return `${STORAGE_KEY_PREFIX}${ownFingerprint}`;
-}
-
-/**
- * Loads the friends list for the given fingerprint from localStorage.
- * @param {string} ownFingerprint
- * @returns {Array<{fingerprint: string, nickname: string, publicKey?: string, addedAt: number}>}
- */
-function loadFriends(ownFingerprint) {
-  try {
-    const raw = localStorage.getItem(storageKey(ownFingerprint));
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Persists the friends list for the given fingerprint to localStorage.
- * @param {string} ownFingerprint
- * @param {Array<{fingerprint: string, nickname: string, publicKey?: string, addedAt: number}>} friends
- */
-function saveFriends(ownFingerprint, friends) {
-  localStorage.setItem(storageKey(ownFingerprint), JSON.stringify(friends));
-}
-
 /**
  * Manages the friends list tied to an identity fingerprint.
  * Combines server-backed friend requests with local caching.
@@ -45,6 +9,15 @@ export class FriendsService extends EventTarget {
   constructor(ownFingerprint) {
     super();
     this._fingerprint = ownFingerprint;
+
+    /** @type {Array<{fingerprint: string, nickname: string, public_key?: string, added_at: number}>} */
+    this._friends = [];
+    /** @type {Set<string>} */
+    this._ignored = new Set();
+    /** @type {Set<string>} */
+    this._blocked = new Set();
+    /** @type {boolean} */
+    this._ready = false;
 
     /** @type {Map<string, {requestReceived: Function, accepted: Function, rejected: Function, removed: Function}>} */
     this._listeners = new Map();
@@ -67,6 +40,30 @@ export class FriendsService extends EventTarget {
     for (const [key] of connectionManager.connections) {
       this._bindConnection(key);
     }
+
+    this._loadFromDb();
+  }
+
+  /**
+   * Loads friends, ignored, and blocked lists from the database.
+   * @private
+   */
+  async _loadFromDb() {
+    try {
+      const [friends, ignored, blocked] = await Promise.all([
+        window.gimodi.db.listFriends(),
+        window.gimodi.db.listBlocked('ignored'),
+        window.gimodi.db.listBlocked('blocked'),
+      ]);
+      this._friends = friends || [];
+      this._ignored = new Set((ignored || []).map((b) => b.fingerprint));
+      this._blocked = new Set((blocked || []).map((b) => b.fingerprint));
+    } catch {
+      this._friends = [];
+      this._ignored = new Set();
+      this._blocked = new Set();
+    }
+    this._ready = true;
   }
 
   /**
@@ -81,10 +78,8 @@ export class FriendsService extends EventTarget {
 
     const conn = connectionManager.getConnection(key);
     if (!conn) {
-      console.log('[FriendsService] _bindConnection: no conn for key', key);
       return;
     }
-    console.log('[FriendsService] Binding friend event listeners to connection', key);
 
     const onRequestReceived = (e) => this._handleRequestReceived(e.detail);
     const onAccepted = (e) => this._handleAccepted(e.detail);
@@ -132,8 +127,6 @@ export class FriendsService extends EventTarget {
 
   /**
    * Initialises presence tracking for a newly bound connection.
-   * Reads the initial client list from connectionManager's stored connect data
-   * and attaches server:client-joined / server:client-left listeners.
    * @private
    * @param {string} key
    * @param {object} conn
@@ -209,7 +202,6 @@ export class FriendsService extends EventTarget {
    * @param {object} detail
    */
   _handleRequestReceived(detail) {
-    console.log('[FriendsService] Received friend:request-received', detail);
     if (this._pendingRequests.has(detail.requestId)) {
       return;
     }
@@ -219,12 +211,10 @@ export class FriendsService extends EventTarget {
 
   /**
    * Handles a friend request acceptance notification.
-   * Adds the friend to local storage and dispatches an event.
    * @private
    * @param {object} detail
    */
   _handleAccepted(detail) {
-    console.log('[FriendsService] Received friend:accepted', detail);
     const { friendFingerprint, friendNickname, friendPublicKey, requestId } = detail;
     this._addToLocal(friendFingerprint, friendNickname, friendPublicKey);
     if (requestId) {
@@ -259,11 +249,8 @@ export class FriendsService extends EventTarget {
    * @returns {Promise<object>}
    */
   async sendRequest(recipientFingerprint) {
-    console.log('[FriendsService] Sending friend request to', recipientFingerprint);
     const conn = this._getConnection();
-    const result = await conn.request('friend:request', { recipientFingerprint });
-    console.log('[FriendsService] Friend request result', result);
-    return result;
+    return conn.request('friend:request', { recipientFingerprint });
   }
 
   /**
@@ -294,13 +281,11 @@ export class FriendsService extends EventTarget {
 
   /**
    * Fetches the full friends list and pending requests from the server.
-   * Updates local cache with the server data.
    * @returns {Promise<{friends: object[], pendingIncoming: object[]}>}
    */
   async fetchFriends() {
     const conn = this._getConnection();
-    const result = await conn.request('friend:list', {});
-    return result;
+    return conn.request('friend:list', {});
   }
 
   /**
@@ -327,7 +312,6 @@ export class FriendsService extends EventTarget {
 
   /**
    * Gets the active server connection or throws.
-   * Prefers the active server, then full-mode connections, then observe-mode.
    * @private
    * @returns {object}
    */
@@ -357,54 +341,50 @@ export class FriendsService extends EventTarget {
   }
 
   /**
-   * Adds a friend to local storage if not already present.
+   * Adds a friend to local cache and database if not already present.
    * @private
    * @param {string} fingerprint
    * @param {string} nickname
    * @param {string} [publicKey]
    */
   _addToLocal(fingerprint, nickname, publicKey) {
-    const friends = loadFriends(this._fingerprint);
-    const existing = friends.find((f) => f.fingerprint === fingerprint);
+    const existing = this._friends.find((f) => f.fingerprint === fingerprint);
     if (existing) {
-      if (nickname) {
-        existing.nickname = nickname;
-      }
-      if (publicKey) {
-        existing.publicKey = publicKey;
-      }
-      saveFriends(this._fingerprint, friends);
+      if (nickname) existing.nickname = nickname;
+      if (publicKey) existing.public_key = publicKey;
+      window.gimodi.db.updateFriend(fingerprint, { nickname: existing.nickname, public_key: existing.public_key });
       return;
     }
-    friends.push({ fingerprint, nickname, publicKey: publicKey || null, addedAt: Date.now() });
-    saveFriends(this._fingerprint, friends);
+    const friend = { fingerprint, nickname, public_key: publicKey || null, added_at: Date.now() };
+    this._friends.push(friend);
+    window.gimodi.db.addFriend(friend);
   }
 
   /**
-   * Removes a friend from local storage.
+   * Removes a friend from local cache and database.
    * @private
    * @param {string} fingerprint
    */
   _removeFromLocal(fingerprint) {
-    const friends = loadFriends(this._fingerprint).filter((f) => f.fingerprint !== fingerprint);
-    saveFriends(this._fingerprint, friends);
+    this._friends = this._friends.filter((f) => f.fingerprint !== fingerprint);
+    window.gimodi.db.removeFriend(fingerprint);
   }
 
   /**
    * Returns all friends from local cache.
-   * @returns {Array<{fingerprint: string, nickname: string, publicKey?: string, addedAt: number}>}
+   * @returns {Array<{fingerprint: string, nickname: string, public_key?: string, added_at: number}>}
    */
   getFriends() {
-    return loadFriends(this._fingerprint);
+    return this._friends;
   }
 
   /**
    * Returns a single friend by fingerprint, or null if not found.
    * @param {string} fingerprint
-   * @returns {{fingerprint: string, nickname: string, addedAt: number}|null}
+   * @returns {{fingerprint: string, nickname: string, added_at: number}|null}
    */
   getFriend(fingerprint) {
-    return loadFriends(this._fingerprint).find((f) => f.fingerprint === fingerprint) ?? null;
+    return this._friends.find((f) => f.fingerprint === fingerprint) ?? null;
   }
 
   /**
@@ -422,11 +402,10 @@ export class FriendsService extends EventTarget {
    * @param {string} nickname
    */
   renameFriend(fingerprint, nickname) {
-    const friends = loadFriends(this._fingerprint);
-    const friend = friends.find((f) => f.fingerprint === fingerprint);
+    const friend = this._friends.find((f) => f.fingerprint === fingerprint);
     if (friend) {
       friend.nickname = nickname;
-      saveFriends(this._fingerprint, friends);
+      window.gimodi.db.updateFriend(fingerprint, { nickname });
     }
   }
 
@@ -444,7 +423,7 @@ export class FriendsService extends EventTarget {
    * @returns {boolean}
    */
   isFriend(fingerprint) {
-    return loadFriends(this._fingerprint).some((f) => f.fingerprint === fingerprint);
+    return this._friends.some((f) => f.fingerprint === fingerprint);
   }
 
   /**
@@ -452,16 +431,9 @@ export class FriendsService extends EventTarget {
    * @param {string} fingerprint
    */
   ignoreRequest(fingerprint) {
-    try {
-      const key = `${IGNORED_KEY_PREFIX}${this._fingerprint}`;
-      const raw = localStorage.getItem(key);
-      const ignored = raw ? JSON.parse(raw) : [];
-      if (!ignored.includes(fingerprint)) {
-        ignored.push(fingerprint);
-        localStorage.setItem(key, JSON.stringify(ignored));
-      }
-    } catch {
-      /* ignore */
+    if (!this._ignored.has(fingerprint)) {
+      this._ignored.add(fingerprint);
+      window.gimodi.db.addBlocked(fingerprint, 'ignored');
     }
   }
 
@@ -471,14 +443,7 @@ export class FriendsService extends EventTarget {
    * @returns {boolean}
    */
   isIgnored(fingerprint) {
-    try {
-      const key = `${IGNORED_KEY_PREFIX}${this._fingerprint}`;
-      const raw = localStorage.getItem(key);
-      const ignored = raw ? JSON.parse(raw) : [];
-      return ignored.includes(fingerprint);
-    } catch {
-      return false;
-    }
+    return this._ignored.has(fingerprint);
   }
 
   /**
@@ -487,16 +452,9 @@ export class FriendsService extends EventTarget {
    * @param {string} fingerprint
    */
   blockContact(fingerprint) {
-    try {
-      const key = `${BLOCKED_KEY_PREFIX}${this._fingerprint}`;
-      const raw = localStorage.getItem(key);
-      const blocked = raw ? JSON.parse(raw) : [];
-      if (!blocked.includes(fingerprint)) {
-        blocked.push(fingerprint);
-        localStorage.setItem(key, JSON.stringify(blocked));
-      }
-    } catch {
-      /* ignore */
+    if (!this._blocked.has(fingerprint)) {
+      this._blocked.add(fingerprint);
+      window.gimodi.db.addBlocked(fingerprint, 'blocked');
     }
   }
 
@@ -505,14 +463,8 @@ export class FriendsService extends EventTarget {
    * @param {string} fingerprint
    */
   unblockContact(fingerprint) {
-    try {
-      const key = `${BLOCKED_KEY_PREFIX}${this._fingerprint}`;
-      const raw = localStorage.getItem(key);
-      const blocked = (raw ? JSON.parse(raw) : []).filter((fp) => fp !== fingerprint);
-      localStorage.setItem(key, JSON.stringify(blocked));
-    } catch {
-      /* ignore */
-    }
+    this._blocked.delete(fingerprint);
+    window.gimodi.db.removeBlocked(fingerprint, 'blocked');
   }
 
   /**
@@ -521,13 +473,6 @@ export class FriendsService extends EventTarget {
    * @returns {boolean}
    */
   isBlocked(fingerprint) {
-    try {
-      const key = `${BLOCKED_KEY_PREFIX}${this._fingerprint}`;
-      const raw = localStorage.getItem(key);
-      const blocked = raw ? JSON.parse(raw) : [];
-      return blocked.includes(fingerprint);
-    } catch {
-      return false;
-    }
+    return this._blocked.has(fingerprint);
   }
 }

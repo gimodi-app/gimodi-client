@@ -67,9 +67,9 @@ class DmChatProvider {
     this._boundHandlers.set('message-updated', onUpdated);
     this._boundHandlers.set('conversation-purged', onPurged);
 
-    const onReactionChanged = (e) => {
+    const onReactionChanged = async (e) => {
       const { messageId } = e.detail;
-      const reactions = this._dmService.getReactions(messageId);
+      const reactions = await this._dmService.loadReactions(messageId);
       this.events.dispatchEvent(new CustomEvent('reaction-update', { detail: { messageId, reactions } }));
     };
 
@@ -142,7 +142,7 @@ class DmChatProvider {
   async sendMessage(content, replyTo = null) {
     let replyToObj = null;
     if (replyTo) {
-      const msgs = this._dmService.getConversation(this._conversationId);
+      const msgs = await this._dmService.getConversation(this._conversationId);
       const orig = msgs.find((m) => m.id === replyTo);
       if (orig) {
         replyToObj = {
@@ -164,9 +164,10 @@ class DmChatProvider {
    * @returns {Promise<{messages: object[]}>}
    */
   async fetchHistory(_channelId, _before, _limit) {
-    const messages = this._dmService.getConversation(this._conversationId);
+    const messages = await this._dmService.getConversation(this._conversationId);
     for (const m of messages) {
       this._seenMessageIds.add(m.id);
+      await this._dmService.loadReactions(m.id);
     }
     const formatted = messages.map((m) => this._toMessageFormat(m));
 
@@ -190,7 +191,7 @@ class DmChatProvider {
 
       await this._dmService.fetchHistory(this._conversationId, serverKey);
 
-      const messages = this._dmService.getConversation(this._conversationId);
+      const messages = await this._dmService.getConversation(this._conversationId);
       for (const m of messages) {
         if (!this._seenMessageIds.has(m.id)) {
           this._seenMessageIds.add(m.id);

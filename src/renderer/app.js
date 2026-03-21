@@ -2,7 +2,7 @@ import serverService from './services/server.js';
 import connectionManager, { connKey } from './services/connectionManager.js';
 import voiceService from './services/voice.js';
 import notificationService from './services/notifications.js';
-import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, refreshIdentitySelects, removeServerByIdentity } from './views/connect.js';
+import { initConnectView, applyTheme, initSidebar, setActiveServer, clearActiveServer, renderSidebar as rerenderSidebar, removeServerByIdentity } from './views/connect.js';
 import {
   initServerView,
   cleanup as cleanupServer,
@@ -17,7 +17,7 @@ import {
   saveState as saveServerState,
   restoreState as restoreServerState,
   syncLocalVoiceIndicators,
-} from './views/server.js';
+} from './views/server/server.js';
 import {
   initChatView,
   cleanup as cleanupChat,
@@ -34,15 +34,18 @@ import {
   initUnreadState,
   getViewingChannelId,
   isServerChatActive,
-} from './views/chat.js';
-import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoiceServerName, syncVoiceControlsUI } from './views/voice.js';
+} from './views/chat/chat.js';
+import { initVoiceView, cleanup as cleanupVoice, setVoiceControlsVisible, setVoiceServerName, syncVoiceControlsUI } from './views/voice/voice.js';
 import { setTimeFormat } from './services/timeFormat.js';
 import { customAlert, customConfirm } from './services/dialogs.js';
 import { initSidePanel } from './views/side-panel.js';
-import { initDmView, updateDmServices, refreshDmView, openDmConversation } from './views/dm.js';
+import { initDmView, updateDmServices, refreshDmView, openDmConversation } from './views/direct-messages/dm.js';
 import { DmService } from './services/dm.js';
 import { FriendsService } from './services/friends.js';
 import ServerChatProvider from './services/chat-providers/server.js';
+import { initSettingsModal, openSettings, closeSettings, stopMicLevelMeter } from './views/settings/settings-modal.js';
+import { initIdentityLogin, showIdentityLogin, hideIdentityLogin } from './views/identity-login.js';
+import { initIdentitySwitcher, setActiveIdentity } from './views/identity-switcher.js';
 
 const log = (...args) => console.log('[app]', ...args);
 
@@ -221,123 +224,15 @@ const btnCancelCreatePlaceholder = document.getElementById('btn-cancel-create-pl
 const newPlaceholderName = document.getElementById('new-placeholder-name');
 const newPlaceholderParentId = document.getElementById('new-placeholder-parent-id');
 
-// Settings modal elements
-const modalSettings = document.getElementById('modal-settings');
-const btnSettings = document.getElementById('btn-settings');
-const btnCloseSettings = document.getElementById('btn-close-settings');
-// Tab nav
-const settingsNavItems = document.querySelectorAll('.settings-nav-item');
-const settingsPanels = document.querySelectorAll('.settings-panel');
-// General tab
-const themeGrid = document.getElementById('theme-grid');
-const checkboxDevMode = document.getElementById('checkbox-dev-mode');
-const selectNotificationMode = document.getElementById('select-notification-mode');
-const checkboxUpdateNotifications = document.getElementById('checkbox-update-notifications');
-const selectUpdateChannel = document.getElementById('select-update-channel');
-const btnCheckUpdates = document.getElementById('btn-check-updates');
-// Audio/Video tab
-const selectMic = document.getElementById('select-mic');
-const selectCamera = document.getElementById('select-camera');
-const selectSpeaker = document.getElementById('select-speaker');
-const rangeVoiceActivation = document.getElementById('range-voice-activation');
-const voiceActivationValue = document.getElementById('voice-activation-value');
-const rangeFeedbackVolume = document.getElementById('range-feedback-volume');
-const feedbackVolumeValue = document.getElementById('feedback-volume-value');
-const checkboxNoiseSuppression = document.getElementById('checkbox-noise-suppression');
-const checkboxPushToTalk = document.getElementById('checkbox-push-to-talk');
-const cameraPreviewVideo = document.getElementById('camera-preview-video');
-const cameraPreviewPlaceholder = document.getElementById('camera-preview-placeholder');
-const cameraPreviewContainer = document.getElementById('camera-preview-container');
-const btnTestCamera = document.getElementById('btn-test-camera');
-const btnTestMic = document.getElementById('btn-test-mic');
-const inputPTTKey = document.getElementById('input-ptt-key');
-const pttKeyConfig = document.getElementById('ptt-key-config');
-const micLevelFill = document.getElementById('mic-level-fill');
-let micLevelRAF = null;
-// Identities tab
-const identityStatus = document.getElementById('identity-status');
-const identityCreateForm = document.getElementById('identity-create-form');
-const inputIdentityName = document.getElementById('input-identity-name');
-const btnIdentityCreateConfirm = document.getElementById('btn-identity-create-confirm');
-const btnIdentityCreateCancel = document.getElementById('btn-identity-create-cancel');
-const settingsIdentityList = document.getElementById('settings-identity-list');
-const btnIdentityNew = document.getElementById('btn-identity-new');
-const btnIdentityImport = document.getElementById('btn-identity-import');
-
-const THEMES = [
-  { id: 'default', name: 'Deep Ocean', bg: '#0f111a', secondary: '#0f111a', accent: '#82aaff' },
-  { id: 'classic-dark', name: 'Classic Dark', bg: '#111111', secondary: '#181818', accent: '#ffffff' },
-  { id: 'deeper-blue', name: 'Deeper Blue', bg: '#060d18', secondary: '#0a1525', accent: '#3b82f6' },
-  { id: 'deep-ocean', name: 'Space', bg: '#0a1628', secondary: '#0f1f3a', accent: '#4a9eff' },
-  { id: 'midnight-purple', name: 'Midnight Purple', bg: '#150f1e', secondary: '#1c1528', accent: '#b388ff' },
-  { id: 'forest', name: 'Forest', bg: '#0e1510', secondary: '#141e16', accent: '#66bb6a' },
-  { id: 'light', name: 'Light', bg: '#f5f5f5', secondary: '#ffffff', accent: '#1a1a1a' },
-];
-
-let _micMeterStream = null;
-let _micMeterCtx = null;
-let _micMeterAnalyser = null;
-
-async function startMicLevelMeter() {
-  stopMicLevelMeter();
-
-  // Open an independent mic stream for monitoring
-  try {
-    const micId = selectMic.value || undefined;
-    const constraints = { audio: micId ? { deviceId: { exact: micId } } : true };
-    _micMeterStream = await navigator.mediaDevices.getUserMedia(constraints);
-
-    _micMeterCtx = new AudioContext();
-    const source = _micMeterCtx.createMediaStreamSource(_micMeterStream);
-    _micMeterAnalyser = _micMeterCtx.createAnalyser();
-    _micMeterAnalyser.fftSize = 256;
-    source.connect(_micMeterAnalyser);
-  } catch (e) {
-    console.warn('[app] Mic level meter: could not open mic stream:', e);
-  }
-
-  function update() {
-    let pct = 0;
-    if (_micMeterAnalyser) {
-      const data = new Uint8Array(_micMeterAnalyser.frequencyBinCount);
-      _micMeterAnalyser.getByteFrequencyData(data);
-      pct = Math.min(100, data.reduce((a, b) => a + b, 0) / data.length);
-    }
-    micLevelFill.style.width = pct + '%';
-    const threshold = voiceService.voiceActivationLevel;
-    if (threshold > 0) {
-      micLevelFill.classList.toggle('below-threshold', pct < threshold);
-    } else {
-      micLevelFill.classList.remove('below-threshold');
-    }
-    micLevelRAF = requestAnimationFrame(update);
-  }
-  micLevelRAF = requestAnimationFrame(update);
-}
-
-function stopMicLevelMeter() {
-  if (micLevelRAF) {
-    cancelAnimationFrame(micLevelRAF);
-    micLevelRAF = null;
-  }
-  if (_micMeterStream) {
-    _micMeterStream.getTracks().forEach((t) => t.stop());
-    _micMeterStream = null;
-  }
-  if (_micMeterCtx) {
-    _micMeterCtx.close().catch(() => {});
-    _micMeterCtx = null;
-    _micMeterAnalyser = null;
-  }
-  micLevelFill.style.width = '0%';
-  micLevelFill.classList.remove('below-threshold');
-}
 
 // --- Settings persistence ---
 let appSettings = {};
 
 async function loadSettings() {
-  appSettings = (await window.gimodi.settings.load()) || {};
+  const raw = await window.gimodi.db.getAppSetting('appSettings');
+  const loaded = raw ? JSON.parse(raw) : {};
+  Object.keys(appSettings).forEach((k) => { if (!(k in loaded)) delete appSettings[k]; });
+  Object.assign(appSettings, loaded);
   notificationService.updateSettings(appSettings);
   if (appSettings.voiceActivationLevel !== null && appSettings.voiceActivationLevel !== undefined) {
     voiceService.setVoiceActivationLevel(appSettings.voiceActivationLevel);
@@ -385,7 +280,7 @@ async function loadSettings() {
 }
 
 function saveSettings() {
-  window.gimodi.settings.save(appSettings);
+  window.gimodi.db.setAppSetting('appSettings', JSON.stringify(appSettings));
   notificationService.updateSettings(appSettings);
 }
 
@@ -406,16 +301,82 @@ voiceService.addEventListener('user-volume-changed', (e) => {
 // Init connect view and sidebar
 initConnectView();
 initSidebar();
-loadSettings();
+loadSettings().then(() => {
+  initSettingsModal({ appSettings, saveSettings });
+});
 
-// Auto-connect to all saved servers on startup
-(async () => {
-  const servers = (await window.gimodi.servers.list()) || [];
-  const identities = (await window.gimodi.identity.loadAll()) || [];
+/**
+ * Starts the main app flow after an identity is active.
+ * Initializes DM services and auto-connects to saved servers.
+ * @param {{ fingerprint: string, name: string, public_key: string }} identity
+ */
+async function startApp(identity) {
+  setActiveIdentity(identity);
+  await ensureDmServices(identity.fingerprint);
+  rerenderSidebar();
+  const servers = (await window.gimodi.db.listServersGrouped()) || [];
   connectionManager.connectAll(
     servers.flatMap((s) => (s.type === 'group' ? s.servers : [s])),
-    identities,
+    identity.public_key || undefined,
   );
+}
+
+/**
+ * Tears down all active connections and services before switching identity or logging out.
+ */
+function teardownApp() {
+  voiceService.cleanup();
+  connectionManager.clearVoiceServer();
+  connectionManager.disconnectAll();
+  dmService = null;
+  friendsService = null;
+  dmViewInitialized = false;
+  setActiveIdentity(null);
+  clearActiveServer();
+  showView('view-connect');
+  rerenderSidebar();
+}
+
+/**
+ * Switches to a different identity: tear down, switch DB, rebuild.
+ * @param {string} fingerprint
+ */
+async function switchIdentity(fingerprint) {
+  teardownApp();
+  const identity = await window.gimodi.db.switchIdentity(fingerprint);
+  await startApp(identity);
+}
+
+/**
+ * Logs out the current identity: tear down, clear DB, show login.
+ */
+async function logoutIdentity() {
+  teardownApp();
+  await window.gimodi.db.logout();
+  showIdentityLogin();
+}
+
+// Identity login screen — shown when no active identity
+initIdentityLogin((identity) => {
+  log('Identity selected:', identity.name);
+  startApp(identity);
+});
+
+// Identity switcher in sidebar — switch or logout
+initIdentitySwitcher({
+  onSwitch: switchIdentity,
+  onLogout: logoutIdentity,
+});
+
+// Check for active identity on startup
+(async () => {
+  const active = await window.gimodi.db.getActiveIdentity();
+  if (active) {
+    hideIdentityLogin();
+    startApp(active);
+  } else {
+    showIdentityLogin();
+  }
 })();
 
 // Menu: Disconnect (leave voice on the currently viewed server)
@@ -585,7 +546,9 @@ window.addEventListener('gimodi:remove-server', async (e) => {
     conn.stopReconnect();
     disconnectServer(key);
   }
-  await window.gimodi.servers.remove(server.address, server.nickname, server.identityFingerprint);
+  if (server.id) {
+    await window.gimodi.db.removeServer(server.id);
+  }
   removeServerByIdentity(server.address, server.nickname, server.identityFingerprint);
   rerenderSidebar();
 });
@@ -1034,445 +997,6 @@ btnCancelCreatePlaceholder.addEventListener('click', () => {
   newPlaceholderParentId.value = '';
 });
 
-// --- Settings modal ---
-
-function renderThemeGrid() {
-  themeGrid.innerHTML = '';
-  const current = document.documentElement.getAttribute('data-theme') || 'default';
-  for (const theme of THEMES) {
-    const card = document.createElement('div');
-    card.className = 'theme-card' + (theme.id === current ? ' active' : '');
-    card.innerHTML = `
-      <div class="theme-card-preview" style="background: ${theme.bg}">
-        <span class="preview-dot" style="background: ${theme.accent}"></span>
-        <span class="preview-line" style="background: ${theme.secondary}"></span>
-        <span class="preview-line" style="background: ${theme.accent}; flex: 0.5; opacity: 0.5"></span>
-      </div>
-      <div class="theme-card-name">${theme.name}</div>
-    `;
-    card.addEventListener('click', () => {
-      applyTheme(theme.id);
-      appSettings.theme = theme.id;
-      saveSettings();
-      renderThemeGrid();
-    });
-    themeGrid.appendChild(card);
-  }
-}
-
-function switchSettingsTab(tab) {
-  settingsNavItems.forEach((t) => t.classList.toggle('active', t.dataset.tab === tab));
-  settingsPanels.forEach((p) => p.classList.toggle('active', p.id === `settings-panel-${tab}`));
-  if (tab === 'audio') {
-    populateDeviceSelectors();
-    startMicLevelMeter();
-  } else {
-    stopMicLevelMeter();
-    stopCameraPreview();
-  }
-  if (tab === 'appearance') {
-    renderThemeGrid();
-  }
-  if (tab === 'identities') {
-    loadSettingsIdentities();
-  }
-}
-
-settingsNavItems.forEach((t) => {
-  t.addEventListener('click', () => switchSettingsTab(t.dataset.tab));
-});
-
-async function openSettings(tab = 'audio') {
-  // Populate all values before showing
-  document.getElementById('select-time-format').value = appSettings.timeFormat || 'locale';
-  document.getElementById('select-chat-display').value = appSettings.chatDisplay || 'default';
-  checkboxDevMode.checked = !!appSettings.devMode;
-  checkboxUpdateNotifications.checked = appSettings.updateNotifications !== false;
-  selectUpdateChannel.value = appSettings.updateChannel || 'stable';
-  selectNotificationMode.value = appSettings.notificationMode || 'mentions';
-  document.getElementById('checkbox-media-embed-privacy').checked = appSettings.mediaEmbedPrivacy !== false;
-
-  rangeVoiceActivation.value = voiceService.voiceActivationLevel;
-  voiceActivationValue.textContent = voiceService.voiceActivationLevel === 0 ? 'Off' : voiceService.voiceActivationLevel;
-  const fbVol = appSettings.feedbackVolume ?? 10;
-  rangeFeedbackVolume.value = fbVol;
-  feedbackVolumeValue.textContent = fbVol;
-  checkboxNoiseSuppression.checked = !!appSettings.noiseSuppression;
-  checkboxPushToTalk.checked = !!appSettings.pushToTalkEnabled;
-  inputPTTKey.value = appSettings.pushToTalkKey || ' ';
-  pttKeyConfig.style.display = checkboxPushToTalk.checked ? '' : 'none';
-
-  switchSettingsTab(tab);
-  modalSettings.classList.remove('hidden');
-}
-
-function closeSettings() {
-  modalSettings.classList.add('hidden');
-  stopMicLevelMeter();
-  stopCameraPreview();
-  stopTestTone();
-  stopMicLoopback();
-  identityCreateForm.classList.add('hidden');
-  inputIdentityName.value = '';
-  identityStatus.textContent = '';
-}
-
-btnSettings.addEventListener('click', () => openSettings('audio'));
-
-btnCloseSettings.addEventListener('click', closeSettings);
-
-modalSettings.addEventListener('click', (e) => {
-  if (e.target === modalSettings) {
-    closeSettings();
-  }
-});
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !modalSettings.classList.contains('hidden')) {
-    closeSettings();
-  }
-});
-
-// General tab handlers
-document.getElementById('select-time-format').addEventListener('change', (e) => {
-  const fmt = e.target.value;
-  setTimeFormat(fmt);
-  appSettings.timeFormat = fmt;
-  saveSettings();
-  refreshTimestamps();
-});
-
-document.getElementById('select-chat-display').addEventListener('change', (e) => {
-  const mode = e.target.value;
-  setChatDisplayMode(mode);
-  appSettings.chatDisplay = mode;
-  saveSettings();
-});
-
-checkboxDevMode.addEventListener('change', () => {
-  appSettings.devMode = checkboxDevMode.checked;
-  saveSettings();
-  window.gimodi.setDevMode(checkboxDevMode.checked);
-});
-
-checkboxUpdateNotifications.addEventListener('change', () => {
-  appSettings.updateNotifications = checkboxUpdateNotifications.checked;
-  saveSettings();
-  window.gimodi.setUpdateNotifications(checkboxUpdateNotifications.checked);
-});
-
-selectUpdateChannel.addEventListener('change', () => {
-  appSettings.updateChannel = selectUpdateChannel.value;
-  saveSettings();
-  window.gimodi.setUpdateChannel(selectUpdateChannel.value);
-});
-
-btnCheckUpdates.addEventListener('click', () => {
-  window.gimodi.menuAction('check-updates');
-});
-
-selectNotificationMode.addEventListener('change', () => {
-  appSettings.notificationMode = selectNotificationMode.value;
-  saveSettings();
-  window.gimodi.setNotificationMode(selectNotificationMode.value);
-});
-
-document.getElementById('checkbox-media-embed-privacy').addEventListener('change', (e) => {
-  appSettings.mediaEmbedPrivacy = e.target.checked;
-  setMediaEmbedPrivacy(e.target.checked);
-  saveSettings();
-});
-
-window.gimodi.onNotificationModeChanged((mode) => {
-  appSettings.notificationMode = mode;
-  notificationService.updateSettings(appSettings);
-  selectNotificationMode.value = mode;
-});
-
-// Identities tab handlers
-async function loadSettingsIdentities() {
-  identityStatus.textContent = '';
-  settingsIdentityList.innerHTML = '';
-  const identities = (await window.gimodi.identity.loadAll()) || [];
-  if (identities.length === 0) {
-    identityStatus.textContent = 'No identities yet. Create one to get started.';
-    return;
-  }
-  for (const id of identities) {
-    const item = document.createElement('div');
-    item.className = 'settings-identity-item';
-    const info = document.createElement('div');
-    info.className = 'identity-info';
-    const name = document.createElement('div');
-    name.className = 'identity-name';
-    const nameText = document.createElement('span');
-    nameText.className = 'identity-name-text';
-    nameText.textContent = id.name;
-    name.appendChild(nameText);
-    if (id.isDefault) {
-      const badge = document.createElement('span');
-      badge.className = 'identity-default-badge';
-      badge.textContent = ' ✓ Default';
-      name.appendChild(badge);
-    }
-    nameText.addEventListener('click', () => {
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.value = id.name;
-      input.maxLength = 64;
-      input.className = 'identity-rename-input';
-      nameText.replaceWith(input);
-      input.focus();
-      input.select();
-      let done = false;
-      async function finish(save) {
-        if (done) {
-          return;
-        }
-        done = true;
-        const newName = input.value.trim();
-        if (save && newName && newName !== id.name) {
-          try {
-            await window.gimodi.identity.rename(id.fingerprint, newName);
-            refreshIdentitySelects();
-          } catch (err) {
-            identityStatus.textContent = err.message || 'Rename failed.';
-          }
-        }
-        loadSettingsIdentities();
-      }
-      input.addEventListener('blur', () => finish(true));
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          input.blur();
-        }
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          finish(false);
-        }
-      });
-    });
-    const fp = document.createElement('div');
-    fp.className = 'identity-fingerprint';
-    fp.textContent = id.fingerprint;
-    info.appendChild(name);
-    info.appendChild(fp);
-    const actions = document.createElement('div');
-    actions.className = 'identity-actions';
-    if (!id.isDefault) {
-      const btnDefault = document.createElement('button');
-      btnDefault.className = 'btn-secondary';
-      btnDefault.textContent = 'Set Default';
-      btnDefault.addEventListener('click', async () => {
-        await window.gimodi.identity.setDefault(id.fingerprint);
-        loadSettingsIdentities();
-      });
-      actions.appendChild(btnDefault);
-    }
-    const btnExport = document.createElement('button');
-    btnExport.className = 'btn-secondary';
-    btnExport.textContent = 'Export';
-    btnExport.addEventListener('click', async () => {
-      await window.gimodi.identity.export(id.fingerprint);
-    });
-    actions.appendChild(btnExport);
-    const btnDelete = document.createElement('button');
-    btnDelete.className = 'btn-danger';
-    btnDelete.textContent = 'Delete';
-    btnDelete.addEventListener('click', async () => {
-      if (!(await customConfirm(`Delete identity "${id.name}"? This cannot be undone.`))) {
-        return;
-      }
-      await window.gimodi.identity.delete(id.fingerprint);
-      loadSettingsIdentities();
-    });
-    actions.appendChild(btnDelete);
-    item.appendChild(info);
-    item.appendChild(actions);
-    settingsIdentityList.appendChild(item);
-  }
-}
-
-btnIdentityNew.addEventListener('click', () => {
-  identityCreateForm.classList.remove('hidden');
-  inputIdentityName.focus();
-});
-
-btnIdentityCreateCancel.addEventListener('click', () => {
-  identityCreateForm.classList.add('hidden');
-  inputIdentityName.value = '';
-});
-
-btnIdentityCreateConfirm.addEventListener('click', async () => {
-  const name = inputIdentityName.value.trim();
-  if (!name) {
-    return;
-  }
-  btnIdentityCreateConfirm.disabled = true;
-  identityStatus.textContent = 'Creating...';
-  try {
-    await window.gimodi.identity.create(name);
-    identityCreateForm.classList.add('hidden');
-    inputIdentityName.value = '';
-    identityStatus.textContent = '';
-    loadSettingsIdentities();
-  } catch (e) {
-    identityStatus.textContent = `Error: ${e.message}`;
-  } finally {
-    btnIdentityCreateConfirm.disabled = false;
-  }
-});
-
-inputIdentityName.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    btnIdentityCreateConfirm.click();
-  }
-  if (e.key === 'Escape') {
-    btnIdentityCreateCancel.click();
-  }
-});
-
-btnIdentityImport.addEventListener('click', async () => {
-  identityStatus.textContent = 'Importing...';
-  try {
-    const result = await window.gimodi.identity.import();
-    if (!result.canceled) {
-      identityStatus.textContent = `Imported: ${result.identity.name}`;
-      loadSettingsIdentities();
-    } else {
-      identityStatus.textContent = '';
-    }
-  } catch (e) {
-    identityStatus.textContent = `Error: ${e.message}`;
-  }
-});
-
-selectMic.addEventListener('change', () => {
-  voiceService.setMicrophone(selectMic.value || null);
-  appSettings.micId = selectMic.value || null;
-  saveSettings();
-  // Restart mic level meter with the newly selected device
-  startMicLevelMeter();
-  // If mic loopback is active, restart with newly selected device
-  if (_micLoopbackStream) {
-    startMicLoopback();
-  }
-});
-
-selectCamera.addEventListener('change', () => {
-  voiceService.setCamera(selectCamera.value || null);
-  appSettings.cameraId = selectCamera.value || null;
-  saveSettings();
-  // If preview is active, restart with newly selected device
-  if (_cameraPreviewStream) {
-    startCameraPreview();
-  }
-});
-
-selectSpeaker.addEventListener('change', () => {
-  voiceService.setSpeaker(selectSpeaker.value || null);
-  appSettings.speakerId = selectSpeaker.value || null;
-  saveSettings();
-});
-
-// --- Speaker test tone ---
-
-const btnTestSpeaker = document.getElementById('btn-test-speaker');
-let _testToneAudio = null;
-
-btnTestSpeaker.addEventListener('click', async () => {
-  // If already playing, stop it
-  if (_testToneAudio) {
-    stopTestTone();
-    return;
-  }
-
-  try {
-    _testToneAudio = new Audio('../../assets/test-tone.wav');
-    _testToneAudio.volume = 0.1;
-
-    // Route to selected speaker if supported
-    const speakerId = selectSpeaker.value;
-    if (speakerId && typeof _testToneAudio.setSinkId === 'function') {
-      await _testToneAudio.setSinkId(speakerId);
-    }
-
-    btnTestSpeaker.classList.add('playing');
-    btnTestSpeaker.innerHTML = '<i class="bi bi-stop-fill"></i> Stop';
-
-    _testToneAudio.addEventListener('ended', stopTestTone);
-    _testToneAudio.addEventListener('error', (e) => {
-      console.error('[app] Test tone error:', e);
-      stopTestTone();
-    });
-
-    await _testToneAudio.play();
-  } catch (e) {
-    console.error('[app] Failed to play test tone:', e);
-    stopTestTone();
-  }
-});
-
-function stopTestTone() {
-  if (_testToneAudio) {
-    _testToneAudio.pause();
-    _testToneAudio.currentTime = 0;
-    _testToneAudio.removeEventListener('ended', stopTestTone);
-    _testToneAudio = null;
-  }
-  btnTestSpeaker.classList.remove('playing');
-  btnTestSpeaker.innerHTML = '<i class="bi bi-volume-up"></i> Test';
-}
-
-rangeVoiceActivation.addEventListener('input', () => {
-  const level = parseInt(rangeVoiceActivation.value, 10);
-  voiceActivationValue.textContent = level === 0 ? 'Off' : level;
-  voiceService.setVoiceActivationLevel(level);
-  appSettings.voiceActivationLevel = level;
-  saveSettings();
-});
-
-rangeFeedbackVolume.addEventListener('input', () => {
-  const vol = parseInt(rangeFeedbackVolume.value, 10);
-  feedbackVolumeValue.textContent = vol;
-  setFeedbackVolume(vol / 100);
-  appSettings.feedbackVolume = vol;
-  saveSettings();
-});
-
-checkboxNoiseSuppression.addEventListener('change', () => {
-  const enabled = checkboxNoiseSuppression.checked;
-  voiceService.setNoiseSuppression(enabled);
-  appSettings.noiseSuppression = enabled;
-  saveSettings();
-});
-
-checkboxPushToTalk.addEventListener('change', () => {
-  const enabled = checkboxPushToTalk.checked;
-  const key = inputPTTKey.value || ' ';
-  voiceService.setPushToTalk(enabled, key);
-  appSettings.pushToTalkEnabled = enabled;
-  appSettings.pushToTalkKey = key;
-  pttKeyConfig.style.display = enabled ? '' : 'none';
-  saveSettings();
-});
-
-inputPTTKey.addEventListener('keydown', (e) => {
-  e.preventDefault();
-  const key = e.key;
-  inputPTTKey.value = key;
-  voiceService.setPushToTalk(checkboxPushToTalk.checked, key);
-  appSettings.pushToTalkKey = key;
-  saveSettings();
-});
-
-selectNotificationMode.addEventListener('change', () => {
-  appSettings.notificationMode = selectNotificationMode.value;
-  saveSettings();
-  window.gimodi.setNotificationMode(selectNotificationMode.value);
-});
-
 // --- Notification click handler ---
 
 window.gimodi.onNotificationClicked((action) => {
@@ -1581,7 +1105,7 @@ connectionManager.addEventListener('background-connected', (e) => {
 
   if (data.serverName && data.serverName !== server.name) {
     server.name = data.serverName;
-    window.gimodi.servers.add(server);
+    window.gimodi.db.addServer(server);
   }
 
   const conn = connectionManager.getConnection(key);
@@ -1619,17 +1143,8 @@ window.gimodi.onConnectServer(async (server) => {
       return;
     }
 
-    // Get identity - use stored fingerprint if available, otherwise default
-    let publicKey;
-    if (server.identityFingerprint) {
-      const allIdentities = await window.gimodi.identity.loadAll();
-      const match = allIdentities.find((i) => i.fingerprint === server.identityFingerprint);
-      publicKey = match ? match.publicKeyArmored : undefined;
-    }
-    if (!publicKey) {
-      const defaultIdentity = await window.gimodi.identity.getDefault();
-      publicKey = defaultIdentity ? defaultIdentity.publicKeyArmored : undefined;
-    }
+    const activeIdentity = await window.gimodi.db.getActiveIdentity();
+    const publicKey = activeIdentity?.public_key || undefined;
 
     const data = await connectionManager.connect(key, server.address, server.nickname, server.password || undefined, publicKey);
 
@@ -1641,218 +1156,6 @@ window.gimodi.onConnectServer(async (server) => {
   }
 });
 
-// --- Microphone loopback test ---
-
-let _micLoopbackStream = null;
-let _micLoopbackCtx = null;
-let _micLoopbackAudio = null;
-let _micLoopbackGateRAF = null;
-
-btnTestMic.addEventListener('click', () => {
-  if (_micLoopbackStream) {
-    stopMicLoopback();
-  } else {
-    startMicLoopback();
-  }
-});
-
-async function startMicLoopback() {
-  stopMicLoopback();
-
-  try {
-    const micId = selectMic.value || undefined;
-    const constraints = { audio: micId ? { deviceId: { exact: micId } } : true };
-    _micLoopbackStream = await navigator.mediaDevices.getUserMedia(constraints);
-
-    // Create AudioContext matching the mic's sample rate to avoid pitch distortion
-    const micTrackSettings = _micLoopbackStream.getAudioTracks()[0]?.getSettings();
-    _micLoopbackCtx = new AudioContext(micTrackSettings?.sampleRate ? { sampleRate: micTrackSettings.sampleRate } : undefined);
-    const source = _micLoopbackCtx.createMediaStreamSource(_micLoopbackStream);
-    const dest = _micLoopbackCtx.createMediaStreamDestination();
-    const gate = _micLoopbackCtx.createGain();
-    const analyser = _micLoopbackCtx.createAnalyser();
-    analyser.fftSize = 256;
-    source.connect(analyser);
-    analyser.connect(gate);
-    gate.connect(dest);
-
-    const gateData = new Uint8Array(analyser.frequencyBinCount);
-    function updateGate() {
-      const threshold = voiceService.voiceActivationLevel;
-      if (threshold > 0) {
-        analyser.getByteFrequencyData(gateData);
-        const level = Math.min(100, gateData.reduce((a, b) => a + b, 0) / gateData.length);
-        gate.gain.value = level >= threshold ? 1 : 0;
-      } else {
-        gate.gain.value = 1;
-      }
-      _micLoopbackGateRAF = requestAnimationFrame(updateGate);
-    }
-    _micLoopbackGateRAF = requestAnimationFrame(updateGate);
-
-    // Play through an audio element so we can use setSinkId
-    _micLoopbackAudio = new Audio();
-    _micLoopbackAudio.srcObject = dest.stream;
-
-    // Route to selected speaker if supported
-    const speakerId = selectSpeaker.value;
-    if (speakerId && typeof _micLoopbackAudio.setSinkId === 'function') {
-      await _micLoopbackAudio.setSinkId(speakerId);
-    }
-
-    await _micLoopbackAudio.play();
-
-    btnTestMic.classList.add('playing');
-    btnTestMic.innerHTML = '<i class="bi bi-stop-fill"></i> Stop';
-  } catch (err) {
-    console.error('[app] Mic loopback failed:', err);
-    stopMicLoopback();
-  }
-}
-
-function stopMicLoopback() {
-  if (_micLoopbackGateRAF) {
-    cancelAnimationFrame(_micLoopbackGateRAF);
-    _micLoopbackGateRAF = null;
-  }
-  if (_micLoopbackAudio) {
-    _micLoopbackAudio.pause();
-    _micLoopbackAudio.srcObject = null;
-    _micLoopbackAudio = null;
-  }
-  if (_micLoopbackCtx) {
-    _micLoopbackCtx.close().catch(() => {});
-    _micLoopbackCtx = null;
-  }
-  if (_micLoopbackStream) {
-    _micLoopbackStream.getTracks().forEach((t) => t.stop());
-    _micLoopbackStream = null;
-  }
-  btnTestMic.classList.remove('playing');
-  btnTestMic.innerHTML = '<i class="bi bi-mic"></i> Test';
-}
-
-// --- Camera preview ---
-
-let _cameraPreviewStream = null;
-
-btnTestCamera.addEventListener('click', () => {
-  if (_cameraPreviewStream || btnTestCamera.classList.contains('playing')) {
-    stopCameraPreview();
-  } else {
-    startCameraPreview();
-  }
-});
-
-async function startCameraPreview() {
-  // Stop any existing preview stream first
-  stopCameraPreview();
-
-  const deviceId = selectCamera.value;
-  if (!deviceId) {
-    // No camera selected - show container with placeholder
-    cameraPreviewContainer.classList.remove('hidden');
-    cameraPreviewVideo.classList.add('hidden');
-    cameraPreviewPlaceholder.classList.remove('hidden');
-    btnTestCamera.classList.add('playing');
-    btnTestCamera.innerHTML = '<i class="bi bi-stop-fill"></i> Stop';
-    return;
-  }
-
-  try {
-    const constraints = {
-      video: { deviceId: { exact: deviceId }, width: { ideal: 640 }, height: { ideal: 360 } },
-      audio: false,
-    };
-    _cameraPreviewStream = await navigator.mediaDevices.getUserMedia(constraints);
-    cameraPreviewVideo.srcObject = _cameraPreviewStream;
-    cameraPreviewContainer.classList.remove('hidden');
-    cameraPreviewVideo.classList.remove('hidden');
-    cameraPreviewPlaceholder.classList.add('hidden');
-    btnTestCamera.classList.add('playing');
-    btnTestCamera.innerHTML = '<i class="bi bi-stop-fill"></i> Stop';
-  } catch (err) {
-    console.warn('[app] Camera preview failed:', err);
-    cameraPreviewContainer.classList.remove('hidden');
-    cameraPreviewVideo.classList.add('hidden');
-    cameraPreviewPlaceholder.classList.remove('hidden');
-  }
-}
-
-function stopCameraPreview() {
-  if (_cameraPreviewStream) {
-    _cameraPreviewStream.getTracks().forEach((t) => t.stop());
-    _cameraPreviewStream = null;
-  }
-  cameraPreviewVideo.srcObject = null;
-  cameraPreviewContainer.classList.add('hidden');
-  cameraPreviewVideo.classList.add('hidden');
-  cameraPreviewPlaceholder.classList.remove('hidden');
-  btnTestCamera.classList.remove('playing');
-  btnTestCamera.innerHTML = '<i class="bi bi-camera-video"></i> Test';
-}
-
-// --- Device selectors ---
-
-async function populateDeviceSelectors() {
-  try {
-    // Need permission first to see device labels
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      stream.getTracks().forEach((t) => t.stop());
-    } catch {
-      // Camera might not exist, try audio only
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((t) => t.stop());
-      } catch {
-        /* no devices */
-      }
-    }
-
-    const { microphones, cameras, speakers } = await voiceService.getAudioDevices();
-
-    selectMic.innerHTML = '<option value="">Default</option>';
-    for (const d of microphones) {
-      const opt = document.createElement('option');
-      opt.value = d.deviceId;
-      opt.textContent = d.label || `Microphonie ${d.deviceId.slice(0, 8)}`;
-      if (d.deviceId === voiceService.selectedMicId) {
-        opt.selected = true;
-      }
-      selectMic.appendChild(opt);
-    }
-
-    selectCamera.innerHTML = '';
-    if (cameras.length === 0) {
-      selectCamera.innerHTML = '<option value="">None</option>';
-    }
-    for (const d of cameras) {
-      const opt = document.createElement('option');
-      opt.value = d.deviceId;
-      opt.textContent = d.label || `Camera ${d.deviceId.slice(0, 8)}`;
-      if (d.deviceId === voiceService.selectedCameraId) {
-        opt.selected = true;
-      }
-      selectCamera.appendChild(opt);
-    }
-
-    selectSpeaker.innerHTML = '<option value="">Default</option>';
-    for (const d of speakers) {
-      const opt = document.createElement('option');
-      opt.value = d.deviceId;
-      opt.textContent = d.label || `Speaker ${d.deviceId.slice(0, 8)}`;
-      if (d.deviceId === voiceService.selectedSpeakerId) {
-        opt.selected = true;
-      }
-      selectSpeaker.appendChild(opt);
-    }
-
-    log('Devices: mics=', microphones.length, 'cameras=', cameras.length, 'speakers=', speakers.length);
-  } catch (e) {
-    console.error('[app] Failed to enumerate devices:', e);
-  }
-}
 
 // --- Sidebar resize ---
 
@@ -1937,20 +1240,8 @@ async function ensureDmServices(fingerprint) {
     return;
   }
 
-  const migrationKey = `dm_migrated_v2_${fingerprint}`;
-  if (!localStorage.getItem(migrationKey)) {
-    const msgKey = `dm_messages_${fingerprint}`;
-    if (localStorage.getItem(msgKey)) {
-      localStorage.removeItem(msgKey);
-      localStorage.removeItem(`dm_purged_${fingerprint}`);
-      localStorage.removeItem(`dm_reactions_${fingerprint}`);
-    }
-    localStorage.setItem(migrationKey, '1');
-  }
-
-  const allIdentities = await window.gimodi.identity.loadAll();
-  const identity = allIdentities.find((i) => i.fingerprint === fingerprint);
-  const publicKey = identity?.publicKeyArmored ?? '';
+  const identity = await window.gimodi.db.getActiveIdentity();
+  const publicKey = identity?.public_key ?? '';
   dmService = new DmService(fingerprint, publicKey);
   friendsService = new FriendsService(fingerprint);
   dmService.addEventListener('message-received', setDmUnread);
@@ -2015,43 +1306,15 @@ window.addEventListener('gimodi:add-friend', async (e) => {
   }
 });
 
-window.addEventListener(
-  'gimodi:connected',
-  (e) => {
-    let identityFingerprint = e.detail.identityFingerprint;
-    if (!identityFingerprint) {
-      const key = e.detail._connKey;
-      if (key) {
-        const idx = key.indexOf('\0');
-        identityFingerprint = idx >= 0 ? key.slice(idx + 1) : null;
-      }
-    }
-    if (identityFingerprint) {
-      ensureDmServices(identityFingerprint);
-    }
-  },
-  true,
-);
 
 /**
  * DevTools utilities. Callable via gimodiDebug.clearAllFriends() in the console.
  */
 window.gimodiDebug = {
   /**
-   * Wipes all friends and DM data from localStorage and resets in-memory state.
+   * Resets in-memory DM and friends state, re-fetches from server.
    */
   clearAllFriends() {
-    const prefixes = ['dm_friends_', 'dm_ignored_', 'dm_blocked_', 'dm_messages_', 'dm_purged_', 'dm_conversations_', 'dm_reactions_'];
-    const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (prefixes.some((p) => key.startsWith(p))) {
-        keys.push(key);
-      }
-    }
-    for (const key of keys) {
-      localStorage.removeItem(key);
-    }
     if (dmService) {
       dmService._conversations.clear();
       dmService._saveConversationsToStorage();
@@ -2060,6 +1323,6 @@ window.gimodiDebug = {
     if (friendsService) {
       friendsService._pendingRequests.clear();
     }
-    console.log(`[gimodi] Cleared ${keys.length} friend/DM entries from localStorage.`);
+    console.log('[gimodi] Reset friends/DM state.');
   },
 };

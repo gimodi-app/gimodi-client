@@ -1,14 +1,17 @@
-import notificationService from '../services/notifications.js';
-import { tryHandleCommand, isSlashCommand } from '../services/commands.js';
-import { showEmojiPicker, closeEmojiPicker, isPickerOpen } from './emoji-picker.js';
-import { setNickname, invalidateNickname, getCachedNickname, resolveNicknames } from '../services/nicknameCache.js';
-import { formatTimeShort, formatDateTime, formatRelativeTime } from '../services/timeFormat.js';
-import { customConfirm } from '../services/dialogs.js';
+import notificationService from '../../services/notifications.js';
+import { tryHandleCommand, isSlashCommand } from '../../services/commands.js';
+import { showEmojiPicker, closeEmojiPicker, isPickerOpen } from '../emoji/emoji-picker.js';
+import { setNickname, invalidateNickname, getCachedNickname, resolveNicknames } from '../../services/nicknameCache.js';
+import { formatTimeShort, formatDateTime, formatRelativeTime } from '../../services/timeFormat.js';
+import { customConfirm } from '../../services/dialogs.js';
 import { renderMarkdown, escapeHtml, replaceEmoticons, isEmojiOnly } from './chat-markdown.js';
 import { renderReactions, showQuickReactionPicker, onReactionUpdate, setReactionProvider } from './chat-reactions.js';
-import { searchEmoji, getEmoji } from '../services/emoji-shortcodes.js';
-
-const MAX_MESSAGE_LENGTH = 4000;
+import { searchEmoji, getEmoji } from '../../services/emoji-shortcodes.js';
+import { createMentionHandlers } from './chat-mentions.js';
+import { createInputHandlers } from './chat-input.js';
+import { createMessageHandlers } from './chat-messages.js';
+import { createTabHandlers } from './chat-tabs.js';
+import createNotificationHandlers from './chat-notifications.js';
 
 let compactMode = false;
 let mediaEmbedPrivacy = true;
@@ -43,18 +46,6 @@ export function getViewingChannelId() {
   }
   return null;
 }
-let mentionAutocomplete = null; // Autocomplete dropdown element
-let mentionStartPos = -1; // Position where @ or # was typed
-let mentionTriggerChar = null; // '@' or '#'
-const selectedMentions = new Map(); // nickname → { userId, clientId } for structured @u() tokens
-const selectedChannelMentions = new Map(); // channelName → channelId for structured #c() tokens
-
-// --- Typing indicator state ---
-const typingUsers = new Map(); // channelId → Map(clientId → { nickname, timer })
-let typingSendTimer = null;
-let typingSendAllowed = true;
-const TYPING_SEND_INTERVAL = 2000;
-const TYPING_EXPIRE_TIMEOUT = 3000;
 
 // --- Reply state ---
 let replyToMessage = null; // { id, nickname, content, channelId } | null
@@ -96,21 +87,177 @@ function resetChannelPagination() {
 // clientId → nickname map for tracking who left
 const clientNicknameMap = new Map();
 
+// --- Factory module initialization ---
+// All cross-factory deps use arrow wrappers (safe: only called at runtime, not during init).
+
+let autoResizeInput, sendMessage, onEmojiClick, onAttachClick, onFileChange;
+let onDragOver, onDragLeave, onDrop, onPaste, onChatInputForTyping, onTypingEvent;
+let renderTypingIndicator, clearTypingState, onChatInputForCharCount, updateCharCount;
+let updateInputForTab, offerSendAsFile;
+let scrollToBottom, onTabBarWheel, onChatScroll, updatePaginationFromMessages;
+let loadOlderMessages, loadOlderChannelMessages, loadOlderChannelViewMessages, openLightbox;
+let highlightMessage, enterEditMode, startReplyTo, cancelReply, renderReplyPreview;
+let onMessageEdited, renderPinnedMessages, onMessagePinned, onMessageUnpinned;
+let onNavigateChannel, switchToTab, renderTabs, showLinkContextMenu, showImageContextMenu;
+let showTabContextMenu, addTabDragListeners;
+let updateNotificationBell, toggleNotificationDropdown, closeNotificationDropdown;
+let onChatInputForMentions, hideMentionAutocomplete, navigateMentionAutocomplete;
+let selectMention, selectChannelMention, selectEmojiShortcode, onChannelMentionClick;
+let resolveStructuredMentions;
+
+const tabState = {};
+Object.defineProperty(tabState, 'activeTab', {
+  get() { return activeTab; },
+  set(v) { activeTab = v; },
+});
+Object.defineProperty(tabState, 'draggedTab', {
+  get() { return draggedTab; },
+  set(v) { draggedTab = v; },
+});
+tabState.tabOrder = tabOrder;
+tabState.channelViewTabs = channelViewTabs;
+tabState.channelMessagesCache = channelMessagesCache;
+tabState.channelMessagesPending = channelMessagesPending;
+tabState.channelViewMessagesCache = channelViewMessagesCache;
+tabState.channelViewMessagesPending = channelViewMessagesPending;
+tabState.unreadChannels = unreadChannels;
+
+const mentionH = createMentionHandlers({
+  getChatInput: () => chatInput,
+  getProvider: () => provider,
+  autoResizeInput: (...a) => autoResizeInput(...a),
+  openChannelViewTab: (...a) => openChannelViewTab(...a),
+});
+
+const inputH = createInputHandlers({
+  getChatInput: () => chatInput,
+  getFileInput: () => fileInput,
+  getChatMessages: () => chatMessages,
+  getChatCharCount: () => chatCharCount,
+  getBtnEmoji: () => btnEmoji,
+  getBtnAttach: () => btnAttach,
+  getBtnSend: () => btnSend,
+  getActiveTab: () => activeTab,
+  getCurrentChannelId: () => currentChannelId,
+  getChannelViewTabs: () => channelViewTabs,
+  getProvider: () => provider,
+  getReplyToMessage: () => replyToMessage,
+  getSelectedMentions: () => mentionH.getSelectedMentions(),
+  getSelectedChannelMentions: () => mentionH.getSelectedChannelMentions(),
+  uploadFile: (...a) => uploadFile(...a),
+  cancelReply: (...a) => cancelReply(...a),
+  appendSystemMessage: (...a) => appendSystemMessage(...a),
+  scrollToBottom: (...a) => scrollToBottom(...a),
+});
+
+const messageH = createMessageHandlers({
+  getChatMessages: () => chatMessages,
+  getChatInput: () => chatInput,
+  getPinnedMessages: () => pinnedMessages,
+  getCurrentChannelId: () => currentChannelId,
+  getActiveTab: () => activeTab,
+  setActiveTab: (t) => { activeTab = t; },
+  getChannelMessagesCache: () => channelMessagesCache,
+  getPaginationState: () => paginationState,
+  getPaginationForTab,
+  getProvider: () => provider,
+  getChannelPinnedMessages: () => channelPinnedMessages,
+  getPinnedCollapsed: () => pinnedCollapsed,
+  setPinnedCollapsed: (v) => { pinnedCollapsed = v; },
+  getReplyToMessage: () => replyToMessage,
+  setReplyToMessage: (v) => { replyToMessage = v; },
+  getSelectedMentions: () => mentionH.getSelectedMentions(),
+  getChannelViewTabs: () => channelViewTabs,
+  getViewingChannelId,
+  loadHistory: (...a) => loadHistory(...a),
+  buildMessageEl: (...a) => buildMessageEl(...a),
+  appendMessage: (...a) => appendMessage(...a),
+  renderTabs: (...a) => renderTabs(...a),
+  updateInputForTab: (...a) => updateInputForTab(...a),
+  appendSystemMessage: (...a) => appendSystemMessage(...a),
+  resolveStructuredMentions: (...a) => mentionH.resolveStructuredMentions(...a),
+  showImageContextMenu: (...a) => showImageContextMenu(...a),
+  isFileMessage,
+  resolveMentionsText,
+  HISTORY_PAGE_SIZE,
+});
+
+const tabH = createTabHandlers({
+  state: tabState,
+  getProvider: () => provider,
+  getCurrentChannelId: () => currentChannelId,
+  getCurrentChannelName: () => currentChannelName,
+  getVoiceChannelId: () => voiceChannelId,
+  getChannelTabUnread: () => channelTabUnread,
+  setChannelTabUnread: (v) => { channelTabUnread = v; },
+  getChatMessages: () => chatMessages,
+  appendMessage: (...a) => appendMessage(...a),
+  scrollToBottom: (...a) => scrollToBottom(...a),
+  renderPinnedMessages: (...a) => renderPinnedMessages(...a),
+  loadHistory: (...a) => loadHistory(...a),
+  loadChannelViewHistory: (...a) => loadChannelViewHistory(...a),
+  updateInputForTab: (...a) => updateInputForTab(...a),
+  cancelReply: (...a) => cancelReply(...a),
+  renderTypingIndicator: (...a) => renderTypingIndicator(...a),
+  closeChannelViewTab: (...a) => closeChannelViewTab(...a),
+  markChannelRead: (...a) => messageH.markChannelRead(...a),
+  notificationService,
+});
+
+const notifH = createNotificationHandlers({
+  notificationService,
+  getBtnNotifications: () => btnNotifications,
+  getNotificationBadge: () => notificationBadge,
+  getNotificationDropdown: () => notificationDropdown,
+  switchToTab: (...a) => switchToTab(...a),
+});
+
+({
+  onChatInputForMentions, hideMentionAutocomplete, navigateMentionAutocomplete,
+  selectMention, selectChannelMention, selectEmojiShortcode, onChannelMentionClick,
+  resolveStructuredMentions,
+} = mentionH);
+
+({
+  autoResizeInput, sendMessage, onEmojiClick, onAttachClick, onFileChange,
+  onDragOver, onDragLeave, onDrop, onPaste, onChatInputForTyping, onTypingEvent,
+  renderTypingIndicator, clearTypingState, onChatInputForCharCount, updateCharCount,
+  updateInputForTab, offerSendAsFile,
+} = inputH);
+
+({
+  scrollToBottom, onTabBarWheel, onChatScroll, updatePaginationFromMessages,
+  loadOlderMessages, loadOlderChannelMessages, loadOlderChannelViewMessages,
+  openLightbox, highlightMessage, enterEditMode, startReplyTo, cancelReply,
+  renderReplyPreview, onMessageEdited, renderPinnedMessages,
+  onMessagePinned, onMessageUnpinned,
+} = messageH);
+
+({
+  onNavigateChannel, switchToTab, renderTabs, showLinkContextMenu,
+  showImageContextMenu, showTabContextMenu, addTabDragListeners,
+} = tabH);
+
+({
+  updateNotificationBell, toggleNotificationDropdown, closeNotificationDropdown,
+} = notifH);
+
 function onKeydown(e) {
-  // Handle mention autocomplete navigation
-  if (mentionAutocomplete && !mentionAutocomplete.classList.contains('hidden')) {
+  if (mentionH.isMentionAutocompleteVisible()) {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       navigateMentionAutocomplete(e.key === 'ArrowDown' ? 1 : -1);
       return;
     }
     if (e.key === 'Tab' || e.key === 'Enter') {
-      const selected = mentionAutocomplete.querySelector('.mention-autocomplete-item.selected');
+      const acEl = document.querySelector('.mention-autocomplete');
+      const selected = acEl?.querySelector('.mention-autocomplete-item.selected');
       if (selected) {
         e.preventDefault();
-        if (mentionTriggerChar === ':') {
+        const triggerChar = mentionH.getMentionTriggerChar();
+        if (triggerChar === ':') {
           selectEmojiShortcode(selected.dataset.shortcode);
-        } else if (mentionTriggerChar === '#') {
+        } else if (triggerChar === '#') {
           selectChannelMention(selected.dataset.channelName, selected.dataset.channelId);
         } else {
           selectMention(selected.dataset.nickname, selected.dataset.userId || null, selected.dataset.clientId || null);
@@ -141,204 +288,6 @@ function onKeydown(e) {
   }
 }
 
-function isInsideCodeBlock(text, pos) {
-  const before = text.substring(0, pos);
-  // Check triple-backtick fenced code blocks
-  const tripleCount = (before.match(/```/g) || []).length;
-  if (tripleCount % 2 === 1) {
-    return true;
-  }
-  // Check single-backtick inline code (after removing triple backticks to avoid false matches)
-  const singleCount = (before.replace(/```/g, '').match(/`/g) || []).length;
-  if (singleCount % 2 === 1) {
-    return true;
-  }
-  return false;
-}
-
-function onChatInputForMentions() {
-  const cursorPos = chatInput.selectionStart;
-  const text = chatInput.value.substring(0, cursorPos);
-
-  // Find the last @, #, or : before cursor
-  const lastAtIndex = text.lastIndexOf('@');
-  const lastHashIndex = text.lastIndexOf('#');
-  const lastColonIndex = text.lastIndexOf(':');
-
-  // Determine which trigger is closest to cursor
-  const triggerIndex = Math.max(lastAtIndex, lastHashIndex, lastColonIndex);
-  if (triggerIndex === -1) {
-    hideMentionAutocomplete();
-    return;
-  }
-  let triggerChar;
-  if (triggerIndex === lastAtIndex) {
-    triggerChar = '@';
-  } else if (triggerIndex === lastHashIndex) {
-    triggerChar = '#';
-  } else {
-    triggerChar = ':';
-  }
-
-  // For @ and #, require whitespace or start-of-string before trigger
-  if (triggerChar !== ':' && triggerIndex > 0 && /\S/.test(text[triggerIndex - 1])) {
-    hideMentionAutocomplete();
-    return;
-  }
-
-  // Don't trigger autocomplete inside code blocks
-  if (isInsideCodeBlock(chatInput.value, triggerIndex)) {
-    hideMentionAutocomplete();
-    return;
-  }
-
-  const searchText = text.substring(triggerIndex + 1);
-
-  // Only show autocomplete if search text doesn't contain spaces
-  if (/\s/.test(searchText)) {
-    hideMentionAutocomplete();
-    return;
-  }
-
-  // For emoji shortcodes, require at least 2 chars to start searching
-  if (triggerChar === ':' && searchText.length < 2) {
-    hideMentionAutocomplete();
-    return;
-  }
-
-  mentionStartPos = triggerIndex;
-  mentionTriggerChar = triggerChar;
-
-  if (triggerChar === '@') {
-    const channelUsers = provider ? provider.getMentionCandidates() : window.gimodiClients || [];
-    const matches = channelUsers.filter((c) => c.nickname.toLowerCase().startsWith(searchText.toLowerCase())).slice(0, 10);
-
-    if (matches.length === 0) {
-      hideMentionAutocomplete();
-      return;
-    }
-    showMentionAutocomplete(matches);
-  } else if (triggerChar === '#') {
-    if (!provider?.supportsChannelMentions) {
-      hideMentionAutocomplete();
-      return;
-    }
-    const allChannels = (window.gimodiChannels || []).filter((c) => c.type !== 'group');
-    const matches = allChannels.filter((c) => c.name.toLowerCase().startsWith(searchText.toLowerCase())).slice(0, 10);
-
-    if (matches.length === 0) {
-      hideMentionAutocomplete();
-      return;
-    }
-    showChannelAutocomplete(matches);
-  } else {
-    // : emoji shortcode
-    const matches = searchEmoji(searchText, 10);
-    if (matches.length === 0) {
-      hideMentionAutocomplete();
-      return;
-    }
-    showEmojiShortcodeAutocomplete(matches);
-  }
-}
-
-function showMentionAutocomplete(users) {
-  if (!mentionAutocomplete) {
-    mentionAutocomplete = document.createElement('div');
-    mentionAutocomplete.id = 'mention-autocomplete';
-    mentionAutocomplete.className = 'mention-autocomplete';
-    document.body.appendChild(mentionAutocomplete);
-  }
-
-  mentionAutocomplete.innerHTML = '';
-  for (let i = 0; i < users.length; i++) {
-    const item = document.createElement('div');
-    item.className = 'mention-autocomplete-item' + (i === 0 ? ' selected' : '');
-    item.dataset.nickname = users[i].nickname;
-    item.dataset.userId = users[i].userId || '';
-    item.dataset.clientId = users[i].id || '';
-    item.textContent = users[i].nickname;
-    item.addEventListener('click', () => selectMention(users[i].nickname, users[i].userId || null, users[i].id || null));
-    mentionAutocomplete.appendChild(item);
-  }
-
-  // Position above the input
-  const inputRect = chatInput.getBoundingClientRect();
-  mentionAutocomplete.style.left = inputRect.left + 'px';
-  mentionAutocomplete.style.bottom = window.innerHeight - inputRect.top + 4 + 'px';
-  mentionAutocomplete.classList.remove('hidden');
-}
-
-function hideMentionAutocomplete() {
-  if (mentionAutocomplete) {
-    mentionAutocomplete.classList.add('hidden');
-  }
-  mentionStartPos = -1;
-}
-
-function navigateMentionAutocomplete(direction) {
-  if (!mentionAutocomplete) {
-    return;
-  }
-  const items = Array.from(mentionAutocomplete.querySelectorAll('.mention-autocomplete-item'));
-  const currentIndex = items.findIndex((item) => item.classList.contains('selected'));
-  if (currentIndex === -1) {
-    return;
-  }
-
-  items[currentIndex].classList.remove('selected');
-  let newIndex = currentIndex + direction;
-  if (newIndex < 0) {
-    newIndex = items.length - 1;
-  }
-  if (newIndex >= items.length) {
-    newIndex = 0;
-  }
-  items[newIndex].classList.add('selected');
-}
-
-function selectMention(nickname, userId, clientId) {
-  if (mentionStartPos === -1) {
-    return;
-  }
-
-  const cursorPos = chatInput.selectionStart;
-  const before = chatInput.value.substring(0, mentionStartPos);
-  const after = chatInput.value.substring(cursorPos);
-
-  chatInput.value = before + '@' + nickname + ' ' + after;
-  chatInput.selectionStart = chatInput.selectionEnd = mentionStartPos + nickname.length + 2;
-  chatInput.focus();
-  autoResizeInput();
-
-  // Record structured mention so sendMessage can transform @nickname → @u(id)
-  if (userId || clientId) {
-    selectedMentions.set(nickname, { userId: userId || null, clientId: clientId || null });
-  }
-
-  hideMentionAutocomplete();
-}
-
-function onChannelMentionClick(e) {
-  const mention = e.target.closest('.channel-mention');
-  if (!mention) {
-    return;
-  }
-  const channelId = mention.dataset.channelId;
-  if (!channelId) {
-    return;
-  }
-  // Open chat-only tab (don't join voice)
-  const channels = window.gimodiChannels || [];
-  const ch = channels.find((c) => c.id === channelId);
-  if (ch) {
-    openChannelViewTab(channelId, ch.name);
-  }
-}
-
-/**
- * @param {MouseEvent} ev
- */
 function onNickContextMenu(ev) {
   if (!provider?.supportsTabs) {
     return;
@@ -373,398 +322,6 @@ function onNickContextMenu(ev) {
   );
 }
 
-function showChannelAutocomplete(channels) {
-  if (!mentionAutocomplete) {
-    mentionAutocomplete = document.createElement('div');
-    mentionAutocomplete.id = 'mention-autocomplete';
-    mentionAutocomplete.className = 'mention-autocomplete';
-    document.body.appendChild(mentionAutocomplete);
-  }
-
-  mentionAutocomplete.innerHTML = '';
-  for (let i = 0; i < channels.length; i++) {
-    const item = document.createElement('div');
-    item.className = 'mention-autocomplete-item' + (i === 0 ? ' selected' : '');
-    item.dataset.channelName = channels[i].name;
-    item.dataset.channelId = channels[i].id;
-    const icon = document.createElement('i');
-    icon.className = 'bi bi-hash';
-    icon.style.marginRight = '6px';
-    icon.style.opacity = '0.6';
-    item.appendChild(icon);
-    item.appendChild(document.createTextNode(channels[i].name));
-    item.addEventListener('click', () => selectChannelMention(channels[i].name, channels[i].id));
-    mentionAutocomplete.appendChild(item);
-  }
-
-  const inputRect = chatInput.getBoundingClientRect();
-  mentionAutocomplete.style.left = inputRect.left + 'px';
-  mentionAutocomplete.style.bottom = window.innerHeight - inputRect.top + 4 + 'px';
-  mentionAutocomplete.classList.remove('hidden');
-}
-
-function selectChannelMention(channelName, channelId) {
-  if (mentionStartPos === -1) {
-    return;
-  }
-
-  const cursorPos = chatInput.selectionStart;
-  const before = chatInput.value.substring(0, mentionStartPos);
-  const after = chatInput.value.substring(cursorPos);
-
-  chatInput.value = before + '#' + channelName + ' ' + after;
-  chatInput.selectionStart = chatInput.selectionEnd = mentionStartPos + channelName.length + 2;
-  chatInput.focus();
-  autoResizeInput();
-
-  if (channelId) {
-    selectedChannelMentions.set(channelName, channelId);
-  }
-
-  hideMentionAutocomplete();
-}
-
-/**
- * @param {{shortcode: string, emoji: string}[]} matches
- */
-function showEmojiShortcodeAutocomplete(matches) {
-  if (!mentionAutocomplete) {
-    mentionAutocomplete = document.createElement('div');
-    mentionAutocomplete.id = 'mention-autocomplete';
-    mentionAutocomplete.className = 'mention-autocomplete';
-    document.body.appendChild(mentionAutocomplete);
-  }
-
-  mentionAutocomplete.innerHTML = '';
-  for (let i = 0; i < matches.length; i++) {
-    const item = document.createElement('div');
-    item.className = 'mention-autocomplete-item' + (i === 0 ? ' selected' : '');
-    item.dataset.shortcode = matches[i].shortcode;
-    const emojiSpan = document.createElement('span');
-    emojiSpan.className = 'emoji';
-    emojiSpan.textContent = matches[i].emoji;
-    emojiSpan.style.marginRight = '8px';
-    item.appendChild(emojiSpan);
-    item.appendChild(document.createTextNode(':' + matches[i].shortcode + ':'));
-    item.addEventListener('click', () => selectEmojiShortcode(matches[i].shortcode));
-    mentionAutocomplete.appendChild(item);
-  }
-
-  const inputRect = chatInput.getBoundingClientRect();
-  mentionAutocomplete.style.left = inputRect.left + 'px';
-  mentionAutocomplete.style.bottom = window.innerHeight - inputRect.top + 4 + 'px';
-  mentionAutocomplete.classList.remove('hidden');
-}
-
-/**
- * @param {string} shortcode
- */
-function selectEmojiShortcode(shortcode) {
-  if (mentionStartPos === -1) {
-    return;
-  }
-
-  const emoji = getEmoji(shortcode);
-  if (!emoji) {
-    return;
-  }
-
-  const cursorPos = chatInput.selectionStart;
-  const before = chatInput.value.substring(0, mentionStartPos);
-  const after = chatInput.value.substring(cursorPos);
-
-  chatInput.value = before + emoji + after;
-  chatInput.selectionStart = chatInput.selectionEnd = mentionStartPos + emoji.length;
-  chatInput.focus();
-  autoResizeInput();
-
-  hideMentionAutocomplete();
-}
-
-function onEmojiClick() {
-  if (isPickerOpen()) {
-    closeEmojiPicker();
-    return;
-  }
-  showEmojiPicker({
-    anchor: btnEmoji,
-    closeOnSelect: false,
-    onSelect: (emoji) => {
-      const start = chatInput.selectionStart;
-      const end = chatInput.selectionEnd;
-      chatInput.value = chatInput.value.substring(0, start) + emoji + chatInput.value.substring(end);
-      chatInput.selectionStart = chatInput.selectionEnd = start + emoji.length;
-      chatInput.focus();
-      autoResizeInput();
-    },
-  });
-}
-
-function onAttachClick() {
-  fileInput.click();
-}
-
-function onFileChange() {
-  for (const file of fileInput.files) {
-    uploadFile(file);
-  }
-  fileInput.value = '';
-}
-
-function onDragOver(e) {
-  e.preventDefault();
-  chatMessages.classList.add('drag-over');
-}
-
-function onDragLeave(e) {
-  e.preventDefault();
-  chatMessages.classList.remove('drag-over');
-}
-
-function onDrop(e) {
-  e.preventDefault();
-  chatMessages.classList.remove('drag-over');
-  for (const file of e.dataTransfer.files) {
-    uploadFile(file);
-  }
-}
-
-function onPaste(e) {
-  const items = e.clipboardData?.items;
-  if (!items) {
-    return;
-  }
-  for (const item of items) {
-    if (item.type.startsWith('image/')) {
-      e.preventDefault();
-      const file = item.getAsFile();
-      if (file) {
-        uploadFile(file);
-      }
-      return;
-    }
-  }
-}
-
-function onChatInputForTyping() {
-  const typingChannelId = activeTab.type === 'channel' ? currentChannelId : activeTab.type === 'channel-view' ? activeTab.channelId : null;
-  if (!typingChannelId) {
-    return;
-  }
-  if (!typingSendAllowed) {
-    return;
-  }
-  typingSendAllowed = false;
-  provider.sendTyping(typingChannelId);
-  typingSendTimer = setTimeout(() => {
-    typingSendAllowed = true;
-  }, TYPING_SEND_INTERVAL);
-}
-
-function onTypingEvent(e) {
-  const { clientId, nickname, channelId } = e.detail;
-  if (!channelId) {
-    return;
-  }
-
-  if (!typingUsers.has(channelId)) {
-    typingUsers.set(channelId, new Map());
-  }
-  const channelTyping = typingUsers.get(channelId);
-
-  // Clear existing timer for this user
-  const existing = channelTyping.get(clientId);
-  if (existing) {
-    clearTimeout(existing.timer);
-  }
-
-  const timer = setTimeout(() => {
-    channelTyping.delete(clientId);
-    renderTypingIndicator();
-  }, TYPING_EXPIRE_TIMEOUT);
-
-  channelTyping.set(clientId, { nickname, timer });
-  renderTypingIndicator();
-}
-
-function renderTypingIndicator() {
-  let indicator = document.getElementById('typing-indicator');
-  if (!indicator) {
-    indicator = document.createElement('div');
-    indicator.id = 'typing-indicator';
-    indicator.className = 'typing-indicator';
-    const chatInputRow = document.querySelector('.chat-input-row');
-    if (chatInputRow) {
-      chatInputRow.parentNode.insertBefore(indicator, chatInputRow);
-    }
-  }
-
-  const activeChannelForTyping = activeTab.type === 'channel' ? currentChannelId : activeTab.type === 'channel-view' ? activeTab.channelId : null;
-  if (!activeChannelForTyping) {
-    indicator.textContent = '';
-    indicator.style.display = 'none';
-    return;
-  }
-
-  const channelTyping = typingUsers.get(activeChannelForTyping);
-  if (!channelTyping || channelTyping.size === 0) {
-    indicator.textContent = '';
-    indicator.style.display = 'none';
-    return;
-  }
-
-  const names = [...channelTyping.values()].map((v) => v.nickname);
-  let text;
-  if (names.length === 1) {
-    text = `${names[0]} is typing...`;
-  } else if (names.length === 2) {
-    text = `${names[0]} and ${names[1]} are typing...`;
-  } else {
-    text = `${names.slice(0, 2).join(', ')} and ${names.length - 2} more are typing...`;
-  }
-
-  indicator.textContent = text;
-  indicator.style.display = '';
-}
-
-function clearTypingState() {
-  for (const channelTyping of typingUsers.values()) {
-    for (const entry of channelTyping.values()) {
-      clearTimeout(entry.timer);
-    }
-  }
-  typingUsers.clear();
-  if (typingSendTimer) {
-    clearTimeout(typingSendTimer);
-    typingSendTimer = null;
-  }
-  typingSendAllowed = true;
-  renderTypingIndicator();
-}
-
-// --- Notification Bell ---
-
-function updateNotificationBell() {
-  const count = notificationService.count;
-  if (count === 0) {
-    notificationBadge.classList.add('hidden');
-    notificationBadge.textContent = '';
-  } else {
-    notificationBadge.classList.remove('hidden');
-    notificationBadge.textContent = count > 9 ? '9+' : String(count);
-    // Shake animation: remove then re-add class to retrigger
-    btnNotifications.classList.remove('bell-shake');
-    void btnNotifications.offsetWidth; // reflow
-    btnNotifications.classList.add('bell-shake');
-  }
-  // Keep dropdown contents fresh if it's open
-  if (!notificationDropdown.classList.contains('hidden')) {
-    renderNotificationDropdown();
-  }
-}
-
-function renderNotificationDropdown() {
-  notificationDropdown.innerHTML = '';
-  const entries = notificationService.entries;
-
-  if (entries.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'notif-empty';
-    empty.textContent = 'No new notifications';
-    notificationDropdown.appendChild(empty);
-  } else {
-    for (const entry of entries) {
-      const item = document.createElement('div');
-      item.className = 'notif-item';
-      item.dataset.type = entry.type;
-
-      const icon = document.createElement('i');
-      icon.className = 'bi bi-at notif-icon';
-      item.appendChild(icon);
-
-      const text = document.createElement('div');
-      text.className = 'notif-text';
-
-      const title = document.createElement('div');
-      title.className = 'notif-item-title';
-      title.textContent = entry.title;
-      text.appendChild(title);
-
-      const body = document.createElement('div');
-      body.className = 'notif-item-body';
-      body.textContent = entry.body;
-      text.appendChild(body);
-
-      item.appendChild(text);
-
-      // Click to navigate
-      if (entry.action) {
-        item.style.cursor = 'pointer';
-        item.addEventListener('click', () => {
-          closeNotificationDropdown();
-          if (entry.action.type === 'channel') {
-            switchToTab({ type: 'channel' });
-          }
-        });
-      }
-
-      notificationDropdown.appendChild(item);
-    }
-  }
-
-  // Footer with "Clear all"
-  const footer = document.createElement('div');
-  footer.className = 'notif-footer';
-  const clearBtn = document.createElement('button');
-  clearBtn.className = 'notif-clear-all';
-  clearBtn.textContent = 'Clear all';
-  clearBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    notificationService.clearAll();
-    closeNotificationDropdown();
-  });
-  footer.appendChild(clearBtn);
-  notificationDropdown.appendChild(footer);
-}
-
-let _onClickOutsideDropdown = null;
-
-function openNotificationDropdown() {
-  renderNotificationDropdown();
-  notificationDropdown.classList.remove('hidden');
-  // Close when clicking outside
-  _onClickOutsideDropdown = (e) => {
-    if (!notificationDropdown.contains(e.target) && e.target !== btnNotifications) {
-      closeNotificationDropdown();
-    }
-  };
-  setTimeout(() => document.addEventListener('click', _onClickOutsideDropdown), 0);
-}
-
-function closeNotificationDropdown() {
-  if (!notificationDropdown) {
-    return;
-  }
-  notificationDropdown.classList.add('hidden');
-  if (_onClickOutsideDropdown) {
-    document.removeEventListener('click', _onClickOutsideDropdown);
-    _onClickOutsideDropdown = null;
-  }
-}
-
-function toggleNotificationDropdown() {
-  if (notificationDropdown.classList.contains('hidden')) {
-    openNotificationDropdown();
-  } else {
-    closeNotificationDropdown();
-  }
-}
-
-/**
- * @param {string|null} channelId
- * @param {object} chatProvider - a ChatProvider (ServerChatProvider or DmChatProvider)
- * @param {HTMLElement} [container] - optional DOM container to resolve child elements from
- */
 export function initChatView(channelId, chatProvider, container) {
   console.log('[chat] initChatView channelId=', channelId, 'provider:', chatProvider?.constructor?.name, 'container:', !!container);
   currentChannelId = channelId;
@@ -987,8 +544,8 @@ export function cleanup() {
   }
   window.removeEventListener('gimodi:navigate-channel', onNavigateChannel);
   clearTypingState();
-  selectedMentions.clear();
-  selectedChannelMentions.clear();
+  mentionH.getSelectedMentions().clear();
+  mentionH.getSelectedChannelMentions().clear();
   if (chatMessages) {
     chatMessages.innerHTML = '';
   }
@@ -1107,172 +664,6 @@ export function switchChannel(channelId) {
   renderPinnedMessages();
 }
 
-function autoResizeInput() {
-  chatInput.style.height = 'auto';
-  const cs = getComputedStyle(chatInput);
-  const maxHeight = parseFloat(cs.lineHeight) * 8 + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-  const capped = chatInput.scrollHeight > maxHeight;
-  chatInput.style.height = (capped ? maxHeight : chatInput.scrollHeight) + 'px';
-  chatInput.style.overflowY = capped ? 'auto' : 'hidden';
-}
-
-function resolveStructuredMentions(text) {
-  // Replace @nickname with @u(id) for each autocomplete-selected mention
-  let result = text;
-  for (const [nickname, { userId, clientId }] of selectedMentions) {
-    const id = userId || clientId;
-    if (!id) {
-      continue;
-    }
-    const escaped = nickname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    result = result.replace(new RegExp(`@${escaped}(?=\\s|$)`, 'g'), `@u(${id})`);
-  }
-  selectedMentions.clear();
-
-  // Replace #channelName with #c(channelId) for each autocomplete-selected channel mention
-  for (const [channelName, channelId] of selectedChannelMentions) {
-    const escaped = channelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    result = result.replace(new RegExp(`#${escaped}(?=\\s|$)`, 'g'), `#c(${channelId})`);
-  }
-  selectedChannelMentions.clear();
-
-  return result;
-}
-
-function sendMessage() {
-  const content = chatInput.value.trim();
-  if (!content) {
-    return;
-  }
-
-  if (content.length > MAX_MESSAGE_LENGTH) {
-    if (provider.supportsFileUpload) {
-      const activeChannelId = activeTab.type === 'channel' ? currentChannelId : activeTab.type === 'channel-view' ? activeTab.channelId : null;
-      offerSendAsFile(content, activeChannelId);
-    } else {
-      appendSystemMessage(`Message is too long (${content.length} of ${MAX_MESSAGE_LENGTH} characters maximum).`);
-    }
-    return;
-  }
-
-  const activeChannelId = activeTab.type === 'channel' ? currentChannelId : activeTab.type === 'channel-view' ? activeTab.channelId : null;
-  if (provider.supportsCommands && activeChannelId && isSlashCommand(content)) {
-    const handled = tryHandleCommand(content, { channelId: activeChannelId });
-    if (handled) {
-      chatInput.value = '';
-      selectedMentions.clear();
-      selectedChannelMentions.clear();
-      autoResizeInput();
-      return;
-    }
-    appendSystemMessage(`Unknown command: ${content.split(/\s+/)[0]}`);
-    chatInput.value = '';
-    selectedMentions.clear();
-    selectedChannelMentions.clear();
-    autoResizeInput();
-    return;
-  }
-
-  const resolved = resolveStructuredMentions(content);
-
-  const replyTo = provider.supportsReplies ? replyToMessage?.id || null : null;
-
-  if (activeTab.type === 'channel-view' && provider.sendMessageToChannel) {
-    provider.sendMessageToChannel(activeTab.channelId, resolved, replyTo);
-  } else {
-    if (!currentChannelId && !provider.sendMessage) {
-      return;
-    }
-    if (provider.sendMessageToChannel && currentChannelId) {
-      provider.sendMessageToChannel(currentChannelId, resolved, replyTo);
-    } else {
-      provider.sendMessage(resolved, replyTo);
-    }
-  }
-  chatInput.value = '';
-  cancelReply();
-  autoResizeInput();
-  // Reset typing send throttle so next keystroke sends immediately
-  if (typingSendTimer) {
-    clearTimeout(typingSendTimer);
-    typingSendTimer = null;
-  }
-  typingSendAllowed = true;
-}
-
-async function offerSendAsFile(content, channelId) {
-  if (!channelId) {
-    return;
-  }
-  const confirmed = await customConfirm(`Your message is too long (${content.length} of ${MAX_MESSAGE_LENGTH} characters maximum).\n\nSend it as a text file instead?`);
-  if (!confirmed) {
-    return;
-  }
-  const blob = new Blob([content], { type: 'text/plain' });
-  const file = new File([blob], 'message.txt', { type: 'text/plain' });
-  chatInput.value = '';
-  autoResizeInput();
-  updateCharCount();
-  uploadFile(file, channelId);
-}
-
-function onChatInputForCharCount() {
-  updateCharCount();
-  autoResizeInput();
-}
-
-function updateCharCount() {
-  const len = chatInput.value.length;
-  if (len < MAX_MESSAGE_LENGTH * 0.75) {
-    chatCharCount.textContent = '';
-    chatCharCount.className = 'chat-char-count';
-    return;
-  }
-  const remaining = MAX_MESSAGE_LENGTH - len;
-  chatCharCount.textContent = remaining >= 0 ? `${remaining}` : `${-remaining} over limit`;
-  chatCharCount.className = 'chat-char-count visible' + (len > MAX_MESSAGE_LENGTH ? ' danger' : len >= MAX_MESSAGE_LENGTH * 0.9 ? ' warning' : '');
-}
-
-function updateInputForTab() {
-  const isAttachSupported = provider?.supportsFileUpload && activeTab.type === 'channel';
-
-  // Check read/write restriction for channel-view tabs and joined channel tab
-  const cvChannelId = activeTab.type === 'channel-view' ? activeTab.channelId : activeTab.type === 'channel' ? currentChannelId : null;
-  const cvTab = cvChannelId ? channelViewTabs.find((t) => t.channelId === cvChannelId) : null;
-
-  // Reset state first
-  chatInput.disabled = false;
-  chatInput.readOnly = false;
-  chatInput.classList.remove('input-write-restricted');
-
-  if (cvTab?.readRestricted) {
-    chatInput.disabled = true;
-    chatInput.placeholder = 'You do not have permission to read this channel';
-    if (btnAttach) {
-      btnAttach.style.display = 'none';
-    }
-    btnSend.disabled = true;
-    return;
-  }
-
-  if (cvTab?.writeRestricted) {
-    chatInput.readOnly = true;
-    chatInput.classList.add('input-write-restricted');
-    chatInput.placeholder = 'You do not have permission to write in this channel';
-    if (btnAttach) {
-      btnAttach.style.display = 'none';
-    }
-    btnSend.disabled = true;
-    return;
-  }
-
-  btnSend.disabled = false;
-  chatInput.disabled = false;
-  chatInput.placeholder = 'Type a message…';
-  if (btnAttach) {
-    btnAttach.style.display = isAttachSupported ? '' : 'none';
-  }
-}
 
 async function loadHistory(channelId) {
   try {
@@ -2836,550 +2227,6 @@ export function appendSystemMessage(text) {
   scrollToBottom();
 }
 
-function scrollToBottom() {
-  if (!chatMessages) {
-    return;
-  }
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-/**
- * @param {WheelEvent} e
- */
-function onTabBarWheel(e) {
-  if (e.deltaY !== 0) {
-    e.preventDefault();
-    e.currentTarget.scrollLeft += e.deltaY;
-  }
-}
-
-function onChatScroll() {
-  if (chatMessages.scrollTop > 150) {
-    return;
-  }
-  const pg = getPaginationForTab();
-  if (!pg || pg.allLoaded || pg.loading) {
-    return;
-  }
-  loadOlderMessages();
-}
-
-function updatePaginationFromMessages(pg, messages) {
-  if (!messages || messages.length === 0) {
-    pg.allLoaded = true;
-    return;
-  }
-  if (messages.length < HISTORY_PAGE_SIZE) {
-    pg.allLoaded = true;
-  }
-  const oldest = messages.reduce((min, m) => (m.timestamp < min ? m.timestamp : min), messages[0].timestamp);
-  if (pg.oldestTs === null || oldest < pg.oldestTs) {
-    pg.oldestTs = oldest;
-  }
-}
-
-async function loadOlderMessages() {
-  const pg = getPaginationForTab();
-  if (!pg || pg.allLoaded || pg.loading || pg.oldestTs === null) {
-    return;
-  }
-  pg.loading = true;
-
-  const prevHeight = chatMessages.scrollHeight;
-  const prevTop = chatMessages.scrollTop;
-
-  try {
-    if (activeTab.type === 'channel') {
-      await loadOlderChannelMessages(pg);
-    } else if (activeTab.type === 'channel-view') {
-      await loadOlderChannelViewMessages(pg);
-    }
-    // Restore scroll position so new messages appear above without jumping
-    chatMessages.scrollTop = prevTop + (chatMessages.scrollHeight - prevHeight);
-  } finally {
-    pg.loading = false;
-  }
-}
-
-async function loadOlderChannelMessages(pg) {
-  const result = await provider.fetchHistory(currentChannelId, pg.oldestTs, HISTORY_PAGE_SIZE);
-  if (!result?.messages || activeTab.type !== 'channel') {
-    return;
-  }
-  const sorted = [...result.messages].reverse();
-  updatePaginationFromMessages(pg, result.messages);
-  const userIds = sorted.map((m) => m.userId).filter(Boolean);
-  if (userIds.length > 0) {
-    await resolveNicknames(userIds);
-  }
-  const frag = document.createDocumentFragment();
-  let batchPrev = null;
-  for (const msg of sorted) {
-    const el = buildMessageEl(msg, batchPrev);
-    if (el) {
-      frag.appendChild(el);
-      batchPrev = el;
-    }
-  }
-  chatMessages.prepend(frag);
-}
-
-async function loadOlderChannelViewMessages(pg) {
-  const { channelId } = activeTab;
-  const tab = channelViewTabs.find((t) => t.channelId === channelId);
-  const result = await provider.fetchHistory(channelId, pg.oldestTs, HISTORY_PAGE_SIZE, tab?.password);
-  if (!result?.messages || activeTab.type !== 'channel-view' || activeTab.channelId !== channelId) {
-    return;
-  }
-  const sorted = [...result.messages].reverse();
-  updatePaginationFromMessages(pg, result.messages);
-  const userIds = sorted.map((m) => m.userId).filter(Boolean);
-  if (userIds.length > 0) {
-    await resolveNicknames(userIds);
-  }
-  const frag = document.createDocumentFragment();
-  let batchPrev = null;
-  for (const msg of sorted) {
-    const el = buildMessageEl(msg, batchPrev);
-    if (el) {
-      frag.appendChild(el);
-      batchPrev = el;
-    }
-  }
-  chatMessages.prepend(frag);
-}
-
-function openLightbox(src, alt, meta) {
-  const overlay = document.createElement('div');
-  overlay.className = 'lightbox-overlay';
-  overlay.innerHTML = `<img class="lightbox-img" src="${escapeHtml(src)}" alt="${escapeHtml(alt || '')}">`;
-  const lbImg = overlay.querySelector('.lightbox-img');
-  lbImg.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    showImageContextMenu(e.clientX, e.clientY, src, meta?.filename, meta?.size, meta?.url);
-  });
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) {
-      overlay.remove();
-    }
-  });
-  document.addEventListener('keydown', function onKey(e) {
-    if (e.key === 'Escape') {
-      overlay.remove();
-      document.removeEventListener('keydown', onKey);
-    }
-  });
-  document.body.appendChild(overlay);
-}
-
-// --- Tab management ---
-
-function onNavigateChannel(e) {
-  const { channelId } = e.detail;
-  if (channelId) {
-    provider.send('channel:join', { channelId });
-  }
-}
-
-function switchToTab(tab) {
-  console.log('[chat] switchToTab', tab.type, tab.channelId || '', 'from', activeTab.type, activeTab.channelId || '');
-  const isSameTab = activeTab.type === tab.type && (tab.type === 'channel' || (tab.type === 'channel-view' && activeTab.channelId === tab.channelId));
-  if (isSameTab) {
-    renderTabs();
-    return;
-  }
-
-  // Save current chat DOM when switching away
-  if (activeTab.type === 'channel') {
-    channelMessagesCache.length = 0;
-    for (const child of chatMessages.children) {
-      channelMessagesCache.push(child);
-    }
-  } else if (activeTab.type === 'channel-view') {
-    let cached = channelViewMessagesCache.get(activeTab.channelId);
-    if (!cached) {
-      cached = [];
-      channelViewMessagesCache.set(activeTab.channelId, cached);
-    }
-    cached.length = 0;
-    for (const child of chatMessages.children) {
-      cached.push(child);
-    }
-  }
-
-  activeTab = tab;
-  chatMessages.innerHTML = '';
-  updateInputForTab();
-  cancelReply();
-  renderTypingIndicator();
-
-  // Clear in-app notification entries for the destination tab
-  if (tab.type === 'channel') {
-    notificationService.clearByAction({ type: 'channel', channelId: currentChannelId });
-  }
-
-  if (tab.type === 'channel') {
-    channelTabUnread = false;
-    if (currentChannelId && unreadChannels.delete(currentChannelId)) {
-      window.dispatchEvent(new CustomEvent('gimodi:channel-unread-changed'));
-    }
-    if (currentChannelId) {
-      markChannelRead(currentChannelId, provider.address);
-    }
-    // Restore channel messages from cache if available, otherwise reload history
-    if (channelMessagesCache.length > 0) {
-      for (const node of channelMessagesCache) {
-        chatMessages.appendChild(node);
-      }
-      channelMessagesCache.length = 0;
-      // Render any messages that arrived while we were on another tab
-      for (const msg of channelMessagesPending) {
-        appendMessage(msg);
-      }
-      channelMessagesPending.length = 0;
-      scrollToBottom();
-      renderPinnedMessages();
-    } else {
-      channelMessagesPending.length = 0;
-      if (currentChannelId) {
-        loadHistory(currentChannelId);
-      }
-    }
-  } else if (tab.type === 'channel-view') {
-    const cvTab = channelViewTabs.find((t) => t.channelId === tab.channelId);
-    if (cvTab) {
-      cvTab.unread = false;
-    }
-    if (unreadChannels.delete(tab.channelId)) {
-      window.dispatchEvent(new CustomEvent('gimodi:channel-unread-changed'));
-    }
-    markChannelRead(tab.channelId, provider.address);
-    const cached = channelViewMessagesCache.get(tab.channelId);
-    if (cached && cached.length > 0) {
-      for (const node of cached) {
-        chatMessages.appendChild(node);
-      }
-      cached.length = 0;
-      const pending = channelViewMessagesPending.get(tab.channelId) || [];
-      for (const msg of pending) {
-        appendMessage(msg);
-      }
-      channelViewMessagesPending.delete(tab.channelId);
-      scrollToBottom();
-      renderPinnedMessages();
-    } else {
-      loadChannelViewHistory(tab.channelId);
-    }
-  }
-
-  renderTabs();
-  window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
-}
-
-function renderTabs() {
-  const tabBar = document.querySelector('.tab-bar');
-  if (!tabBar) {
-    return;
-  }
-
-  tabBar.innerHTML = '';
-
-  // Voice channel tab - always first, not closable, not draggable
-  if (voiceChannelId) {
-    const vcTab = channelViewTabs.find((t) => t.channelId === voiceChannelId);
-    if (vcTab) {
-      const tab = document.createElement('div');
-      tab.className = `tab${activeTab.type === 'channel-view' && activeTab.channelId === voiceChannelId ? ' active' : ''}${vcTab.unread ? ' unread' : ''}`;
-      tab.dataset.type = 'channel-view';
-      tab.dataset.channelId = vcTab.channelId;
-      const label = document.createElement('span');
-      label.className = 'tab-label';
-      label.textContent = '#' + vcTab.channelName;
-      tab.appendChild(label);
-      tab.addEventListener('click', () => switchToTab({ type: 'channel-view', channelId: vcTab.channelId, channelName: vcTab.channelName }));
-      tabBar.appendChild(tab);
-    }
-  }
-
-  // Channel tab - hidden when no channel joined (lobby) or when a channel-view tab for the current channel is open
-  if (currentChannelId && !channelViewTabs.find((t) => t.channelId === currentChannelId)) {
-    const channelTab = document.createElement('div');
-    channelTab.id = 'tab-channel';
-    channelTab.className = `tab${activeTab.type === 'channel' ? ' active' : ''}${channelTabUnread ? ' unread' : ''}`;
-    channelTab.dataset.type = 'channel';
-    const channelLabel = document.createElement('span');
-    channelLabel.className = 'tab-label';
-    channelLabel.textContent = '#' + currentChannelName;
-    channelTab.appendChild(channelLabel);
-    channelTab.addEventListener('click', () => switchToTab({ type: 'channel' }));
-    tabBar.appendChild(channelTab);
-  }
-
-  for (let i = 0; i < tabOrder.length; i++) {
-    const entry = tabOrder[i];
-    const tab = document.createElement('div');
-    tab.dataset.dragIndex = i;
-    tab.draggable = true;
-    addTabDragListeners(tab, i);
-
-    {
-      const cv = channelViewTabs.find((t) => t.channelId === entry.id);
-      if (!cv) {
-        continue;
-      }
-      tab.className = `tab${activeTab.type === 'channel-view' && activeTab.channelId === cv.channelId ? ' active' : ''}${cv.unread ? ' unread' : ''}`;
-      tab.dataset.type = 'channel-view';
-      tab.dataset.channelId = cv.channelId;
-
-      const label = document.createElement('span');
-      label.className = 'tab-label';
-      label.textContent = '#' + cv.channelName;
-      tab.appendChild(label);
-
-      const closeBtn = document.createElement('span');
-      closeBtn.className = 'tab-close';
-      closeBtn.innerHTML = '&times;';
-      closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeChannelViewTab(cv.channelId);
-      });
-      tab.appendChild(closeBtn);
-
-      tab.addEventListener('click', () => switchToTab({ type: 'channel-view', channelId: cv.channelId, channelName: cv.channelName }));
-      tab.addEventListener('contextmenu', (e) => showTabContextMenu(e, { type: 'channel-view', channelId: cv.channelId }));
-    }
-    tabBar.appendChild(tab);
-  }
-}
-
-/**
- * @param {number} x
- * @param {number} y
- * @param {string} href
- */
-function showLinkContextMenu(x, y, href) {
-  const existing = document.querySelector('.link-context-menu');
-  if (existing) {
-    existing.remove();
-  }
-
-  const menu = document.createElement('div');
-  menu.className = 'context-menu link-context-menu';
-  menu.style.left = `${x}px`;
-  menu.style.top = `${y}px`;
-
-  const openItem = document.createElement('div');
-  openItem.className = 'context-menu-item';
-  openItem.textContent = 'Open Link';
-  openItem.addEventListener('click', () => {
-    menu.remove();
-    window.gimodi.openExternal(href);
-  });
-  menu.appendChild(openItem);
-
-  const copyItem = document.createElement('div');
-  copyItem.className = 'context-menu-item';
-  copyItem.textContent = 'Copy Link';
-  copyItem.addEventListener('click', () => {
-    menu.remove();
-    navigator.clipboard.writeText(href);
-  });
-  menu.appendChild(copyItem);
-
-  document.body.appendChild(menu);
-  const onClickOutside = (ev) => {
-    if (!menu.contains(ev.target)) {
-      menu.remove();
-      document.removeEventListener('click', onClickOutside, true);
-    }
-  };
-  setTimeout(() => document.addEventListener('click', onClickOutside, true), 0);
-}
-
-/**
- * @param {number} x
- * @param {number} y
- * @param {string} src
- * @param {string} [filename]
- * @param {string} [size]
- * @param {string} [url]
- */
-function showImageContextMenu(x, y, src, filename, size, url) {
-  const existing = document.querySelector('.image-context-menu');
-  if (existing) {
-    existing.remove();
-  }
-
-  const menu = document.createElement('div');
-  menu.className = 'context-menu image-context-menu';
-  menu.style.left = `${x}px`;
-  menu.style.top = `${y}px`;
-
-  const copyItem = document.createElement('div');
-  copyItem.className = 'context-menu-item';
-  copyItem.textContent = 'Copy Image URL';
-  copyItem.addEventListener('click', () => {
-    menu.remove();
-    navigator.clipboard.writeText(src);
-  });
-  menu.appendChild(copyItem);
-
-  if (url) {
-    const downloadItem = document.createElement('div');
-    downloadItem.className = 'context-menu-item';
-    downloadItem.textContent = 'Save Image';
-    downloadItem.addEventListener('click', () => {
-      menu.remove();
-      window.gimodi.downloadFile(url, filename || 'image');
-    });
-    menu.appendChild(downloadItem);
-  }
-
-  const openItem = document.createElement('div');
-  openItem.className = 'context-menu-item';
-  openItem.textContent = 'Open in Browser';
-  openItem.addEventListener('click', () => {
-    menu.remove();
-    window.gimodi.openExternal(src);
-  });
-  menu.appendChild(openItem);
-
-  document.body.appendChild(menu);
-  const onClickOutside = (ev) => {
-    if (!menu.contains(ev.target)) {
-      menu.remove();
-      document.removeEventListener('click', onClickOutside, true);
-    }
-  };
-  setTimeout(() => document.addEventListener('click', onClickOutside, true), 0);
-}
-
-function showTabContextMenu(e, tabInfo) {
-  e.preventDefault();
-  e.stopPropagation();
-
-  const existing = document.querySelector('.tab-context-menu');
-  if (existing) {
-    existing.remove();
-  }
-
-  const menu = document.createElement('div');
-  menu.className = 'context-menu tab-context-menu';
-  menu.style.left = `${e.clientX}px`;
-  menu.style.top = `${e.clientY}px`;
-
-  const closeItem = document.createElement('div');
-  closeItem.className = 'context-menu-item';
-  closeItem.textContent = 'Close Tab';
-  closeItem.addEventListener('click', () => {
-    menu.remove();
-    closeChannelViewTab(tabInfo.channelId);
-  });
-  menu.appendChild(closeItem);
-
-  const closeAllItem = document.createElement('div');
-  closeAllItem.className = 'context-menu-item';
-  closeAllItem.textContent = 'Close All Tabs';
-  closeAllItem.addEventListener('click', () => {
-    menu.remove();
-    for (const t of [...channelViewTabs]) {
-      closeChannelViewTab(t.channelId);
-    }
-  });
-  menu.appendChild(closeAllItem);
-
-  const closeOthersItem = document.createElement('div');
-  closeOthersItem.className = 'context-menu-item';
-  closeOthersItem.textContent = 'Close Other Tabs';
-  closeOthersItem.addEventListener('click', () => {
-    menu.remove();
-    for (const t of [...channelViewTabs]) {
-      if (t.channelId !== tabInfo.channelId) {
-        closeChannelViewTab(t.channelId);
-      }
-    }
-  });
-  menu.appendChild(closeOthersItem);
-
-  document.body.appendChild(menu);
-
-  const onClickOutside = (ev) => {
-    if (!menu.contains(ev.target)) {
-      menu.remove();
-      document.removeEventListener('click', onClickOutside, true);
-    }
-  };
-  setTimeout(() => document.addEventListener('click', onClickOutside, true), 0);
-
-  const onEscape = (ev) => {
-    if (ev.key === 'Escape') {
-      menu.remove();
-      document.removeEventListener('keydown', onEscape);
-    }
-  };
-  document.addEventListener('keydown', onEscape);
-}
-
-function addTabDragListeners(tab, index) {
-  tab.addEventListener('dragstart', (e) => {
-    draggedTab = { index };
-    tab.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-  });
-
-  tab.addEventListener('dragend', () => {
-    tab.classList.remove('dragging');
-    document.querySelectorAll('.tab.drag-over-left, .tab.drag-over-right').forEach((el) => {
-      el.classList.remove('drag-over-left', 'drag-over-right');
-    });
-    draggedTab = null;
-  });
-
-  tab.addEventListener('dragover', (e) => {
-    if (!draggedTab) {
-      return;
-    }
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = tab.getBoundingClientRect();
-    const midX = rect.left + rect.width / 2;
-    tab.classList.toggle('drag-over-left', e.clientX < midX);
-    tab.classList.toggle('drag-over-right', e.clientX >= midX);
-  });
-
-  tab.addEventListener('dragleave', () => {
-    tab.classList.remove('drag-over-left', 'drag-over-right');
-  });
-
-  tab.addEventListener('drop', (e) => {
-    e.preventDefault();
-    tab.classList.remove('drag-over-left', 'drag-over-right');
-    if (!draggedTab) {
-      return;
-    }
-
-    const fromIndex = draggedTab.index;
-    const rect = tab.getBoundingClientRect();
-    const midX = rect.left + rect.width / 2;
-    let toIndex = e.clientX < midX ? index : index + 1;
-    if (toIndex > fromIndex) {
-      toIndex--;
-    }
-    if (fromIndex === toIndex) {
-      return;
-    }
-
-    const [moved] = tabOrder.splice(fromIndex, 1);
-    tabOrder.splice(toIndex, 0, moved);
-
-    if (tabOrder.some((t) => t.type === 'channel-view')) {
-      window.dispatchEvent(new CustomEvent('gimodi:channel-tabs-changed'));
-    }
-    renderTabs();
-  });
-}
-
 export function setChannelName(name) {
   currentChannelName = name;
   renderTabs();
@@ -3389,15 +2236,9 @@ export function isChannelUnread(channelId) {
   return unreadChannels.has(channelId);
 }
 
-export function initUnreadState(channels, serverAddress) {
+export async function initUnreadState(channels, serverAddress) {
   unreadChannels.clear();
-  const storageKey = `gimodi:lastRead:${serverAddress}`;
-  let lastReadMap = {};
-  try {
-    lastReadMap = JSON.parse(localStorage.getItem(storageKey) || '{}');
-  } catch {
-    /* ignore */
-  }
+  const lastReadMap = await window.gimodi.db.getLastRead(serverAddress);
 
   for (const ch of channels) {
     if (!ch.lastMessageAt) {
@@ -3415,430 +2256,22 @@ export function initUnreadState(channels, serverAddress) {
 }
 
 /**
- * Highlights a message element and removes the highlight after 2 seconds.
- * @param {HTMLElement} el
- */
-function highlightMessage(el) {
-  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  el.classList.add('chat-msg-highlight');
-  setTimeout(() => el.classList.remove('chat-msg-highlight'), 2000);
-}
-
-/**
  * Scrolls to a specific message by ID, loading context from server if needed.
  * @param {string} messageId
  * @param {number} timestamp
+ * @returns {Promise<void>}
  */
 export async function scrollToMessage(messageId, timestamp) {
-  if (!currentChannelId) {
-    return;
-  }
-
-  if (activeTab.type !== 'channel') {
-    activeTab = { type: 'channel' };
-    channelMessagesCache.length = 0;
-    renderTabs();
-    updateInputForTab();
-    await loadHistory(currentChannelId);
-  }
-
-  const existing = chatMessages.querySelector(`[data-msg-id="${messageId}"]`);
-  if (existing) {
-    highlightMessage(existing);
-    return;
-  }
-
-  try {
-    const result = await provider.fetchContext(currentChannelId, timestamp);
-    if (!result?.messages?.length) {
-      return;
-    }
-
-    const sorted = [...result.messages];
-    sorted.sort((a, b) => a.timestamp - b.timestamp);
-
-    const userIds = sorted.map((m) => m.userId).filter(Boolean);
-    if (userIds.length > 0) {
-      await resolveNicknames(userIds);
-    }
-
-    chatMessages.innerHTML = '';
-    paginationState.channel = { oldestTs: sorted[0].timestamp, allLoaded: false, loading: false };
-
-    for (const msg of sorted) {
-      appendMessage(msg);
-    }
-
-    requestAnimationFrame(() => {
-      const target = chatMessages.querySelector(`[data-msg-id="${messageId}"]`);
-      if (target) {
-        highlightMessage(target);
-      }
-    });
-  } catch (err) {
-    console.error('[chat] scrollToMessage failed:', err);
-  }
+  return messageH.scrollToMessage(messageId, timestamp);
 }
 
+/**
+ * Marks a channel as read by updating the lastRead timestamp in the database.
+ * @param {string} channelId
+ * @param {string} serverAddress
+ * @returns {void}
+ */
 export function markChannelRead(channelId, serverAddress) {
-  const storageKey = `gimodi:lastRead:${serverAddress}`;
-  let lastReadMap = {};
-  try {
-    lastReadMap = JSON.parse(localStorage.getItem(storageKey) || '{}');
-  } catch {
-    /* ignore */
-  }
-  lastReadMap[channelId] = Date.now();
-  localStorage.setItem(storageKey, JSON.stringify(lastReadMap));
+  return messageH.markChannelRead(channelId, serverAddress);
 }
 
-function onMessagePinned(e) {
-  const { messageId, channelId } = e.detail;
-  if (!channelPinnedMessages.has(channelId)) {
-    channelPinnedMessages.set(channelId, new Set());
-  }
-  channelPinnedMessages.get(channelId).add(messageId);
-
-  // If this is the currently viewed channel, update pinned messages display
-  if (channelId === getViewingChannelId()) {
-    renderPinnedMessages();
-  }
-}
-
-function onMessageUnpinned(e) {
-  const { messageId, channelId } = e.detail;
-  const pinnedSet = channelPinnedMessages.get(channelId);
-  if (pinnedSet) {
-    pinnedSet.delete(messageId);
-  }
-
-  // If this is the currently viewed channel, update pinned messages display
-  if (channelId === getViewingChannelId()) {
-    renderPinnedMessages();
-  }
-}
-
-// --- Message editing ---
-
-function enterEditMode(msgEl, messageId) {
-  if (msgEl.classList.contains('editing')) {
-    return;
-  }
-
-  const rawContent = msgEl.dataset.content || '';
-  const bodyEl = msgEl.querySelector('.chat-msg-body');
-  if (!bodyEl) {
-    return;
-  }
-
-  // Convert @u(id) → @nickname for display in edit field
-  const preexistingMentions = new Map(); // nickname → { userId, clientId }
-  const content = rawContent.replace(/@u\(([^)]+)\)/g, (full, id) => {
-    let nick = null;
-    if (window.gimodiClients) {
-      const c = window.gimodiClients.find((cl) => cl.userId === id || cl.id === id);
-      nick = c?.nickname ?? null;
-    }
-    if (!nick) {
-      nick = getCachedNickname(id);
-    }
-    if (!nick) {
-      nick = id.slice(0, 8);
-    }
-    preexistingMentions.set(nick, { userId: id, clientId: null });
-    return `@${nick}`;
-  });
-
-  msgEl.classList.add('editing');
-  bodyEl.style.display = 'none';
-
-  const textarea = document.createElement('textarea');
-  textarea.className = 'edit-msg-textarea';
-  textarea.value = content;
-  textarea.rows = Math.min(content.split('\n').length + 1, 10);
-
-  const controls = document.createElement('div');
-  controls.className = 'edit-msg-controls';
-
-  const saveBtn = document.createElement('button');
-  saveBtn.className = 'edit-msg-save';
-  saveBtn.textContent = 'Save';
-
-  const cancelBtn = document.createElement('button');
-  cancelBtn.className = 'edit-msg-cancel';
-  cancelBtn.textContent = 'Cancel';
-
-  controls.appendChild(saveBtn);
-  controls.appendChild(cancelBtn);
-  bodyEl.after(textarea);
-  textarea.after(controls);
-  textarea.focus();
-  textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-
-  function exitEditMode() {
-    msgEl.classList.remove('editing');
-    textarea.remove();
-    controls.remove();
-    bodyEl.style.display = '';
-  }
-
-  cancelBtn.addEventListener('click', exitEditMode);
-
-  saveBtn.addEventListener('click', async () => {
-    const editedText = textarea.value.trim();
-    if (!editedText) {
-      return;
-    }
-    // Seed selectedMentions with pre-existing mentions before resolving
-    for (const [nick, ids] of preexistingMentions) {
-      if (!selectedMentions.has(nick)) {
-        selectedMentions.set(nick, ids);
-      }
-    }
-    const newContent = resolveStructuredMentions(editedText);
-    if (newContent === rawContent) {
-      exitEditMode();
-      return;
-    }
-    try {
-      await provider.editMessage(messageId, newContent);
-      exitEditMode();
-    } catch (err) {
-      appendSystemMessage(`Edit failed: ${err.message}`);
-      exitEditMode();
-    }
-  });
-
-  textarea.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      saveBtn.click();
-    }
-    if (e.key === 'Escape') {
-      exitEditMode();
-    }
-  });
-}
-
-// --- Reply functionality ---
-
-function startReplyTo(msg) {
-  replyToMessage = {
-    id: msg.id,
-    nickname: msg.nickname,
-    content: msg.content,
-    channelId: msg.channelId,
-  };
-  renderReplyPreview();
-  chatInput.focus();
-}
-
-function cancelReply() {
-  replyToMessage = null;
-  renderReplyPreview();
-}
-
-function renderReplyPreview() {
-  let previewEl = document.getElementById('reply-preview');
-  if (!replyToMessage) {
-    if (previewEl) {
-      previewEl.remove();
-    }
-    return;
-  }
-
-  const inputRow = chatInput?.closest('.chat-input-row');
-  if (!previewEl) {
-    previewEl = document.createElement('div');
-    previewEl.id = 'reply-preview';
-    previewEl.className = 'reply-preview';
-    inputRow.parentNode.insertBefore(previewEl, inputRow);
-  }
-
-  const rawPreview = replyToMessage.content && isFileMessage(replyToMessage.content) ? 'click to see attachment' : replyToMessage.content ? resolveMentionsText(replyToMessage.content) : '';
-  const previewContent = rawPreview ? rawPreview.substring(0, 80) + (rawPreview.length > 80 ? '…' : '') : '(message)';
-
-  previewEl.innerHTML = `
-    <div class="reply-preview-bar"></div>
-    <div class="reply-preview-body">
-      <span class="reply-preview-nickname">${escapeHtml(replyToMessage.nickname)}</span>
-      <span class="reply-preview-content">${escapeHtml(previewContent)}</span>
-    </div>
-    <button class="reply-preview-cancel" title="Cancel reply"><i class="bi bi-x"></i></button>
-  `;
-
-  previewEl.querySelector('.reply-preview-cancel').addEventListener('click', cancelReply);
-}
-
-function onMessageEdited(e) {
-  const { messageId, newContent, editedAt } = e.detail;
-  const msgEl = chatMessages.querySelector(`[data-msg-id="${messageId}"]`);
-  if (!msgEl) {
-    return;
-  }
-
-  // Update stored raw content
-  msgEl.dataset.content = newContent;
-
-  const bodyEl = msgEl.querySelector('.chat-msg-body');
-  if (bodyEl) {
-    bodyEl.innerHTML = renderMarkdown(newContent);
-    // Re-attach link click handlers
-    for (const a of bodyEl.querySelectorAll('a')) {
-      a.addEventListener('click', (ev) => {
-        ev.preventDefault();
-        const href = a.getAttribute('href');
-        if (href) {
-          window.gimodi.openExternal(href);
-        }
-      });
-    }
-    // Re-attach copy buttons to code blocks
-    for (const pre of bodyEl.querySelectorAll('pre')) {
-      pre.style.position = 'relative';
-      const btn = document.createElement('button');
-      btn.className = 'code-copy-btn';
-      btn.textContent = 'Copy';
-      btn.addEventListener('click', () => {
-        const code = pre.querySelector('code');
-        const text = (code || pre).textContent;
-        navigator.clipboard.writeText(text).then(() => {
-          btn.textContent = 'Copied!';
-          setTimeout(() => {
-            btn.textContent = 'Copy';
-          }, 1500);
-        });
-      });
-      pre.appendChild(btn);
-    }
-  }
-
-  // Add or update (edited) label
-  let editedLabelEl = msgEl.querySelector('.chat-msg-edited');
-  if (!editedLabelEl) {
-    editedLabelEl = document.createElement('span');
-    editedLabelEl.className = 'chat-msg-edited';
-    editedLabelEl.textContent = '(edited)';
-
-    const header = msgEl.querySelector('.chat-msg-header');
-    if (header) {
-      const timeEl = header.querySelector('.chat-msg-time');
-      if (timeEl) {
-        timeEl.after(editedLabelEl);
-      } else {
-        header.appendChild(editedLabelEl);
-      }
-    } else {
-      // Grouped message - append after body
-      if (bodyEl) {
-        bodyEl.after(editedLabelEl);
-      }
-    }
-  }
-  editedLabelEl.title = formatDateTime(editedAt);
-}
-
-function renderPinnedMessages() {
-  if (!provider?.supportsPinning || !pinnedMessages) {
-    return;
-  }
-  const viewingChannelId = getViewingChannelId();
-  const pinnedSet = viewingChannelId ? channelPinnedMessages.get(viewingChannelId) : null;
-  if (!pinnedSet || pinnedSet.size === 0) {
-    pinnedMessages.classList.add('hidden');
-    pinnedMessages.innerHTML = '';
-    return;
-  }
-
-  pinnedMessages.classList.remove('hidden');
-  pinnedMessages.innerHTML = '';
-
-  const header = document.createElement('div');
-  header.className = 'pinned-header';
-  header.innerHTML = `
-    <i class="bi bi-pin-angle-fill"></i>
-    <span>${pinnedSet.size} Pinned Message${pinnedSet.size > 1 ? 's' : ''}</span>
-    <i class="bi bi-chevron-down pinned-chevron${pinnedCollapsed ? '' : ' expanded'}"></i>
-  `;
-  header.style.cursor = 'pointer';
-  header.addEventListener('click', () => {
-    pinnedCollapsed = !pinnedCollapsed;
-    renderPinnedMessages();
-  });
-  pinnedMessages.appendChild(header);
-
-  if (pinnedCollapsed) {
-    return;
-  }
-
-  const container = document.createElement('div');
-  container.className = 'pinned-messages-container';
-
-  // Display pinned messages (find them in the chat history)
-  for (const messageId of pinnedSet) {
-    const msgEl = chatMessages.querySelector(`[data-msg-id="${messageId}"]`);
-    if (msgEl) {
-      const clone = msgEl.cloneNode(true);
-      clone.classList.add('pinned-message-preview');
-
-      const actionsEl = clone.querySelector('.chat-msg-actions');
-      if (actionsEl) {
-        actionsEl.remove();
-      }
-      const hoverTimeEl = clone.querySelector('.chat-msg-hover-time');
-      if (hoverTimeEl) {
-        hoverTimeEl.remove();
-      }
-
-      // If this is a grouped message (no header), inject the author name with badge and time
-      if (clone.classList.contains('chat-msg-grouped')) {
-        clone.classList.remove('chat-msg-grouped');
-        const nickname = msgEl.dataset.nickname || 'Unknown';
-        const badge = msgEl.dataset.badge || '';
-        const badgeHtml = badge ? `<span class="admin-badge">${escapeHtml(badge)}</span>` : '';
-        const ts = Number(msgEl.dataset.timestamp);
-        const timeStr = formatRelativeTime(ts);
-        const headerDiv = document.createElement('div');
-        headerDiv.className = 'chat-msg-header';
-        headerDiv.innerHTML = `<span class="chat-msg-nick-group"><span class="chat-msg-nick">${escapeHtml(nickname)}</span>${badgeHtml}</span><span class="chat-msg-time">${timeStr}</span>`;
-        const body = clone.querySelector('.chat-msg-body');
-        if (body) {
-          clone.insertBefore(headerDiv, body);
-        }
-      }
-
-      // Add unpin button
-      if (provider.hasPermission('chat.pin')) {
-        const unpinBtn = document.createElement('button');
-        unpinBtn.className = 'pinned-message-unpin';
-        unpinBtn.title = 'Unpin';
-        unpinBtn.innerHTML = '&times;';
-        unpinBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          provider.unpinMessage(messageId);
-        });
-        clone.appendChild(unpinBtn);
-      }
-
-      // Click to scroll to original message
-      clone.addEventListener('click', () => {
-        const original = chatMessages.querySelector(`[data-msg-id="${messageId}"]`);
-        if (original) {
-          original.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          original.classList.add('highlight');
-          setTimeout(() => original.classList.remove('highlight'), 2000);
-        }
-      });
-
-      container.appendChild(clone);
-    } else {
-      // Message was deleted - auto-unpin the orphaned pin
-      pinnedSet.delete(messageId);
-      if (provider.hasPermission('chat.pin')) {
-        provider.unpinMessage(messageId);
-      }
-    }
-  }
-
-  pinnedMessages.appendChild(container);
-}

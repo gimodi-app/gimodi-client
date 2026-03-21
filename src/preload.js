@@ -2,43 +2,92 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('gimodi', {
   getVersion: () => ipcRenderer.invoke('get-version'),
-  history: {
-    load: () => ipcRenderer.invoke('history:load'),
-    save: (entries) => ipcRenderer.invoke('history:save', entries),
-  },
-  servers: {
-    list: () => ipcRenderer.invoke('servers:list'),
-    add: (server) => ipcRenderer.invoke('servers:add', server),
-    remove: (address, nickname, identityFingerprint) => ipcRenderer.invoke('servers:remove', address, nickname, identityFingerprint),
-    reorder: (fromIndex, toIndex) => ipcRenderer.invoke('servers:reorder', fromIndex, toIndex),
-    save: (items) => ipcRenderer.invoke('servers:save', items),
-  },
-  friends: {
-    list: () => ipcRenderer.invoke('friends:list'),
-    add: (friend) => ipcRenderer.invoke('friends:add', friend),
-    remove: (fingerprint) => ipcRenderer.invoke('friends:remove', fingerprint),
-    update: (fingerprint, updates) => ipcRenderer.invoke('friends:update', fingerprint, updates),
-  },
-  settings: {
-    load: () => ipcRenderer.invoke('settings:load'),
-    save: (settings) => ipcRenderer.invoke('settings:save', settings),
-  },
-  identity: {
-    loadAll: () => ipcRenderer.invoke('identity:load-all'),
-    create: (name) => ipcRenderer.invoke('identity:create', name),
-    delete: (fingerprint) => ipcRenderer.invoke('identity:delete', fingerprint),
-    rename: (fingerprint, newName) => ipcRenderer.invoke('identity:rename', fingerprint, newName),
-    setDefault: (fingerprint) => ipcRenderer.invoke('identity:set-default', fingerprint),
-    getDefault: () => ipcRenderer.invoke('identity:get-default'),
-    encrypt: (recipientPublicKeys, plaintext) => ipcRenderer.invoke('identity:encrypt', recipientPublicKeys, plaintext),
-    decrypt: (armoredMessage) => ipcRenderer.invoke('identity:decrypt', armoredMessage),
-    generateSessionKey: () => ipcRenderer.invoke('identity:generate-session-key'),
-    encryptSessionKey: (base64Key, participants) => ipcRenderer.invoke('identity:encrypt-session-key', base64Key, participants),
-    decryptSessionKey: (encryptedKey) => ipcRenderer.invoke('identity:decrypt-session-key', encryptedKey),
-    encryptSymmetric: (base64Key, plaintext) => ipcRenderer.invoke('identity:encrypt-symmetric', base64Key, plaintext),
-    decryptSymmetric: (base64Key, ciphertext) => ipcRenderer.invoke('identity:decrypt-symmetric', base64Key, ciphertext),
-    export: (fingerprint) => ipcRenderer.invoke('identity:export', fingerprint),
-    import: () => ipcRenderer.invoke('identity:import'),
+  db: {
+    // --- Global (app.db) ---
+    listIdentities: () => ipcRenderer.invoke('db:identities:list'),
+    createIdentity: (name) => ipcRenderer.invoke('db:identities:create', name),
+    deleteIdentity: (fp) => ipcRenderer.invoke('db:identities:delete', fp),
+    renameIdentity: (fp, name) => ipcRenderer.invoke('db:identities:rename', fp, name),
+    switchIdentity: (fp) => ipcRenderer.invoke('db:identities:switch', fp),
+    getActiveIdentity: () => ipcRenderer.invoke('db:identities:active'),
+    logout: () => ipcRenderer.invoke('db:identities:logout'),
+    exportIdentity: (fp) => ipcRenderer.invoke('db:identities:export', fp),
+    importIdentity: () => ipcRenderer.invoke('db:identities:import'),
+
+    // App-level settings
+    getAppSetting: (key) => ipcRenderer.invoke('db:app-setting:get', key),
+    setAppSetting: (key, value) => ipcRenderer.invoke('db:app-setting:set', key, value),
+
+    // --- Identity-scoped ---
+    getSetting: (key) => ipcRenderer.invoke('db:setting:get', key),
+    setSetting: (key, value) => ipcRenderer.invoke('db:setting:set', key, value),
+    getSettings: () => ipcRenderer.invoke('db:settings:all'),
+
+    // Servers
+    listServers: () => ipcRenderer.invoke('db:servers:list'),
+    listServersGrouped: () => ipcRenderer.invoke('db:servers:list-grouped'),
+    saveServersGrouped: (items) => ipcRenderer.invoke('db:servers:save-grouped', items),
+    addServer: (server) => ipcRenderer.invoke('db:servers:add', server),
+    removeServer: (id) => ipcRenderer.invoke('db:servers:remove', id),
+    reorderServer: (id, newPosition) => ipcRenderer.invoke('db:servers:reorder', id, newPosition),
+    updateServer: (id, updates) => ipcRenderer.invoke('db:servers:update', id, updates),
+
+    // Server groups
+    listGroups: () => ipcRenderer.invoke('db:groups:list'),
+    createGroup: (group) => ipcRenderer.invoke('db:groups:create', group),
+    deleteGroup: (id) => ipcRenderer.invoke('db:groups:delete', id),
+    updateGroup: (id, updates) => ipcRenderer.invoke('db:groups:update', id, updates),
+
+    // Friends
+    listFriends: () => ipcRenderer.invoke('db:friends:list'),
+    addFriend: (friend) => ipcRenderer.invoke('db:friends:add', friend),
+    removeFriend: (fp) => ipcRenderer.invoke('db:friends:remove', fp),
+    updateFriend: (fp, updates) => ipcRenderer.invoke('db:friends:update', fp, updates),
+
+    // Blocked/Ignored
+    listBlocked: (type) => ipcRenderer.invoke('db:blocked:list', type),
+    addBlocked: (fp, type) => ipcRenderer.invoke('db:blocked:add', fp, type),
+    removeBlocked: (fp, type) => ipcRenderer.invoke('db:blocked:remove', fp, type),
+
+    // DM Conversations
+    listConversations: () => ipcRenderer.invoke('db:dm:conversations'),
+    getConversation: (id) => ipcRenderer.invoke('db:dm:conversation:get', id),
+    upsertConversation: (conv) => ipcRenderer.invoke('db:dm:upsert-conversation', conv),
+    deleteConversation: (id) => ipcRenderer.invoke('db:dm:delete-conversation', id),
+    updateConversation: (id, updates) => ipcRenderer.invoke('db:dm:update-conversation', id, updates),
+    removeParticipant: (convId, fp) => ipcRenderer.invoke('db:dm:remove-participant', convId, fp),
+
+    // DM Messages
+    getMessages: (conversationId, opts) => ipcRenderer.invoke('db:dm:messages', conversationId, opts),
+    getLastMessages: () => ipcRenderer.invoke('db:dm:last-messages'),
+    saveMessage: (msg) => ipcRenderer.invoke('db:dm:save-message', msg),
+    updateMessageStatus: (id, status) => ipcRenderer.invoke('db:dm:update-status', id, status),
+    getMessage: (id) => ipcRenderer.invoke('db:dm:get-message', id),
+    purgeMessage: (id) => ipcRenderer.invoke('db:dm:purge', id),
+    purgeConversation: (conversationId) => ipcRenderer.invoke('db:dm:purge-conversation', conversationId),
+    hasMessage: (conversationId, messageId) => ipcRenderer.invoke('db:dm:has-message', conversationId, messageId),
+
+    // DM Reactions
+    getReactions: (messageId) => ipcRenderer.invoke('db:dm:reactions', messageId),
+    addReaction: (messageId, emoji) => ipcRenderer.invoke('db:dm:add-reaction', messageId, emoji),
+    removeReaction: (messageId, emoji) => ipcRenderer.invoke('db:dm:remove-reaction', messageId, emoji),
+
+    // Last Read
+    getLastRead: (serverAddress) => ipcRenderer.invoke('db:last-read:get', serverAddress),
+    setLastRead: (serverAddress, channelId, ts) => ipcRenderer.invoke('db:last-read:set', serverAddress, channelId, ts),
+
+    // Crypto
+    encrypt: (recipientPublicKeys, plaintext) => ipcRenderer.invoke('db:identity:encrypt', recipientPublicKeys, plaintext),
+    decrypt: (armoredMessage) => ipcRenderer.invoke('db:identity:decrypt', armoredMessage),
+    generateSessionKey: () => ipcRenderer.invoke('db:identity:generate-session-key'),
+    encryptSessionKey: (base64Key, participants) => ipcRenderer.invoke('db:identity:encrypt-session-key', base64Key, participants),
+    decryptSessionKey: (encryptedKey) => ipcRenderer.invoke('db:identity:decrypt-session-key', encryptedKey),
+    encryptSymmetric: (base64Key, plaintext) => ipcRenderer.invoke('db:identity:encrypt-symmetric', base64Key, plaintext),
+    decryptSymmetric: (base64Key, ciphertext) => ipcRenderer.invoke('db:identity:decrypt-symmetric', base64Key, ciphertext),
+
+    // Events
+    onIdentitySwitched: (cb) => ipcRenderer.on('identity:switched', (_, data) => cb(data)),
+    onIdentityLoggedOut: (cb) => ipcRenderer.on('identity:logged-out', () => cb()),
   },
   windowControl: {
     minimize: () => ipcRenderer.send('window:minimize'),

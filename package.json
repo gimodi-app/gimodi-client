@@ -5,6 +5,7 @@
   "private": true,
   "main": "src/main/index.js",
   "scripts": {
+    "postinstall": "electron-rebuild",
     "build": "esbuild src/renderer/app.js --bundle --outfile=dist/bundle.js --platform=browser --format=iife --external:electron",
     "start": "npm run build && electron .",
     "package": "npm run build && electron-forge package",
@@ -46,6 +47,7 @@
   },
   "dependencies": {
     "@jitsi/rnnoise-wasm": "^0.2.1",
+    "better-sqlite3": "^12.8.0",
     "bootstrap-icons": "^1.13.1",
     "electron-squirrel-startup": "^1.0.1",
     "highlight.js": "^11.11.1",

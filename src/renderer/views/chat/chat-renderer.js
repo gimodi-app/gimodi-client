@@ -1,4 +1,4 @@
-import { formatTime, formatTimeShort, formatDateTime } from '../services/timeFormat.js';
+import { formatTime, formatTimeShort, formatDateTime } from '../../services/timeFormat.js';
 import { renderMarkdown, escapeHtml } from './chat-markdown.js';
 
 /**
