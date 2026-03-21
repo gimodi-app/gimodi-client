@@ -12,8 +12,8 @@ let closeHandler = null;
  * @returns {Promise<void>}
  */
 async function loadFrequent() {
-  const settings = (await window.gimodi.settings.load()) || {};
-  frequentCache = Array.isArray(settings.emojiFrequent) ? settings.emojiFrequent : [];
+  const raw = await window.gimodi.db.getAppSetting('emojiFrequent');
+  frequentCache = raw ? JSON.parse(raw) : [];
 }
 
 /**
@@ -24,9 +24,7 @@ async function trackUsage(emoji) {
   frequentCache = frequentCache.filter((e) => e !== emoji);
   frequentCache.unshift(emoji);
   frequentCache = frequentCache.slice(0, MAX_FREQUENT_STORED);
-  const settings = (await window.gimodi.settings.load()) || {};
-  settings.emojiFrequent = frequentCache;
-  window.gimodi.settings.save(settings);
+  window.gimodi.db.setAppSetting('emojiFrequent', JSON.stringify(frequentCache));
 }
 
 loadFrequent();

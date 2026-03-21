@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('gimodi', {
 
     // Servers
     listServers: () => ipcRenderer.invoke('db:servers:list'),
+    listServersGrouped: () => ipcRenderer.invoke('db:servers:list-grouped'),
+    saveServersGrouped: (items) => ipcRenderer.invoke('db:servers:save-grouped', items),
     addServer: (server) => ipcRenderer.invoke('db:servers:add', server),
     removeServer: (id) => ipcRenderer.invoke('db:servers:remove', id),
     reorderServer: (id, newPosition) => ipcRenderer.invoke('db:servers:reorder', id, newPosition),
@@ -86,45 +88,6 @@ contextBridge.exposeInMainWorld('gimodi', {
     // Events
     onIdentitySwitched: (cb) => ipcRenderer.on('identity:switched', (_, data) => cb(data)),
     onIdentityLoggedOut: (cb) => ipcRenderer.on('identity:logged-out', () => cb()),
-  },
-  // --- Legacy APIs (kept for backward compatibility during migration) ---
-  history: {
-    load: () => ipcRenderer.invoke('history:load'),
-    save: (entries) => ipcRenderer.invoke('history:save', entries),
-  },
-  servers: {
-    list: () => ipcRenderer.invoke('servers:list'),
-    add: (server) => ipcRenderer.invoke('servers:add', server),
-    remove: (address, nickname, identityFingerprint) => ipcRenderer.invoke('servers:remove', address, nickname, identityFingerprint),
-    reorder: (fromIndex, toIndex) => ipcRenderer.invoke('servers:reorder', fromIndex, toIndex),
-    save: (items) => ipcRenderer.invoke('servers:save', items),
-  },
-  friends: {
-    list: () => ipcRenderer.invoke('friends:list'),
-    add: (friend) => ipcRenderer.invoke('friends:add', friend),
-    remove: (fingerprint) => ipcRenderer.invoke('friends:remove', fingerprint),
-    update: (fingerprint, updates) => ipcRenderer.invoke('friends:update', fingerprint, updates),
-  },
-  settings: {
-    load: () => ipcRenderer.invoke('settings:load'),
-    save: (settings) => ipcRenderer.invoke('settings:save', settings),
-  },
-  identity: {
-    loadAll: () => ipcRenderer.invoke('identity:load-all'),
-    create: (name) => ipcRenderer.invoke('identity:create', name),
-    delete: (fingerprint) => ipcRenderer.invoke('identity:delete', fingerprint),
-    rename: (fingerprint, newName) => ipcRenderer.invoke('identity:rename', fingerprint, newName),
-    setDefault: (fingerprint) => ipcRenderer.invoke('identity:set-default', fingerprint),
-    getDefault: () => ipcRenderer.invoke('identity:get-default'),
-    encrypt: (recipientPublicKeys, plaintext) => ipcRenderer.invoke('identity:encrypt', recipientPublicKeys, plaintext),
-    decrypt: (armoredMessage) => ipcRenderer.invoke('identity:decrypt', armoredMessage),
-    generateSessionKey: () => ipcRenderer.invoke('identity:generate-session-key'),
-    encryptSessionKey: (base64Key, participants) => ipcRenderer.invoke('identity:encrypt-session-key', base64Key, participants),
-    decryptSessionKey: (encryptedKey) => ipcRenderer.invoke('identity:decrypt-session-key', encryptedKey),
-    encryptSymmetric: (base64Key, plaintext) => ipcRenderer.invoke('identity:encrypt-symmetric', base64Key, plaintext),
-    decryptSymmetric: (base64Key, ciphertext) => ipcRenderer.invoke('identity:decrypt-symmetric', base64Key, ciphertext),
-    export: (fingerprint) => ipcRenderer.invoke('identity:export', fingerprint),
-    import: () => ipcRenderer.invoke('identity:import'),
   },
   windowControl: {
     minimize: () => ipcRenderer.send('window:minimize'),

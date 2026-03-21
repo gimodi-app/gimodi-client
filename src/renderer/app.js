@@ -229,7 +229,8 @@ const newPlaceholderParentId = document.getElementById('new-placeholder-parent-i
 let appSettings = {};
 
 async function loadSettings() {
-  appSettings = (await window.gimodi.settings.load()) || {};
+  const raw = await window.gimodi.db.getAppSetting('appSettings');
+  appSettings = raw ? JSON.parse(raw) : {};
   notificationService.updateSettings(appSettings);
   if (appSettings.voiceActivationLevel !== null && appSettings.voiceActivationLevel !== undefined) {
     voiceService.setVoiceActivationLevel(appSettings.voiceActivationLevel);
@@ -277,7 +278,7 @@ async function loadSettings() {
 }
 
 function saveSettings() {
-  window.gimodi.settings.save(appSettings);
+  window.gimodi.db.setAppSetting('appSettings', JSON.stringify(appSettings));
   notificationService.updateSettings(appSettings);
 }
 
@@ -310,7 +311,7 @@ async function startApp(identity) {
   setActiveIdentity(identity);
   await ensureDmServices(identity.fingerprint);
   rerenderSidebar();
-  const servers = (await window.gimodi.servers.list()) || [];
+  const servers = (await window.gimodi.db.listServersGrouped()) || [];
   connectionManager.connectAll(
     servers.flatMap((s) => (s.type === 'group' ? s.servers : [s])),
     identity.public_key || undefined,
@@ -542,7 +543,9 @@ window.addEventListener('gimodi:remove-server', async (e) => {
     conn.stopReconnect();
     disconnectServer(key);
   }
-  await window.gimodi.servers.remove(server.address, server.nickname, server.identityFingerprint);
+  if (server.id) {
+    await window.gimodi.db.removeServer(server.id);
+  }
   removeServerByIdentity(server.address, server.nickname, server.identityFingerprint);
   rerenderSidebar();
 });
@@ -1099,7 +1102,7 @@ connectionManager.addEventListener('background-connected', (e) => {
 
   if (data.serverName && data.serverName !== server.name) {
     server.name = data.serverName;
-    window.gimodi.servers.add(server);
+    window.gimodi.db.addServer(server);
   }
 
   const conn = connectionManager.getConnection(key);
@@ -1137,17 +1140,8 @@ window.gimodi.onConnectServer(async (server) => {
       return;
     }
 
-    // Get identity - use stored fingerprint if available, otherwise default
-    let publicKey;
-    if (server.identityFingerprint) {
-      const allIdentities = await window.gimodi.identity.loadAll();
-      const match = allIdentities.find((i) => i.fingerprint === server.identityFingerprint);
-      publicKey = match ? match.publicKeyArmored : undefined;
-    }
-    if (!publicKey) {
-      const defaultIdentity = await window.gimodi.identity.getDefault();
-      publicKey = defaultIdentity ? defaultIdentity.publicKeyArmored : undefined;
-    }
+    const activeIdentity = await window.gimodi.db.getActiveIdentity();
+    const publicKey = activeIdentity?.public_key || undefined;
 
     const data = await connectionManager.connect(key, server.address, server.nickname, server.password || undefined, publicKey);
 
@@ -1243,9 +1237,8 @@ async function ensureDmServices(fingerprint) {
     return;
   }
 
-  const allIdentities = await window.gimodi.identity.loadAll();
-  const identity = allIdentities.find((i) => i.fingerprint === fingerprint);
-  const publicKey = identity?.publicKeyArmored ?? '';
+  const identity = await window.gimodi.db.getActiveIdentity();
+  const publicKey = identity?.public_key ?? '';
   dmService = new DmService(fingerprint, publicKey);
   friendsService = new FriendsService(fingerprint);
   dmService.addEventListener('message-received', setDmUnread);

@@ -91,7 +91,7 @@ async function _initRolesLogic(root) {
 
   const rolesSidebar = root.querySelector('.roles-sidebar');
   const resizeHandle = root.querySelector('.roles-resize-handle');
-  const savedWidth = (await window.gimodi.settings.load())?.rolesSidebarWidth;
+  const savedWidth = JSON.parse(await window.gimodi.db.getAppSetting('appSettings') || '{}').rolesSidebarWidth;
   if (savedWidth) {
     rolesSidebar.style.width = savedWidth + 'px';
   }
@@ -119,9 +119,9 @@ async function _initRolesLogic(root) {
       resizeHandle.style.background = 'transparent';
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      const settings = (await window.gimodi.settings.load()) || {};
+      const settings = JSON.parse(await window.gimodi.db.getAppSetting('appSettings') || '{}');
       settings.rolesSidebarWidth = rolesSidebar.offsetWidth;
-      window.gimodi.settings.save(settings);
+      window.gimodi.db.setAppSetting('appSettings', JSON.stringify(settings));
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
@@ -132,7 +132,7 @@ async function _initRolesLogic(root) {
   const permsContainer = root.querySelector('.roles-perms-list');
 
   const permsResizeHandle = root.querySelector('.roles-perms-resize-handle');
-  const savedPermsWidth = (await window.gimodi.settings.load())?.rolesPermsWidth;
+  const savedPermsWidth = JSON.parse(await window.gimodi.db.getAppSetting('appSettings') || '{}').rolesPermsWidth;
   if (savedPermsWidth) {
     permsContainer.style.width = savedPermsWidth + 'px';
   }
@@ -162,9 +162,9 @@ async function _initRolesLogic(root) {
       permsResizeHandle.style.background = 'var(--border)';
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      const settings = (await window.gimodi.settings.load()) || {};
+      const settings = JSON.parse(await window.gimodi.db.getAppSetting('appSettings') || '{}');
       settings.rolesPermsWidth = permsContainer.offsetWidth;
-      window.gimodi.settings.save(settings);
+      window.gimodi.db.setAppSetting('appSettings', JSON.stringify(settings));
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);

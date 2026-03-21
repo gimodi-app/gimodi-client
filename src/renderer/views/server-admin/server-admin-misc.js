@@ -463,7 +463,7 @@ async function renderAuditLogPanel(container) {
     { key: 'details', label: 'Details', minWidth: 80 },
   ];
 
-  const savedColWidths = (await window.gimodi.settings.load())?.auditColumnWidths || {};
+  const savedColWidths = JSON.parse(await window.gimodi.db.getAppSetting('appSettings') || '{}').auditColumnWidths || {};
 
   container.style.cssText = 'display:flex;flex-direction:column;overflow:hidden;flex:1;min-height:0';
   container.innerHTML = `
@@ -525,12 +525,12 @@ async function renderAuditLogPanel(container) {
         handle.style.background = '';
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
-        const settings = (await window.gimodi.settings.load()) || {};
+        const settings = JSON.parse(await window.gimodi.db.getAppSetting('appSettings') || '{}');
         if (!settings.auditColumnWidths) {
           settings.auditColumnWidths = {};
         }
         settings.auditColumnWidths[colKey] = th.offsetWidth;
-        window.gimodi.settings.save(settings);
+        window.gimodi.db.setAppSetting('appSettings', JSON.stringify(settings));
       };
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);

@@ -216,7 +216,7 @@ async function handleAddServer() {
 
     server.name = data.serverName || address;
 
-    await window.gimodi.servers.add(server);
+    await window.gimodi.db.addServer(server);
     addOrUpdateServer(server);
 
     await saveToHistory(address, nickname, password, data.serverName);
@@ -301,7 +301,7 @@ async function handleEditServer() {
 
   const matchesOld = (s) => s.address === oldAddress && s.nickname === oldNickname;
   replaceServerInPlace(oldAddress, oldNickname, null, updatedServer);
-  const items = await window.gimodi.servers.list();
+  const items = await window.gimodi.db.listServersGrouped();
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     if (item.type === 'group') {
@@ -315,7 +315,7 @@ async function handleEditServer() {
       break;
     }
   }
-  await window.gimodi.servers.save(items);
+  await window.gimodi.db.saveServersGrouped(items);
 
   closeEditServerModal();
   renderSidebar();
@@ -349,7 +349,7 @@ async function connectToServer(server, { autoJoin = false } = {}) {
 
     if (data.serverName && data.serverName !== server.name) {
       server.name = data.serverName;
-      await window.gimodi.servers.add(server);
+      await window.gimodi.db.addServer(server);
       updateServerInList(server);
     }
 
@@ -370,7 +370,8 @@ async function connectToServer(server, { autoJoin = false } = {}) {
  * @param {string} serverName
  */
 async function saveToHistory(address, nickname, password, serverName) {
-  const history = (await window.gimodi.history.load()) || [];
+  const raw = await window.gimodi.db.getAppSetting('connectHistory');
+  const history = raw ? JSON.parse(raw) : [];
   const existing = history.findIndex((b) => b.address === address && b.nickname === nickname);
   if (existing >= 0) {
     history[existing].name = serverName || address;
@@ -383,7 +384,7 @@ async function saveToHistory(address, nickname, password, serverName) {
       password: password || null,
     });
   }
-  await window.gimodi.history.save(history);
+  await window.gimodi.db.setAppSetting('connectHistory', JSON.stringify(history));
 }
 
 /** @param {string} message */

@@ -133,6 +133,14 @@ function registerIpcHandlers(sendToMain) {
         return serversRepo.listServers();
     });
 
+    ipcMain.handle('db:servers:list-grouped', () => {
+        return serversRepo.listGrouped();
+    });
+
+    ipcMain.handle('db:servers:save-grouped', (event, items) => {
+        serversRepo.saveGrouped(items);
+    });
+
     ipcMain.handle('db:servers:add', (event, server) => {
         return serversRepo.addServer(server);
     });

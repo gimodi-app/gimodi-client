@@ -96,7 +96,7 @@ export class DmService extends EventTarget {
     for (const conv of this._conversations.values()) {
       if (conv.type === 'group' && conv.encryptedSessionKey && !conv.sessionKey) {
         try {
-          conv.sessionKey = await window.gimodi.identity.decryptSessionKey(conv.encryptedSessionKey);
+          conv.sessionKey = await window.gimodi.db.decryptSessionKey(conv.encryptedSessionKey);
           this.dispatchEvent(new CustomEvent('session-key-restored', { detail: { conversationId: conv.id } }));
         } catch (err) {
           console.error('[DmService] Failed to decrypt stored session key for', conv.id, err);
@@ -275,9 +275,9 @@ export class DmService extends EventTarget {
     let encryptedKeys = null;
 
     if (isGroup) {
-      const sessionKey = await window.gimodi.identity.generateSessionKey();
+      const sessionKey = await window.gimodi.db.generateSessionKey();
       const allParticipants = [{ fingerprint: this._fingerprint, publicKeyArmored: this._publicKey }, ...participants];
-      encryptedKeys = await window.gimodi.identity.encryptSessionKey(sessionKey, allParticipants);
+      encryptedKeys = await window.gimodi.db.encryptSessionKey(sessionKey, allParticipants);
     }
 
     const participantFingerprints = fingerprints;
@@ -313,7 +313,7 @@ export class DmService extends EventTarget {
     };
 
     if (isGroup && conv.encryptedSessionKey) {
-      conv.sessionKey = await window.gimodi.identity.decryptSessionKey(conv.encryptedSessionKey);
+      conv.sessionKey = await window.gimodi.db.decryptSessionKey(conv.encryptedSessionKey);
     }
 
     this._conversations.set(conv.id, conv);
@@ -362,7 +362,7 @@ export class DmService extends EventTarget {
         };
         if (conv.type === 'group' && conv.encryptedSessionKey) {
           try {
-            conv.sessionKey = await window.gimodi.identity.decryptSessionKey(conv.encryptedSessionKey);
+            conv.sessionKey = await window.gimodi.db.decryptSessionKey(conv.encryptedSessionKey);
           } catch (err) {
             console.error('[DmService] Failed to decrypt session key on fetch for', conv.id, err);
           }
@@ -377,7 +377,7 @@ export class DmService extends EventTarget {
         existing.serverKey = serverKey;
         if (!existing.sessionKey && existing.type === 'group' && raw.encryptedSessionKey) {
           try {
-            existing.sessionKey = await window.gimodi.identity.decryptSessionKey(raw.encryptedSessionKey);
+            existing.sessionKey = await window.gimodi.db.decryptSessionKey(raw.encryptedSessionKey);
             existing.encryptedSessionKey = raw.encryptedSessionKey;
             this.dispatchEvent(new CustomEvent('session-key-restored', { detail: { conversationId: existing.id } }));
           } catch (err) {
@@ -489,7 +489,7 @@ export class DmService extends EventTarget {
 
     let encryptedKey = null;
     if (conv.sessionKey && participant.publicKeyArmored) {
-      const keys = await window.gimodi.identity.encryptSessionKey(conv.sessionKey, [participant]);
+      const keys = await window.gimodi.db.encryptSessionKey(conv.sessionKey, [participant]);
       encryptedKey = keys[participant.fingerprint];
     }
 
@@ -544,12 +544,12 @@ export class DmService extends EventTarget {
       }
 
       recipientPubKeys.push(this._publicKey);
-      encryptedContent = await window.gimodi.identity.encrypt(recipientPubKeys, content);
+      encryptedContent = await window.gimodi.db.encrypt(recipientPubKeys, content);
     } else {
       if (!conv.sessionKey) {
         throw new Error('Session key not available');
       }
-      encryptedContent = await window.gimodi.identity.encryptSymmetric(conv.sessionKey, content);
+      encryptedContent = await window.gimodi.db.encryptSymmetric(conv.sessionKey, content);
     }
 
     /** @type {DmMessage} */
@@ -621,12 +621,12 @@ export class DmService extends EventTarget {
         }
       }
       recipientPubKeys.push(this._publicKey);
-      encryptedContent = await window.gimodi.identity.encrypt(recipientPubKeys, msg.content);
+      encryptedContent = await window.gimodi.db.encrypt(recipientPubKeys, msg.content);
     } else {
       if (!conv.sessionKey) {
         throw new Error('Session key not available');
       }
-      encryptedContent = await window.gimodi.identity.encryptSymmetric(conv.sessionKey, msg.content);
+      encryptedContent = await window.gimodi.db.encryptSymmetric(conv.sessionKey, msg.content);
     }
 
     await conn.request('dm:send', { id: msg.id, conversationId: msg.conversationId, content: encryptedContent, keyIndex: msg.keyIndex ?? 0 });
@@ -763,7 +763,7 @@ export class DmService extends EventTarget {
       }
       if (!existing.sessionKey && existing.type === 'group' && encryptedKey) {
         try {
-          existing.sessionKey = await window.gimodi.identity.decryptSessionKey(encryptedKey);
+          existing.sessionKey = await window.gimodi.db.decryptSessionKey(encryptedKey);
           existing.encryptedSessionKey = encryptedKey;
           this.dispatchEvent(new CustomEvent('session-key-restored', { detail: { conversationId } }));
         } catch (err) {
@@ -777,7 +777,7 @@ export class DmService extends EventTarget {
     let sessionKey = null;
     if (type === 'group' && encryptedKey) {
       try {
-        sessionKey = await window.gimodi.identity.decryptSessionKey(encryptedKey);
+        sessionKey = await window.gimodi.db.decryptSessionKey(encryptedKey);
       } catch (err) {
         console.error('[DmService] Failed to decrypt session key for conversation', conversationId, err);
       }
@@ -865,7 +865,7 @@ export class DmService extends EventTarget {
     }
 
     try {
-      conv.sessionKey = await window.gimodi.identity.decryptSessionKey(encryptedKey);
+      conv.sessionKey = await window.gimodi.db.decryptSessionKey(encryptedKey);
       conv.encryptedSessionKey = encryptedKey;
       conv.keyIndex = keyIndex ?? 0;
       this._saveConversationsToStorage();
@@ -906,8 +906,8 @@ export class DmService extends EventTarget {
       }
     }
 
-    const newKey = await window.gimodi.identity.generateSessionKey();
-    const encryptedKeys = await window.gimodi.identity.encryptSessionKey(newKey, allParticipants);
+    const newKey = await window.gimodi.db.generateSessionKey();
+    const encryptedKeys = await window.gimodi.db.encryptSessionKey(newKey, allParticipants);
     const keyIndex = (conv.keyIndex ?? 0) + 1;
 
     await server.conn.request('conversation:key-update', {
@@ -932,12 +932,12 @@ export class DmService extends EventTarget {
    */
   async _decryptContent(conv, encryptedContent) {
     if (conv.type === 'direct') {
-      return window.gimodi.identity.decrypt(encryptedContent);
+      return window.gimodi.db.decrypt(encryptedContent);
     }
     if (!conv.sessionKey) {
       throw new Error('No session key');
     }
-    return window.gimodi.identity.decryptSymmetric(conv.sessionKey, encryptedContent);
+    return window.gimodi.db.decryptSymmetric(conv.sessionKey, encryptedContent);
   }
 
   // ── Storage helpers ─────────────────────────────────────────────────────

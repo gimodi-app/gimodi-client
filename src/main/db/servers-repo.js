@@ -112,9 +112,77 @@ function updateGroup(id, updates) {
     db().prepare(`UPDATE server_groups SET ${sets.join(', ')} WHERE id = ?`).run(...values);
 }
 
+/**
+ * Returns servers in the grouped format expected by the sidebar:
+ * [ { type:'group', id, name, expanded, servers:[...] }, { address, nickname, ... }, ... ]
+ * Ordered by position. Ungrouped servers and groups are interleaved by position.
+ */
+function listGrouped() {
+    const allServers = db().prepare('SELECT * FROM servers ORDER BY position').all();
+    const allGroups = db().prepare('SELECT * FROM server_groups ORDER BY position').all();
+
+    const groupMap = new Map();
+    for (const g of allGroups) {
+        groupMap.set(g.id, {
+            type: 'group',
+            id: g.id,
+            name: g.name,
+            expanded: g.expanded === 1,
+            position: g.position,
+            servers: [],
+        });
+    }
+
+    const ungrouped = [];
+    for (const s of allServers) {
+        if (s.group_id && groupMap.has(s.group_id)) {
+            groupMap.get(s.group_id).servers.push(s);
+        } else {
+            ungrouped.push(s);
+        }
+    }
+
+    const items = [...ungrouped, ...groupMap.values()];
+    items.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    return items;
+}
+
+/**
+ * Replaces all servers and groups with the given list.
+ * Accepts the sidebar format: [ { type:'group', ... }, { address, ... }, ... ]
+ * @param {Array<Object>} items
+ */
+function saveGrouped(items) {
+    const d = db();
+    d.transaction(() => {
+        d.prepare('DELETE FROM servers').run();
+        d.prepare('DELETE FROM server_groups').run();
+
+        let pos = 0;
+        for (const item of items) {
+            if (item.type === 'group') {
+                const gid = item.id || crypto.randomUUID();
+                d.prepare('INSERT INTO server_groups (id, name, expanded, position) VALUES (?, ?, ?, ?)')
+                    .run(gid, item.name, item.expanded !== false ? 1 : 0, pos);
+                for (const s of (item.servers || [])) {
+                    pos += 0.001;
+                    d.prepare('INSERT INTO servers (id, group_id, address, nickname, auto_connect, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                        .run(s.id || crypto.randomUUID(), gid, s.address, s.nickname, s.auto_connect ? 1 : 0, pos, s.created_at || Date.now());
+                }
+            } else {
+                d.prepare('INSERT INTO servers (id, group_id, address, nickname, auto_connect, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                    .run(item.id || crypto.randomUUID(), null, item.address, item.nickname, item.auto_connect ? 1 : 0, pos, item.created_at || Date.now());
+            }
+            pos++;
+        }
+    })();
+}
+
 module.exports = {
     listServers,
     listGroups,
+    listGrouped,
+    saveGrouped,
     addServer,
     removeServer,
     updateServer,

@@ -348,27 +348,6 @@ if (process.platform === 'linux') {
 let mainWindow;
 let tray = null;
 
-const historyPath = path.join(app.getPath('userData'), 'history.json');
-const serversPath = path.join(app.getPath('userData'), 'servers.json');
-
-// Migrate legacy bookmarks.json → history.json
-const legacyBookmarksPath = path.join(app.getPath('userData'), 'bookmarks.json');
-if (!fs.existsSync(historyPath) && fs.existsSync(legacyBookmarksPath)) {
-  fs.renameSync(legacyBookmarksPath, historyPath);
-}
-// Migrate history.json → servers.json on first run
-if (!fs.existsSync(serversPath) && fs.existsSync(historyPath)) {
-  try {
-    const historyData = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
-    if (Array.isArray(historyData)) {
-      fs.writeFileSync(serversPath, JSON.stringify(historyData, null, 2));
-    }
-  } catch {
-    /* ignore migration errors */
-  }
-}
-
-const settingsPath = path.join(app.getPath('userData'), 'settings.json');
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -538,9 +517,7 @@ function rebuildTrayMenu() {
       checked: notificationMode === m.value,
       click: () => {
         notificationMode = m.value;
-        const settings = loadSettingsSync();
-        settings.notificationMode = m.value;
-        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+        appSettingsRepo.setAppSetting('notificationMode', m.value);
         rebuildTrayMenu();
         if (mainWindow) {
           mainWindow.webContents.send('notification-mode:changed', m.value);
@@ -559,13 +536,6 @@ function rebuildTrayMenu() {
   tray.setContextMenu(Menu.buildFromTemplate(items));
 }
 
-function loadSettingsSync() {
-  try {
-    return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-  } catch {
-    return {};
-  }
-}
 
 function buildMenu(isAdmin, connected) {
   lastAdminStatus = isAdmin;
@@ -638,19 +608,9 @@ app.whenReady().then(async () => {
   if (updateNotifSetting === '0') {
     updateNotifications = false;
   }
-  // Also try loading from legacy settings.json as fallback
-  const savedSettings = loadSettingsSync();
-  if (savedSettings.devMode) {
-    lastDevMode = true;
-  }
-  if (savedSettings.updateChannel && !updateChannelSetting) {
-    updateChannel = savedSettings.updateChannel;
-  }
-  if (savedSettings.notificationMode) {
-    notificationMode = savedSettings.notificationMode;
-  }
-  if (savedSettings.updateNotifications === false && !updateNotifSetting) {
-    updateNotifications = false;
+  const notifModeSetting = appSettingsRepo.getAppSetting('notificationMode');
+  if (notifModeSetting) {
+    notificationMode = notifModeSetting;
   }
 
   const trayExt = process.platform === 'win32' ? 'ico' : 'png';
@@ -795,35 +755,6 @@ ipcMain.handle('settings:set-update-notifications', (_, enabled) => {
   appSettingsRepo.setAppSetting('updateNotifications', enabled ? '1' : '0');
 });
 
-// --- Identity Manager Window ---
-
-let identityManagerWindow = null;
-
-// eslint-disable-next-line no-unused-vars
-function openIdentityManager() {
-  if (identityManagerWindow && !identityManagerWindow.isDestroyed()) {
-    identityManagerWindow.focus();
-    return;
-  }
-  identityManagerWindow = new BrowserWindow({
-    width: 600,
-    height: 500,
-    webPreferences: {
-      preload: path.join(__dirname, '..', 'identity-manager-preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-    title: 'Manage Identities',
-    backgroundColor: '#111111',
-    autoHideMenuBar: true,
-  });
-  identityManagerWindow.setMenuBarVisibility(false);
-  identityManagerWindow.loadFile(path.join(__dirname, '..', 'renderer', 'identity-manager.html'));
-  identityManagerWindow.on('closed', () => {
-    identityManagerWindow = null;
-  });
-}
-
 // --- IPC Handlers ---
 
 // Admin status - rebuild menu when admin state changes
@@ -850,328 +781,18 @@ ipcMain.handle('set-voice-mute-state', (event, muted, deafened) => {
   rebuildTrayMenu();
 });
 
-// Recently Joined history
-ipcMain.handle('history:load', () => {
-  try {
-    const data = fs.readFileSync(historyPath, 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
-});
-
-ipcMain.handle('history:save', (event, history) => {
-  fs.writeFileSync(historyPath, JSON.stringify(history, null, 2));
-});
-
-// Server list (persistent sidebar)
-ipcMain.handle('servers:list', () => {
-  try {
-    const data = fs.readFileSync(serversPath, 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
-});
-
-ipcMain.handle('servers:add', (event, server) => {
-  let items = [];
-  try {
-    items = JSON.parse(fs.readFileSync(serversPath, 'utf-8'));
-  } catch {
-    /* empty */
-  }
-  const fp = server.identityFingerprint || null;
-  const matches = (s) => s.address === server.address && s.nickname === server.nickname && (s.identityFingerprint || null) === fp;
-  let found = false;
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (item.type === 'group') {
-      const idx = item.servers.findIndex(matches);
-      if (idx >= 0) {
-        item.servers[idx] = { ...item.servers[idx], ...server };
-        found = true;
-        break;
-      }
-    } else if (matches(item)) {
-      items[i] = { ...items[i], ...server };
-      found = true;
-      break;
-    }
-  }
-  if (!found) {
-    items.push(server);
-  }
-  fs.writeFileSync(serversPath, JSON.stringify(items, null, 2));
-  return items;
-});
 
 ipcMain.on('notification-mode:set', (event, mode) => {
   notificationMode = mode;
+  appSettingsRepo.setAppSetting('notificationMode', mode);
   rebuildTrayMenu();
-});
-
-ipcMain.handle('servers:reorder', (event, fromIndex, toIndex) => {
-  let items = [];
-  try {
-    items = JSON.parse(fs.readFileSync(serversPath, 'utf-8'));
-  } catch {
-    /* empty */
-  }
-  if (fromIndex < 0 || fromIndex >= items.length || toIndex < 0 || toIndex >= items.length) {
-    return items;
-  }
-  const [moved] = items.splice(fromIndex, 1);
-  items.splice(toIndex, 0, moved);
-  fs.writeFileSync(serversPath, JSON.stringify(items, null, 2));
-  return items;
-});
-
-ipcMain.handle('servers:save', (event, items) => {
-  fs.writeFileSync(serversPath, JSON.stringify(items, null, 2));
-});
-
-ipcMain.handle('servers:remove', (event, address, nickname, identityFingerprint) => {
-  let items = [];
-  try {
-    items = JSON.parse(fs.readFileSync(serversPath, 'utf-8'));
-  } catch {
-    /* empty */
-  }
-  const fp = identityFingerprint || null;
-  const matches = (s) => s.address === address && s.nickname === nickname && (s.identityFingerprint || null) === fp;
-  for (let i = items.length - 1; i >= 0; i--) {
-    const item = items[i];
-    if (item.type === 'group') {
-      item.servers = item.servers.filter((s) => !matches(s));
-      if (item.servers.length === 0) {
-        items.splice(i, 1);
-      } else if (item.servers.length === 1) {
-        items[i] = item.servers[0];
-      }
-    } else if (matches(item)) {
-      items.splice(i, 1);
-    }
-  }
-  fs.writeFileSync(serversPath, JSON.stringify(items, null, 2));
-  return items;
 });
 
 ipcMain.handle('get-version', () => {
   return app.getVersion();
 });
 
-// Friends list (persistent across sessions, keyed by fingerprint)
-const friendsPath = path.join(app.getPath('userData'), 'friends.json');
 
-/**
- * Loads friends list and auto-migrates old userId-based format to fingerprint-based.
- * @returns {object[]}
- */
-function loadFriends() {
-  let items;
-  try {
-    items = JSON.parse(fs.readFileSync(friendsPath, 'utf-8'));
-  } catch {
-    return [];
-  }
-
-  let migrated = false;
-  items = items
-    .map((f) => {
-      if (f.fingerprint) {
-        return f;
-      }
-      if (!f.identityFingerprint) {
-        return null;
-      }
-      migrated = true;
-      return {
-        fingerprint: f.identityFingerprint,
-        displayName: f.displayName || f.userId,
-        servers: [{ address: f.serverAddress || '', userId: f.userId }],
-        addedAt: f.addedAt || Date.now(),
-      };
-    })
-    .filter(Boolean);
-
-  if (migrated) {
-    const merged = [];
-    const byFp = new Map();
-    for (const f of items) {
-      const existing = byFp.get(f.fingerprint);
-      if (existing) {
-        for (const s of f.servers) {
-          if (!existing.servers.some((es) => es.address === s.address)) {
-            existing.servers.push(s);
-          }
-        }
-      } else {
-        byFp.set(f.fingerprint, f);
-        merged.push(f);
-      }
-    }
-    fs.writeFileSync(friendsPath, JSON.stringify(merged, null, 2));
-    return merged;
-  }
-
-  return items;
-}
-
-/**
- * Saves the friends list to disk.
- * @param {object[]} items
- */
-function saveFriends(items) {
-  fs.writeFileSync(friendsPath, JSON.stringify(items, null, 2));
-}
-
-ipcMain.handle('friends:list', () => {
-  return loadFriends();
-});
-
-ipcMain.handle('friends:add', (event, friend) => {
-  const items = loadFriends();
-  const existing = items.find((f) => f.fingerprint === friend.fingerprint);
-  if (existing) {
-    if (friend.servers) {
-      for (const s of friend.servers) {
-        if (!existing.servers.some((es) => es.address === s.address)) {
-          existing.servers.push(s);
-        }
-      }
-    }
-    saveFriends(items);
-    return items;
-  }
-  items.push({
-    fingerprint: friend.fingerprint,
-    displayName: friend.displayName,
-    servers: friend.servers || [],
-    addedAt: friend.addedAt || Date.now(),
-  });
-  saveFriends(items);
-  return items;
-});
-
-ipcMain.handle('friends:remove', (event, fingerprint) => {
-  let items = loadFriends();
-  items = items.filter((f) => f.fingerprint !== fingerprint);
-  saveFriends(items);
-  return items;
-});
-
-ipcMain.handle('friends:update', (event, fingerprint, updates) => {
-  const items = loadFriends();
-  const friend = items.find((f) => f.fingerprint === fingerprint);
-  if (friend) {
-    Object.assign(friend, updates);
-    saveFriends(items);
-  }
-  return items;
-});
-
-// Settings
-ipcMain.handle('settings:load', () => {
-  try {
-    const data = fs.readFileSync(settingsPath, 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return {};
-  }
-});
-
-ipcMain.handle('settings:save', (event, settings) => {
-  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
-});
-
-// Identities (legacy handlers, delegate to db)
-ipcMain.handle('identity:load-all', () => {
-  return appSettingsRepo.listIdentities().map((i) => ({
-    name: i.name,
-    fingerprint: i.fingerprint,
-    publicKeyArmored: i.public_key,
-    isDefault: database.getActiveFingerprint() === i.fingerprint,
-    createdAt: i.created_at,
-  }));
-});
-ipcMain.handle('identity:create', async (event, name) => {
-  const result = await identity.createIdentity(name);
-  database.createIdentityDb(result.fingerprint);
-  return { name: result.name, fingerprint: result.fingerprint, publicKeyArmored: result.public_key, isDefault: false, createdAt: result.created_at };
-});
-ipcMain.handle('identity:delete', (event, fingerprint) => {
-  const identities = appSettingsRepo.listIdentities();
-  if (identities.length <= 1) throw new Error('Cannot delete the last identity.');
-  database.deleteIdentityDb(fingerprint);
-  appSettingsRepo.deleteIdentity(fingerprint);
-});
-ipcMain.handle('identity:rename', (event, fingerprint, newName) => {
-  appSettingsRepo.renameIdentity(fingerprint, newName);
-  const i = appSettingsRepo.getIdentity(fingerprint);
-  return { name: i.name, fingerprint: i.fingerprint, publicKeyArmored: i.public_key, isDefault: database.getActiveFingerprint() === i.fingerprint, createdAt: i.created_at };
-});
-ipcMain.handle('identity:set-default', (event, fingerprint) => {
-  database.switchIdentity(fingerprint);
-});
-ipcMain.handle('identity:get-default', () => {
-  const fp = database.getActiveFingerprint();
-  if (!fp) {
-    const first = appSettingsRepo.listIdentities()[0];
-    if (!first) return null;
-    return { name: first.name, fingerprint: first.fingerprint, publicKeyArmored: first.public_key, isDefault: true, createdAt: first.created_at };
-  }
-  const i = appSettingsRepo.getIdentity(fp);
-  if (!i) return null;
-  return { name: i.name, fingerprint: i.fingerprint, publicKeyArmored: i.public_key, isDefault: true, createdAt: i.created_at };
-});
-ipcMain.handle('identity:encrypt', (event, recipientPublicKeys, plaintext) => identity.encryptMessage(recipientPublicKeys, plaintext));
-ipcMain.handle('identity:decrypt', (event, armoredMessage) => identity.decryptMessage(armoredMessage));
-ipcMain.handle('identity:generate-session-key', () => identity.generateSessionKey());
-ipcMain.handle('identity:encrypt-session-key', (event, base64Key, participants) => identity.encryptSessionKeyForParticipants(base64Key, participants));
-ipcMain.handle('identity:decrypt-session-key', (event, encryptedKey) => identity.decryptSessionKey(encryptedKey));
-ipcMain.handle('identity:encrypt-symmetric', (event, base64Key, plaintext) => identity.encryptWithSessionKey(base64Key, plaintext));
-ipcMain.handle('identity:decrypt-symmetric', (event, base64Key, ciphertext) => identity.decryptWithSessionKey(base64Key, ciphertext));
-
-ipcMain.handle('identity:export', async (event, fingerprint) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  const ident = appSettingsRepo.getIdentity(fingerprint);
-  if (!ident) throw new Error('Identity not found.');
-  const data = {
-    version: 1,
-    name: ident.name,
-    fingerprint: ident.fingerprint,
-    publicKeyArmored: ident.public_key,
-    privateKeyArmored: ident.private_key,
-    createdAt: ident.created_at,
-  };
-  const { canceled, filePath } = await dialog.showSaveDialog(win, {
-    title: 'Export Identity',
-    defaultPath: `${data.name.replace(/[^a-z0-9_-]/gi, '_')}.gimodi-identity`,
-    filters: [{ name: 'Gimodi Identity', extensions: ['gimodi-identity'] }],
-  });
-  if (canceled || !filePath) {
-    return { canceled: true };
-  }
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-  return { canceled: false, filePath };
-});
-
-ipcMain.handle('identity:import', async (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-    title: 'Import Identity',
-    filters: [{ name: 'Gimodi Identity', extensions: ['gimodi-identity'] }],
-    properties: ['openFile'],
-  });
-  if (canceled || !filePaths.length) {
-    return { canceled: true };
-  }
-  const raw = JSON.parse(fs.readFileSync(filePaths[0], 'utf-8'));
-  const imported = await identity.importIdentity(raw);
-  database.createIdentityDb(imported.fingerprint);
-  return { canceled: false, identity: { name: imported.name, fingerprint: imported.fingerprint, publicKeyArmored: imported.public_key, isDefault: false, createdAt: imported.created_at } };
-});
 
 // Open external URLs in system browser
 ipcMain.handle('open-external', (event, url) => {

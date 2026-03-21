@@ -117,7 +117,7 @@ export async function onDmViewActive() {
  * Loads friends from persistent storage and updates DmService.
  */
 async function loadFriends() {
-  friendsList = await window.gimodi.friends.list();
+  friendsList = await window.gimodi.db.listFriends();
   dmService.setFriends(friendsList);
 }
 
@@ -510,7 +510,7 @@ function showFriendContextMenu(e, friend) {
     menu.remove();
     const newName = await customPrompt('New display name:', friend.displayName);
     if (newName && newName !== friend.displayName) {
-      await window.gimodi.friends.update(friend.fingerprint, { displayName: newName });
+      await window.gimodi.db.updateFriend(friend.fingerprint, { displayName: newName });
       window.dispatchEvent(new CustomEvent('gimodi:friends-updated'));
     }
   });
@@ -523,7 +523,7 @@ function showFriendContextMenu(e, friend) {
     menu.remove();
     const confirmed = await customConfirm(`Remove ${friend.displayName} from friends?`);
     if (confirmed) {
-      await window.gimodi.friends.remove(friend.fingerprint);
+      await window.gimodi.db.removeFriend(friend.fingerprint);
       window.dispatchEvent(new CustomEvent('gimodi:friends-updated'));
     }
   });

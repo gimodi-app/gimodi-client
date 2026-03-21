@@ -98,7 +98,7 @@ function flatServers() {
 
 /** Persists the server list to storage. */
 async function saveServers() {
-  await window.gimodi.servers.save(servers);
+  await window.gimodi.db.saveServersGrouped(servers);
 }
 
 /** @param {Object} item - Server or group to remove from the list. */
@@ -987,7 +987,7 @@ export function clearActiveServer() {
 export async function initSidebar(connectCallback, onAddServer, onEditServer) {
   _connectCallback = connectCallback;
   _editServerCallback = onEditServer;
-  servers = (await window.gimodi.servers.list()) || [];
+  servers = (await window.gimodi.db.listServersGrouped()) || [];
   const savedPresence = await window.gimodi.db.getSetting('presence');
   if (savedPresence) currentPresence = savedPresence;
   renderSidebar();

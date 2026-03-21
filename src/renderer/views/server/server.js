@@ -2583,7 +2583,7 @@ export function showUserContextMenu(e, user, options = {}) {
       if (displayName === null) {
         return;
       }
-      await window.gimodi.friends.add({
+      await window.gimodi.db.addFriend({
         userId: user.userId,
         displayName: displayName || user.nickname,
         serverAddress: serverService.address,
