@@ -47,14 +47,23 @@ contextBridge.exposeInMainWorld('gimodi', {
     addBlocked: (fp, type) => ipcRenderer.invoke('db:blocked:add', fp, type),
     removeBlocked: (fp, type) => ipcRenderer.invoke('db:blocked:remove', fp, type),
 
-    // DM Messages
-    getMessages: (peerFp, opts) => ipcRenderer.invoke('db:dm:messages', peerFp, opts),
-    saveMessage: (msg) => ipcRenderer.invoke('db:dm:save-message', msg),
-    purgeMessage: (id) => ipcRenderer.invoke('db:dm:purge', id),
-
     // DM Conversations
     listConversations: () => ipcRenderer.invoke('db:dm:conversations'),
+    getConversation: (id) => ipcRenderer.invoke('db:dm:conversation:get', id),
     upsertConversation: (conv) => ipcRenderer.invoke('db:dm:upsert-conversation', conv),
+    deleteConversation: (id) => ipcRenderer.invoke('db:dm:delete-conversation', id),
+    updateConversation: (id, updates) => ipcRenderer.invoke('db:dm:update-conversation', id, updates),
+    removeParticipant: (convId, fp) => ipcRenderer.invoke('db:dm:remove-participant', convId, fp),
+
+    // DM Messages
+    getMessages: (conversationId, opts) => ipcRenderer.invoke('db:dm:messages', conversationId, opts),
+    getLastMessages: () => ipcRenderer.invoke('db:dm:last-messages'),
+    saveMessage: (msg) => ipcRenderer.invoke('db:dm:save-message', msg),
+    updateMessageStatus: (id, status) => ipcRenderer.invoke('db:dm:update-status', id, status),
+    getMessage: (id) => ipcRenderer.invoke('db:dm:get-message', id),
+    purgeMessage: (id) => ipcRenderer.invoke('db:dm:purge', id),
+    purgeConversation: (conversationId) => ipcRenderer.invoke('db:dm:purge-conversation', conversationId),
+    hasMessage: (conversationId, messageId) => ipcRenderer.invoke('db:dm:has-message', conversationId, messageId),
 
     // DM Reactions
     getReactions: (messageId) => ipcRenderer.invoke('db:dm:reactions', messageId),

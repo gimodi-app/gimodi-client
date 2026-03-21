@@ -196,26 +196,62 @@ function registerIpcHandlers(sendToMain) {
         friendsRepo.removeBlocked(fingerprint, type);
     });
 
+    // DM Conversations
+    ipcMain.handle('db:dm:conversations', () => {
+        return dmRepo.listConversations();
+    });
+
+    ipcMain.handle('db:dm:conversation:get', (event, id) => {
+        return dmRepo.getConversation(id);
+    });
+
+    ipcMain.handle('db:dm:upsert-conversation', (event, conv) => {
+        dmRepo.upsertConversation(conv);
+    });
+
+    ipcMain.handle('db:dm:delete-conversation', (event, id) => {
+        dmRepo.deleteConversation(id);
+    });
+
+    ipcMain.handle('db:dm:update-conversation', (event, id, updates) => {
+        dmRepo.updateConversation(id, updates);
+    });
+
+    ipcMain.handle('db:dm:remove-participant', (event, conversationId, fingerprint) => {
+        dmRepo.removeParticipant(conversationId, fingerprint);
+    });
+
     // DM Messages
-    ipcMain.handle('db:dm:messages', (event, peerFp, opts) => {
-        return dmRepo.getMessages(peerFp, opts);
+    ipcMain.handle('db:dm:messages', (event, conversationId, opts) => {
+        return dmRepo.getMessages(conversationId, opts);
+    });
+
+    ipcMain.handle('db:dm:last-messages', () => {
+        return dmRepo.getLastMessages();
     });
 
     ipcMain.handle('db:dm:save-message', (event, msg) => {
         dmRepo.saveMessage(msg);
     });
 
+    ipcMain.handle('db:dm:update-status', (event, id, status) => {
+        dmRepo.updateMessageStatus(id, status);
+    });
+
+    ipcMain.handle('db:dm:get-message', (event, id) => {
+        return dmRepo.getMessage(id);
+    });
+
     ipcMain.handle('db:dm:purge', (event, id) => {
         dmRepo.purgeMessage(id);
     });
 
-    // DM Conversations
-    ipcMain.handle('db:dm:conversations', () => {
-        return dmRepo.listConversations();
+    ipcMain.handle('db:dm:purge-conversation', (event, conversationId) => {
+        return dmRepo.purgeConversationMessages(conversationId);
     });
 
-    ipcMain.handle('db:dm:upsert-conversation', (event, conv) => {
-        dmRepo.upsertConversation(conv);
+    ipcMain.handle('db:dm:has-message', (event, conversationId, messageId) => {
+        return dmRepo.hasMessage(conversationId, messageId);
     });
 
     // DM Reactions

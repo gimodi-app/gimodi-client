@@ -74,10 +74,9 @@ const screenSourcesDiv = document.getElementById('screen-sources');
 const chkScreenAudio = document.getElementById('chk-screen-audio');
 const btnCancelScreen = document.getElementById('btn-cancel-screen');
 const selectScreenResolution = document.getElementById('select-screen-resolution');
-const savedScreenResolution = localStorage.getItem('screenShareResolution');
-if (savedScreenResolution) {
-  selectScreenResolution.value = savedScreenResolution;
-}
+window.gimodi.db.getSetting('screenShareResolution').then((val) => {
+  if (val) selectScreenResolution.value = val;
+});
 
 let isMuted = false;
 let isDeafened = false;
@@ -1069,7 +1068,7 @@ function createSourceItem(source) {
     // process resolves getDisplayMedia (needed for venmic on Linux)
     screenShareService._wantAudio = withAudio;
     screenShareService._resolution = selectScreenResolution.value || '1080';
-    localStorage.setItem('screenShareResolution', screenShareService._resolution);
+    window.gimodi.db.setSetting('screenShareResolution', screenShareService._resolution);
     window.gimodi.screen.selectSource({ sourceId: source.id, withAudio });
     modalScreenPicker.classList.add('hidden');
   });

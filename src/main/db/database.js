@@ -24,6 +24,27 @@ function applySchema(db, schemaPath) {
 }
 
 /**
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} migrationsDir
+ */
+function runMigrations(db, migrationsDir) {
+    if (!fs.existsSync(migrationsDir)) return;
+    const files = fs.readdirSync(migrationsDir)
+        .filter((f) => f.endsWith('.js'))
+        .sort();
+    const applied = new Set(
+        db.prepare('SELECT name FROM migrations').all().map((r) => r.name)
+    );
+    for (const file of files) {
+        if (applied.has(file)) continue;
+        const migrate = require(path.join(migrationsDir, file));
+        const fn = typeof migrate === 'function' ? migrate : migrate.default || migrate;
+        fn(db);
+        db.prepare('INSERT INTO migrations (name, applied_at) VALUES (?, ?)').run(file, Date.now());
+    }
+}
+
+/**
  * @returns {import('better-sqlite3').Database}
  */
 function openAppDb() {
@@ -33,6 +54,7 @@ function openAppDb() {
     appDb.pragma('foreign_keys = ON');
     const schemaPath = path.join(__dirname, 'app-schema.sql');
     applySchema(appDb, schemaPath);
+    runMigrations(appDb, path.join(__dirname, 'migrations', 'app'));
     return appDb;
 }
 
@@ -50,6 +72,7 @@ function switchIdentity(fingerprint) {
     identityDb.pragma('foreign_keys = ON');
     const schemaPath = path.join(__dirname, 'identity-schema.sql');
     applySchema(identityDb, schemaPath);
+    runMigrations(identityDb, path.join(__dirname, 'migrations', 'identity'));
     activeFingerprint = fingerprint;
     appDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('activeIdentity', fingerprint);
     return identityDb;
@@ -67,6 +90,7 @@ function createIdentityDb(fingerprint) {
     db.pragma('foreign_keys = ON');
     const schemaPath = path.join(__dirname, 'identity-schema.sql');
     applySchema(db, schemaPath);
+    runMigrations(db, path.join(__dirname, 'migrations', 'identity'));
     db.close();
 }
 

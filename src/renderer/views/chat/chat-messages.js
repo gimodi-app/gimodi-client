@@ -115,21 +115,13 @@ export function createMessageHandlers(deps) {
   }
 
   /**
-   * Marks a channel as read by storing the current timestamp in localStorage.
+   * Marks a channel as read by storing the current timestamp in the database.
    * @param {string} channelId - The ID of the channel to mark as read
    * @param {string} serverAddress - The server address for the storage key
    * @returns {void}
    */
   function markChannelRead(channelId, serverAddress) {
-    const storageKey = `gimodi:lastRead:${serverAddress}`;
-    let lastReadMap = {};
-    try {
-      lastReadMap = JSON.parse(localStorage.getItem(storageKey) || '{}');
-    } catch {
-      /* ignore */
-    }
-    lastReadMap[channelId] = Date.now();
-    localStorage.setItem(storageKey, JSON.stringify(lastReadMap));
+    window.gimodi.db.setLastRead(serverAddress, channelId, Date.now());
   }
 
   /**

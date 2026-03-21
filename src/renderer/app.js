@@ -1177,17 +1177,6 @@ async function ensureDmServices(fingerprint) {
     return;
   }
 
-  const migrationKey = `dm_migrated_v2_${fingerprint}`;
-  if (!localStorage.getItem(migrationKey)) {
-    const msgKey = `dm_messages_${fingerprint}`;
-    if (localStorage.getItem(msgKey)) {
-      localStorage.removeItem(msgKey);
-      localStorage.removeItem(`dm_purged_${fingerprint}`);
-      localStorage.removeItem(`dm_reactions_${fingerprint}`);
-    }
-    localStorage.setItem(migrationKey, '1');
-  }
-
   const allIdentities = await window.gimodi.identity.loadAll();
   const identity = allIdentities.find((i) => i.fingerprint === fingerprint);
   const publicKey = identity?.publicKeyArmored ?? '';
@@ -1278,20 +1267,9 @@ window.addEventListener(
  */
 window.gimodiDebug = {
   /**
-   * Wipes all friends and DM data from localStorage and resets in-memory state.
+   * Resets in-memory DM and friends state, re-fetches from server.
    */
   clearAllFriends() {
-    const prefixes = ['dm_friends_', 'dm_ignored_', 'dm_blocked_', 'dm_messages_', 'dm_purged_', 'dm_conversations_', 'dm_reactions_'];
-    const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (prefixes.some((p) => key.startsWith(p))) {
-        keys.push(key);
-      }
-    }
-    for (const key of keys) {
-      localStorage.removeItem(key);
-    }
     if (dmService) {
       dmService._conversations.clear();
       dmService._saveConversationsToStorage();
@@ -1300,6 +1278,6 @@ window.gimodiDebug = {
     if (friendsService) {
       friendsService._pendingRequests.clear();
     }
-    console.log(`[gimodi] Cleared ${keys.length} friend/DM entries from localStorage.`);
+    console.log('[gimodi] Reset friends/DM state.');
   },
 };

@@ -2236,15 +2236,9 @@ export function isChannelUnread(channelId) {
   return unreadChannels.has(channelId);
 }
 
-export function initUnreadState(channels, serverAddress) {
+export async function initUnreadState(channels, serverAddress) {
   unreadChannels.clear();
-  const storageKey = `gimodi:lastRead:${serverAddress}`;
-  let lastReadMap = {};
-  try {
-    lastReadMap = JSON.parse(localStorage.getItem(storageKey) || '{}');
-  } catch {
-    /* ignore */
-  }
+  const lastReadMap = await window.gimodi.db.getLastRead(serverAddress);
 
   for (const ch of channels) {
     if (!ch.lastMessageAt) {
@@ -2272,7 +2266,7 @@ export async function scrollToMessage(messageId, timestamp) {
 }
 
 /**
- * Marks a channel as read by updating the lastRead timestamp in localStorage.
+ * Marks a channel as read by updating the lastRead timestamp in the database.
  * @param {string} channelId
  * @param {string} serverAddress
  * @returns {void}

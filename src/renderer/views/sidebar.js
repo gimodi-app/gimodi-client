@@ -17,7 +17,7 @@ export const PRESENCE_STATUSES = [
   { key: 'offline', label: 'Offline', color: '#6b7280' },
 ];
 
-let currentPresence = localStorage.getItem('gimodi:presence') || 'online';
+let currentPresence = 'online';
 let statusPickerEl = null;
 
 /**
@@ -82,7 +82,7 @@ function showStatusPicker(e) {
     item.addEventListener('click', (ev) => {
       ev.stopPropagation();
       currentPresence = status.key;
-      localStorage.setItem('gimodi:presence', currentPresence);
+      window.gimodi.db.setSetting('presence', currentPresence);
       updateSelfStatusDot();
       dismissStatusPicker();
       window.dispatchEvent(new CustomEvent('gimodi:presence-changed', { detail: { status: currentPresence } }));
@@ -1035,6 +1035,8 @@ export async function initSidebar(connectCallback, onAddServer, onEditServer) {
   _connectCallback = connectCallback;
   _editServerCallback = onEditServer;
   servers = (await window.gimodi.servers.list()) || [];
+  const savedPresence = await window.gimodi.db.getSetting('presence');
+  if (savedPresence) currentPresence = savedPresence;
   renderSidebar();
 
   document.getElementById('btn-add-server').addEventListener('click', onAddServer);
