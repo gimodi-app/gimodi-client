@@ -1405,6 +1405,17 @@ function showChannelContextMenu(e, ch) {
     menu.appendChild(fileBrowserItem);
   }
 
+  if (serverService.hasPermission('meet.create_invite')) {
+    const inviteItem = document.createElement('div');
+    inviteItem.className = 'context-menu-item';
+    inviteItem.textContent = 'Create Meet Invite';
+    inviteItem.addEventListener('click', () => {
+      dismissContextMenu();
+      showCreateMeetInviteModal(ch);
+    });
+    menu.appendChild(inviteItem);
+  }
+
   if (canUpdate) {
     const editItem = document.createElement('div');
     editItem.className = 'context-menu-item';
@@ -1533,6 +1544,116 @@ function showMoveChannelModal(ch) {
   document.addEventListener('keydown', onEscape);
 }
 
+
+function showCreateMeetInviteModal(ch) {
+  const existing = document.querySelector('.modal-meet-invite');
+  if (existing) {
+    existing.remove();
+  }
+
+  const modal = document.createElement('div');
+  modal.className = 'modal modal-meet-invite';
+  modal.innerHTML = `
+    <div class="modal-content">
+      <h2>Meet Invite erstellen</h2>
+      <p style="color:var(--text-secondary);margin-bottom:12px">Kanal: ${escapeHtml(ch.name)}</p>
+      <div class="form-group">
+        <label>Gültigkeitsdauer</label>
+        <select class="invite-expiry">
+          <option value="">Kein Ablaufdatum</option>
+          <option value="1800000">30 Minuten</option>
+          <option value="3600000" selected>1 Stunde</option>
+          <option value="86400000">24 Stunden</option>
+          <option value="604800000">7 Tage</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Maximale Nutzungen</label>
+        <select class="invite-max-uses">
+          <option value="">Unbegrenzt</option>
+          <option value="1">1</option>
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+      <div class="invite-result" hidden>
+        <label>Einladungslink</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" class="invite-link-input" readonly style="flex:1" />
+          <button class="btn-secondary invite-copy-btn">Kopieren</button>
+        </div>
+      </div>
+      <div class="modal-buttons">
+        <button class="btn-primary invite-create-btn">Erstellen</button>
+        <button class="btn-secondary modal-cancel-btn">Schließen</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const closeModal = () => {
+    modal.remove();
+    document.removeEventListener('keydown', onEscape);
+  };
+
+  modal.querySelector('.invite-create-btn').addEventListener('click', async () => {
+    const expirySelect = modal.querySelector('.invite-expiry');
+    const maxUsesSelect = modal.querySelector('.invite-max-uses');
+    const expiresIn = expirySelect.value ? Number(expirySelect.value) : undefined;
+    const maxUses = maxUsesSelect.value ? Number(maxUsesSelect.value) : undefined;
+
+    try {
+      const result = await serverService.request('meet:create-invite', {
+        channelId: ch.id,
+        expiresIn,
+        maxUses,
+      });
+
+      let link;
+      if (result.meetUrl) {
+        link = result.meetUrl;
+      } else {
+        const protocol = serverService.address.startsWith('ws://') ? 'http' : 'https';
+        const host = serverService.address.replace(/^wss?:\/\//, '');
+        link = `${protocol}://${host}/meet/invite/${result.inviteId}`;
+      }
+
+      const resultDiv = modal.querySelector('.invite-result');
+      const linkInput = modal.querySelector('.invite-link-input');
+      linkInput.value = link;
+      resultDiv.hidden = false;
+      linkInput.select();
+    } catch (err) {
+      alert(err.message || 'Fehler beim Erstellen der Einladung.');
+    }
+  });
+
+  modal.querySelector('.invite-copy-btn').addEventListener('click', () => {
+    const linkInput = modal.querySelector('.invite-link-input');
+    navigator.clipboard.writeText(linkInput.value).then(() => {
+      const btn = modal.querySelector('.invite-copy-btn');
+      btn.textContent = 'Kopiert!';
+      setTimeout(() => { btn.textContent = 'Kopieren'; }, 2000);
+    });
+  });
+
+  modal.querySelector('.modal-cancel-btn').addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
+  const onEscape = (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+  };
+  document.addEventListener('keydown', onEscape);
+}
 
 async function showEditChannelModal(ch) {
   const existing = document.querySelector('.modal-edit-channel');
