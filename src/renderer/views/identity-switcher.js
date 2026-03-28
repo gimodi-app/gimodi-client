@@ -73,7 +73,7 @@ async function openMenu() {
     menu.appendChild(label);
 
     for (const id of identities) {
-      if (_activeIdentity && id.fingerprint === _activeIdentity.fingerprint) continue;
+      if (_activeIdentity && id.fingerprint === _activeIdentity.fingerprint) {continue;}
 
       const item = document.createElement('div');
       item.className = 'self-menu-item';
@@ -91,7 +91,7 @@ async function openMenu() {
 
       item.addEventListener('click', () => {
         closeMenu();
-        if (_onSwitch) _onSwitch(id.fingerprint);
+        if (_onSwitch) {_onSwitch(id.fingerprint);}
       });
 
       menu.appendChild(item);
@@ -134,7 +134,7 @@ async function openMenu() {
   logoutItem.textContent = 'Logout';
   logoutItem.addEventListener('click', () => {
     closeMenu();
-    if (_onLogout) _onLogout();
+    if (_onLogout) {_onLogout();}
   });
   menu.appendChild(logoutItem);
 

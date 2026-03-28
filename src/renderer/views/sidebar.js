@@ -26,7 +26,7 @@ let currentPresence = 'online';
  */
 export function getEffectivePresence() {
   const hasConnection = [...connectionManager._connections.values()].some((c) => c.connected);
-  if (!hasConnection) return 'offline';
+  if (!hasConnection) {return 'offline';}
   return currentPresence;
 }
 
@@ -34,7 +34,7 @@ export function getEffectivePresence() {
 function updateSelfStatusDot() {
   const effective = getEffectivePresence();
   const dot = document.getElementById('self-status-dot');
-  if (!dot) return;
+  if (!dot) {return;}
   dot.className = 'self-status-dot status-' + effective;
   const entry = PRESENCE_STATUSES.find((s) => s.key === effective);
   const btn = document.getElementById('btn-self-user');
@@ -989,7 +989,7 @@ export async function initSidebar(connectCallback, onAddServer, onEditServer) {
   _editServerCallback = onEditServer;
   servers = (await window.gimodi.db.listServersGrouped()) || [];
   const savedPresence = await window.gimodi.db.getSetting('presence');
-  if (savedPresence) currentPresence = savedPresence;
+  if (savedPresence) {currentPresence = savedPresence;}
   renderSidebar();
 
   document.getElementById('btn-add-server').addEventListener('click', onAddServer);

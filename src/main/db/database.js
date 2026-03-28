@@ -28,7 +28,7 @@ function applySchema(db, schemaPath) {
  * @param {string} migrationsDir
  */
 function runMigrations(db, migrationsDir) {
-    if (!fs.existsSync(migrationsDir)) return;
+    if (!fs.existsSync(migrationsDir)) {return;}
     const files = fs.readdirSync(migrationsDir)
         .filter((f) => f.endsWith('.js'))
         .sort();
@@ -36,7 +36,7 @@ function runMigrations(db, migrationsDir) {
         db.prepare('SELECT name FROM migrations').all().map((r) => r.name)
     );
     for (const file of files) {
-        if (applied.has(file)) continue;
+        if (applied.has(file)) {continue;}
         const migrate = require(path.join(migrationsDir, file));
         const fn = typeof migrate === 'function' ? migrate : migrate.default || migrate;
         fn(db);
@@ -63,7 +63,7 @@ function openAppDb() {
  * @returns {import('better-sqlite3').Database}
  */
 function switchIdentity(fingerprint) {
-    if (identityDb) identityDb.close();
+    if (identityDb) {identityDb.close();}
     const dir = getIdentitiesDir();
     fs.mkdirSync(dir, { recursive: true });
     const dbPath = path.join(dir, `${fingerprint}.db`);
@@ -108,7 +108,7 @@ function deleteIdentityDb(fingerprint) {
 }
 
 function logout() {
-    if (identityDb) identityDb.close();
+    if (identityDb) {identityDb.close();}
     identityDb = null;
     activeFingerprint = null;
     appDb.prepare('DELETE FROM app_settings WHERE key = ?').run('activeIdentity');
@@ -136,10 +136,10 @@ function getActiveFingerprint() {
 }
 
 function closeAll() {
-    if (identityDb) identityDb.close();
+    if (identityDb) {identityDb.close();}
     identityDb = null;
     activeFingerprint = null;
-    if (appDb) appDb.close();
+    if (appDb) {appDb.close();}
     appDb = null;
 }
 

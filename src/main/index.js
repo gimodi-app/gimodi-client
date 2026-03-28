@@ -631,7 +631,7 @@ app.whenReady().then(async () => {
   // Check for updates once the window is ready
   mainWindow.webContents.once('did-finish-load', () => {
     buildMenu(false, false);
-    if (updateNotifications) checkForUpdates();
+    if (updateNotifications) {checkForUpdates();}
 
     // Flush any protocol URL received before the window was ready
     if (pendingProtocolUrl) {

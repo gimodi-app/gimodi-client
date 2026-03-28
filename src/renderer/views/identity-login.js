@@ -183,7 +183,7 @@ function startRename(id, nameEl, iconEl) {
 
   let done = false;
   async function finish(save) {
-    if (done) return;
+    if (done) {return;}
     done = true;
     const newName = input.value.trim();
     if (save && newName && newName !== id.name) {
@@ -229,7 +229,7 @@ async function exportIdentity(id) {
  */
 async function deleteIdentity(id) {
   loginStatus.textContent = '';
-  if (!(await customConfirm(`Delete identity "${id.name}"? This cannot be undone.`))) return;
+  if (!(await customConfirm(`Delete identity "${id.name}"? This cannot be undone.`))) {return;}
   try {
     await window.gimodi.db.deleteIdentity(id.fingerprint);
     await renderIdentityList();
@@ -243,7 +243,7 @@ async function deleteIdentity(id) {
  */
 async function createIdentity() {
   const name = loginNameInput.value.trim();
-  if (!name) return;
+  if (!name) {return;}
 
   loginStatus.textContent = '';
   btnConfirm.disabled = true;
@@ -270,7 +270,7 @@ async function selectIdentity(fingerprint) {
   try {
     const identity = await window.gimodi.db.switchIdentity(fingerprint);
     hideIdentityLogin();
-    if (_onLogin) _onLogin(identity);
+    if (_onLogin) {_onLogin(identity);}
   } catch (err) {
     loginStatus.textContent = err.message || 'Failed to switch identity.';
   }

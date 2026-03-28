@@ -36,7 +36,7 @@ function setAppSettingsRepo(repo) {
  * @returns {object}
  */
 function repo() {
-  if (!_appSettingsRepo) throw new Error('Identity module not initialized. Call setAppSettingsRepo first.');
+  if (!_appSettingsRepo) {throw new Error('Identity module not initialized. Call setAppSettingsRepo first.');}
   return _appSettingsRepo;
 }
 

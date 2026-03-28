@@ -41,7 +41,7 @@ function registerIpcHandlers(sendToMain) {
 
     ipcMain.handle('db:identities:switch', (event, fingerprint) => {
         const ident = appSettingsRepo.getIdentity(fingerprint);
-        if (!ident) throw new Error('Identity not found.');
+        if (!ident) {throw new Error('Identity not found.');}
         database.switchIdentity(fingerprint);
         const result = {
             fingerprint: ident.fingerprint,
@@ -54,9 +54,9 @@ function registerIpcHandlers(sendToMain) {
 
     ipcMain.handle('db:identities:active', () => {
         const fp = database.getActiveFingerprint();
-        if (!fp) return null;
+        if (!fp) {return null;}
         const ident = appSettingsRepo.getIdentity(fp);
-        if (!ident) return null;
+        if (!ident) {return null;}
         return {
             fingerprint: ident.fingerprint,
             name: ident.name,
@@ -81,7 +81,7 @@ function registerIpcHandlers(sendToMain) {
     ipcMain.handle('db:identities:export', async (event, fingerprint) => {
         const win = BrowserWindow.fromWebContents(event.sender);
         const ident = appSettingsRepo.getIdentity(fingerprint);
-        if (!ident) throw new Error('Identity not found.');
+        if (!ident) {throw new Error('Identity not found.');}
         const data = {
             version: 1,
             name: ident.name,
@@ -95,7 +95,7 @@ function registerIpcHandlers(sendToMain) {
             defaultPath: `${data.name.replace(/[^a-z0-9_-]/gi, '_')}.gimodi-identity`,
             filters: [{ name: 'Gimodi Identity', extensions: ['gimodi-identity'] }],
         });
-        if (canceled || !filePath) return { canceled: true };
+        if (canceled || !filePath) {return { canceled: true };}
         fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
         return { canceled: false, filePath };
     });
@@ -107,7 +107,7 @@ function registerIpcHandlers(sendToMain) {
             filters: [{ name: 'Gimodi Identity', extensions: ['gimodi-identity'] }],
             properties: ['openFile'],
         });
-        if (canceled || !filePaths.length) return { canceled: true };
+        if (canceled || !filePaths.length) {return { canceled: true };}
         const raw = JSON.parse(fs.readFileSync(filePaths[0], 'utf-8'));
         const imported = await identity.importIdentity(raw);
         database.createIdentityDb(imported.fingerprint);

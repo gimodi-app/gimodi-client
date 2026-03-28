@@ -40,7 +40,7 @@ function backup(filePath) {
  * @returns {Promise<void>}
  */
 async function migrateJsonFiles() {
-    if (alreadyMigrated()) return;
+    if (alreadyMigrated()) {return;}
 
     const userData = app.getPath('userData');
     const serversPath = path.join(userData, 'servers.json');
@@ -61,9 +61,9 @@ async function migrateJsonFiles() {
     // 2. Migrate app-level settings
     const settings = readJson(settingsPath);
     if (settings) {
-        if (settings.devMode !== undefined) appSettingsRepo.setAppSetting('devMode', settings.devMode ? '1' : '0');
-        if (settings.updateChannel) appSettingsRepo.setAppSetting('updateChannel', settings.updateChannel);
-        if (settings.updateNotifications !== undefined) appSettingsRepo.setAppSetting('updateNotifications', settings.updateNotifications ? '1' : '0');
+        if (settings.devMode !== undefined) {appSettingsRepo.setAppSetting('devMode', settings.devMode ? '1' : '0');}
+        if (settings.updateChannel) {appSettingsRepo.setAppSetting('updateChannel', settings.updateChannel);}
+        if (settings.updateNotifications !== undefined) {appSettingsRepo.setAppSetting('updateNotifications', settings.updateNotifications ? '1' : '0');}
     }
 
     // 3. Get identities to distribute data across
@@ -137,7 +137,7 @@ function migrateServers(items, identities, defaultIdentity) {
     }
 
     for (const [fp, entries] of byIdentity) {
-        if (entries.length === 0 && groups.length === 0) continue;
+        if (entries.length === 0 && groups.length === 0) {continue;}
         const db = database.switchIdentity(fp);
 
         const groupsNeeded = new Set(entries.filter((e) => e.groupId).map((e) => e.groupId));
@@ -176,7 +176,7 @@ function migrateFriends(friends, defaultIdentity) {
 
     for (const friend of friends) {
         const fp = friend.fingerprint || friend.identityFingerprint;
-        if (!fp) continue;
+        if (!fp) {continue;}
         db.prepare(
             'INSERT OR IGNORE INTO friends (fingerprint, nickname, public_key, added_at) VALUES (?, ?, ?, ?)'
         ).run(fp, friend.displayName || null, null, friend.addedAt || Date.now());

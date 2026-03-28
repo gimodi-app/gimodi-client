@@ -7,7 +7,7 @@ const { getIdentityDb } = require('./database');
  */
 function db() {
     const d = getIdentityDb();
-    if (!d) throw new Error('No active identity');
+    if (!d) {throw new Error('No active identity');}
     return d;
 }
 
@@ -55,11 +55,11 @@ function updateServer(id, updates) {
     const sets = [];
     const values = [];
     for (const [key, value] of Object.entries(updates)) {
-        if (!allowed.includes(key)) continue;
+        if (!allowed.includes(key)) {continue;}
         sets.push(`${key} = ?`);
         values.push(key === 'auto_connect' ? (value ? 1 : 0) : value);
     }
-    if (sets.length === 0) return;
+    if (sets.length === 0) {return;}
     values.push(id);
     db().prepare(`UPDATE servers SET ${sets.join(', ')} WHERE id = ?`).run(...values);
 }
@@ -103,11 +103,11 @@ function updateGroup(id, updates) {
     const sets = [];
     const values = [];
     for (const [key, value] of Object.entries(updates)) {
-        if (!allowed.includes(key)) continue;
+        if (!allowed.includes(key)) {continue;}
         sets.push(`${key} = ?`);
         values.push(key === 'expanded' ? (value ? 1 : 0) : value);
     }
-    if (sets.length === 0) return;
+    if (sets.length === 0) {return;}
     values.push(id);
     db().prepare(`UPDATE server_groups SET ${sets.join(', ')} WHERE id = ?`).run(...values);
 }

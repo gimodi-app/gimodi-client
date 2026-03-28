@@ -18,10 +18,10 @@ const HISTORY_PAGE_SIZE = 50;
  */
 function getOwnNickname() {
   const active = connectionManager.getActive();
-  if (active?.nickname) return active.nickname;
+  if (active?.nickname) {return active.nickname;}
   for (const [key] of connectionManager._connections) {
     const creds = connectionManager.getCredentials(key);
-    if (creds?.nickname) return creds.nickname;
+    if (creds?.nickname) {return creds.nickname;}
   }
   return 'You';
 }
@@ -31,7 +31,7 @@ function getOwnNickname() {
  */
 export function renderDmSelfUser() {
   const container = document.getElementById('dm-self-user');
-  if (!container) return;
+  if (!container) {return;}
 
   const presence = getEffectivePresence();
   const entry = PRESENCE_STATUSES.find((s) => s.key === presence);

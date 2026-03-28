@@ -6,7 +6,7 @@ const { getIdentityDb } = require('./database');
  */
 function db() {
     const d = getIdentityDb();
-    if (!d) throw new Error('No active identity');
+    if (!d) {throw new Error('No active identity');}
     return d;
 }
 
@@ -42,11 +42,11 @@ function updateFriend(fingerprint, updates) {
     const sets = [];
     const values = [];
     for (const [key, value] of Object.entries(updates)) {
-        if (!allowed.includes(key)) continue;
+        if (!allowed.includes(key)) {continue;}
         sets.push(`${key} = ?`);
         values.push(value);
     }
-    if (sets.length === 0) return;
+    if (sets.length === 0) {return;}
     values.push(fingerprint);
     db().prepare(`UPDATE friends SET ${sets.join(', ')} WHERE fingerprint = ?`).run(...values);
 }

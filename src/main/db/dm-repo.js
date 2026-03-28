@@ -6,7 +6,7 @@ const { getIdentityDb } = require('./database');
  */
 function db() {
     const d = getIdentityDb();
-    if (!d) throw new Error('No active identity');
+    if (!d) {throw new Error('No active identity');}
     return d;
 }
 
@@ -31,7 +31,7 @@ function listConversations() {
  */
 function getConversation(conversationId) {
     const conv = db().prepare('SELECT * FROM dm_conversations WHERE id = ?').get(conversationId);
-    if (!conv) return null;
+    if (!conv) {return null;}
     conv.participants = db().prepare(
         'SELECT fingerprint, nickname, public_key FROM dm_participants WHERE conversation_id = ?'
     ).all(conv.id);
@@ -92,7 +92,7 @@ function updateConversation(conversationId, updates) {
     const fields = [];
     const values = [];
     for (const [key, val] of Object.entries(updates)) {
-        if (key === 'participants') continue;
+        if (key === 'participants') {continue;}
         fields.push(`${key} = ?`);
         values.push(val);
     }
@@ -162,7 +162,7 @@ function getLastMessages() {
     const results = [];
     for (const conv of convs) {
         const msg = getLastMessage(conv.id);
-        if (msg) results.push({ conversation_id: conv.id, ...msg });
+        if (msg) {results.push({ conversation_id: conv.id, ...msg });}
     }
     return results;
 }
@@ -273,7 +273,7 @@ function removeReaction(messageId, emoji) {
 function getLastRead(serverAddress) {
     const rows = db().prepare('SELECT channel_id, timestamp FROM last_read WHERE server_address = ?').all(serverAddress);
     const result = {};
-    for (const row of rows) result[row.channel_id] = row.timestamp;
+    for (const row of rows) {result[row.channel_id] = row.timestamp;}
     return result;
 }
 

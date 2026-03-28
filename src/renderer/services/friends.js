@@ -350,8 +350,8 @@ export class FriendsService extends EventTarget {
   _addToLocal(fingerprint, nickname, publicKey) {
     const existing = this._friends.find((f) => f.fingerprint === fingerprint);
     if (existing) {
-      if (nickname) existing.nickname = nickname;
-      if (publicKey) existing.public_key = publicKey;
+      if (nickname) {existing.nickname = nickname;}
+      if (publicKey) {existing.public_key = publicKey;}
       window.gimodi.db.updateFriend(fingerprint, { nickname: existing.nickname, public_key: existing.public_key });
       return;
     }

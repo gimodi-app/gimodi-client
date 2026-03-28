@@ -226,12 +226,12 @@ const newPlaceholderParentId = document.getElementById('new-placeholder-parent-i
 
 
 // --- Settings persistence ---
-let appSettings = {};
+const appSettings = {};
 
 async function loadSettings() {
   const raw = await window.gimodi.db.getAppSetting('appSettings');
   const loaded = raw ? JSON.parse(raw) : {};
-  Object.keys(appSettings).forEach((k) => { if (!(k in loaded)) delete appSettings[k]; });
+  Object.keys(appSettings).forEach((k) => { if (!(k in loaded)) {delete appSettings[k];} });
   Object.assign(appSettings, loaded);
   notificationService.updateSettings(appSettings);
   if (appSettings.voiceActivationLevel !== null && appSettings.voiceActivationLevel !== undefined) {
@@ -271,11 +271,11 @@ async function loadSettings() {
   }
   if (appSettings.sidebarWidth) {
     const sidebar = document.querySelector('.sidebar');
-    if (sidebar) sidebar.style.width = appSettings.sidebarWidth + 'px';
+    if (sidebar) {sidebar.style.width = appSettings.sidebarWidth + 'px';}
   }
   if (appSettings.dmSidebarWidth) {
     const dmSidebar = document.querySelector('.dm-sidebar');
-    if (dmSidebar) dmSidebar.style.width = appSettings.dmSidebarWidth + 'px';
+    if (dmSidebar) {dmSidebar.style.width = appSettings.dmSidebarWidth + 'px';}
   }
 }
 

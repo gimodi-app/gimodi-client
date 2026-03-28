@@ -6,7 +6,7 @@ const { getIdentityDb } = require('./database');
  */
 function db() {
     const d = getIdentityDb();
-    if (!d) throw new Error('No active identity');
+    if (!d) {throw new Error('No active identity');}
     return d;
 }
 
@@ -33,7 +33,7 @@ function setSetting(key, value) {
 function getAllSettings() {
     const rows = db().prepare('SELECT key, value FROM settings').all();
     const result = {};
-    for (const row of rows) result[row.key] = row.value;
+    for (const row of rows) {result[row.key] = row.value;}
     return result;
 }
 

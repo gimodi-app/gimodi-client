@@ -75,7 +75,7 @@ const chkScreenAudio = document.getElementById('chk-screen-audio');
 const btnCancelScreen = document.getElementById('btn-cancel-screen');
 const selectScreenResolution = document.getElementById('select-screen-resolution');
 window.gimodi.db.getSetting('screenShareResolution').then((val) => {
-  if (val) selectScreenResolution.value = val;
+  if (val) {selectScreenResolution.value = val;}
 });
 
 let isMuted = false;
