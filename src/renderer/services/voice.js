@@ -46,7 +46,7 @@ class VoiceService extends EventTarget {
     this.pushToTalkKey = ' ';
     /** @type {boolean} */
     this._pttActive = false;
-    /** @type {Map<string, number>} userId → volume (0-100) */
+    /** @type {Map<string, number>} userId → volume (0-200) */
     this._userVolumes = new Map();
     /** @type {AudioContext|null} */
     this._audioContext = null;
@@ -867,7 +867,7 @@ class VoiceService extends EventTarget {
 
   /**
    * @param {string} userId
-   * @param {number} volume - 0-100
+   * @param {number} volume - 0-200
    */
   setUserVolume(userId, volume) {
     this._userVolumes.set(userId, volume);

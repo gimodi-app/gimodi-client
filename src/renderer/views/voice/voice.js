@@ -91,6 +91,7 @@ let wcPopoutPC = null; // RTCPeerConnection for webcam popout window
 let wcPopoutClientId = null; // clientId of the webcam being popped out
 let popoutPC = null; // RTCPeerConnection for screen share popout
 let screenAudioGain = parseInt(rangeScreenVolume.value, 10); // screen audio gain percentage (0-100)
+let voiceAudioCtx = null; // shared AudioContext for voice consumers (enables boost above 100%)
 let isScreenMaximized = false;
 let isScreenResized = false;
 
@@ -102,6 +103,7 @@ const consumerH = createConsumerHandlers({
   getIsDeafened: () => isDeafened,
   getScreenAudioGain: () => screenAudioGain,
   getWatchingScreenClientId: () => watchingScreenClientId,
+  getVoiceAudioCtx: () => voiceAudioCtx,
   log,
   voiceService,
   screenVolumeControl,
@@ -175,6 +177,10 @@ export function initVoiceView(initialClients = [], serverName = '') {
     if (c.userId) {
       clientUserMap.set(c.id, c.userId);
     }
+  }
+
+  if (!voiceAudioCtx || voiceAudioCtx.state === 'closed') {
+    voiceAudioCtx = new AudioContext();
   }
 
   // Voice-specific buttons are hidden until user joins a voice channel
@@ -324,7 +330,13 @@ export function cleanup() {
   setVoiceControlsEnabled(false);
 
   for (const entry of audioElements.values()) {
-    if (entry.audioCtx) {
+    if (entry.source) {
+      entry.source.disconnect();
+    }
+    if (entry.gainNode) {
+      entry.gainNode.disconnect();
+    }
+    if (entry.screenAudio && entry.audioCtx) {
       entry.audioCtx.close().catch(() => {});
     }
     if (entry.audio) {
@@ -333,6 +345,10 @@ export function cleanup() {
     }
   }
   audioElements.clear();
+  if (voiceAudioCtx) {
+    voiceAudioCtx.close().catch(() => {});
+    voiceAudioCtx = null;
+  }
   clientUserMap.clear();
 
   // Reset unified focus
@@ -437,14 +453,18 @@ function updateDeafenUI() {
 
 function applyDeafenToAudio() {
   for (const entry of audioElements.values()) {
-    if (entry.audio) {
+    if (entry.gainNode) {
+      if (isDeafened) {
+        entry.gainNode.gain.value = 0;
+      } else if (entry.screenAudio && entry.audioCtx) {
+        entry.gainNode.gain.cancelScheduledValues(entry.audioCtx.currentTime);
+        entry.gainNode.gain.setValueAtTime(screenAudioGain / 100, entry.audioCtx.currentTime);
+      } else {
+        const userId = clientUserMap.get(entry.clientId);
+        entry.gainNode.gain.value = userId ? voiceService.getUserVolume(userId) / 100 : 1.0;
+      }
+    } else if (entry.audio) {
       entry.audio.muted = isDeafened;
-    }
-    // Screen audio uses AudioContext gain instead of audio element
-    if (entry.screenAudio && entry.gainNode && entry.audioCtx) {
-      const vol = isDeafened ? 0 : screenAudioGain / 100;
-      entry.gainNode.gain.cancelScheduledValues(entry.audioCtx.currentTime);
-      entry.gainNode.gain.setValueAtTime(vol, entry.audioCtx.currentTime);
     }
   }
 }

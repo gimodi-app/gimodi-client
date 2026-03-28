@@ -18,6 +18,7 @@
  * @param {Function} deps.createScreenTile - Creates a screen share tile in the media grid
  * @param {Function} deps.removeScreenTile - Removes a screen share tile from the media grid
  * @param {Function} deps.unwatchScreen - Stops watching a screen share
+ * @param {Function} deps.getVoiceAudioCtx - Returns the shared AudioContext for voice consumers
  * @param {Function} deps.backToGrid - Returns to the media grid view
  * @returns {object} Object containing consumer handler functions
  */
@@ -30,6 +31,7 @@ export function createConsumerHandlers(deps) {
     getIsDeafened,
     getScreenAudioGain,
     getWatchingScreenClientId,
+    getVoiceAudioCtx,
     log,
     voiceService,
     screenVolumeControl,
@@ -50,7 +52,13 @@ export function createConsumerHandlers(deps) {
    * @returns {void}
    */
   function cleanupAudioEntry(consumerId, entry) {
-    if (entry.audioCtx) {
+    if (entry.source) {
+      entry.source.disconnect();
+    }
+    if (entry.gainNode) {
+      entry.gainNode.disconnect();
+    }
+    if (entry.screenAudio && entry.audioCtx) {
       entry.audioCtx.close().catch(() => {});
     }
     if (entry.audio) {
@@ -125,38 +133,49 @@ export function createConsumerHandlers(deps) {
 
     if (kind === 'audio' && !screenAudio) {
       const track = consumer.track;
+      const stream = new MediaStream([track]);
+
       const audio = new Audio();
-      audio.volume = 1.0;
-
-      const userId = clientUserMap.get(clientId);
-      if (userId) {
-        const vol = voiceService.getUserVolume(userId);
-        if (vol !== 100) {
-          audio.volume = Math.min(vol / 100, 1.0);
-        }
-      }
-
-      if (voiceService.selectedSpeakerId && typeof audio.setSinkId === 'function') {
-        try {
-          await audio.setSinkId(voiceService.selectedSpeakerId);
-        } catch (err) {
-          log(`Failed to set audio output device:`, err.message);
-        }
-      }
-
-      if (getIsDeafened()) {
-        audio.muted = true;
-      }
-
-      const origVolume = audio.volume;
-      audio.volume = 0;
-      audio.srcObject = new MediaStream([track]);
+      audio.srcObject = stream;
       audio.autoplay = true;
       document.body.appendChild(audio);
-      audioElements.set(consumer.id, { audio, clientId, track });
-      setTimeout(() => {
-        audio.volume = origVolume;
-      }, 150);
+
+      const audioCtx = getVoiceAudioCtx();
+      if (audioCtx) {
+        if (audioCtx.state === 'suspended') {
+          await audioCtx.resume();
+        }
+
+        audio.volume = 0;
+        audio.muted = true;
+
+        const source = audioCtx.createMediaStreamSource(new MediaStream([track.clone()]));
+        const gainNode = audioCtx.createGain();
+
+        let targetGain = 1.0;
+        const userId = clientUserMap.get(clientId);
+        if (userId) {
+          targetGain = voiceService.getUserVolume(userId) / 100;
+        }
+
+        gainNode.gain.value = getIsDeafened() ? 0 : targetGain;
+        source.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        audioElements.set(consumer.id, { audio, clientId, track, audioCtx, gainNode, source });
+      } else {
+        const userId = clientUserMap.get(clientId);
+        if (userId) {
+          audio.volume = Math.min(voiceService.getUserVolume(userId) / 100, 1.0);
+        }
+        if (getIsDeafened()) {
+          audio.muted = true;
+        }
+        const origVolume = audio.volume;
+        audio.volume = 0;
+        audioElements.set(consumer.id, { audio, clientId, track });
+        setTimeout(() => { audio.volume = origVolume; }, 150);
+      }
     }
   }
 
@@ -226,12 +245,22 @@ export function createConsumerHandlers(deps) {
     const { deviceId } = e.detail;
     log(`Speaker changed to: ${deviceId || 'default'}`);
 
+    const voiceCtx = getVoiceAudioCtx();
+    if (voiceCtx && typeof voiceCtx.setSinkId === 'function') {
+      try {
+        await voiceCtx.setSinkId(deviceId || '');
+        log('Updated voice AudioContext output device');
+      } catch (err) {
+        log('Failed to update voice AudioContext output device:', err.message);
+      }
+    }
+
     for (const [consumerId, entry] of audioElements) {
       try {
-        if (entry.audioCtx && typeof entry.audioCtx.setSinkId === 'function') {
+        if (entry.screenAudio && entry.audioCtx && typeof entry.audioCtx.setSinkId === 'function') {
           await entry.audioCtx.setSinkId(deviceId || '');
-          log(`Updated audio output (AudioContext) for consumer ${consumerId}`);
-        } else if (typeof entry.audio.setSinkId === 'function') {
+          log(`Updated screen audio output for consumer ${consumerId}`);
+        } else if (entry.audio && !entry.gainNode && typeof entry.audio.setSinkId === 'function') {
           await entry.audio.setSinkId(deviceId || '');
           log(`Updated audio output for consumer ${consumerId}`);
         }
@@ -242,21 +271,22 @@ export function createConsumerHandlers(deps) {
   }
 
   /**
-   * Handles per-user volume changes by adjusting gain or volume on all
+   * Handles per-user volume changes by adjusting gain on all
    * non-screen audio elements belonging to the specified user.
    *
-   * @param {CustomEvent} e - Event with detail containing userId and volume (0-100)
+   * @param {CustomEvent} e - Event with detail containing userId and volume (0-200)
    * @returns {void}
    */
   function onUserVolumeChanged(e) {
     const { userId, volume } = e.detail;
     for (const entry of audioElements.values()) {
-      if (!entry.screenAudio && clientUserMap.get(entry.clientId) === userId) {
-        if (entry.gainNode) {
-          entry.gainNode.gain.value = volume / 100;
-        } else {
-          entry.audio.volume = Math.min(volume / 100, 1.0);
-        }
+      if (entry.screenAudio || clientUserMap.get(entry.clientId) !== userId) {
+        continue;
+      }
+      if (entry.gainNode) {
+        entry.gainNode.gain.value = volume / 100;
+      } else if (entry.audio) {
+        entry.audio.volume = Math.min(volume / 100, 1.0);
       }
     }
   }

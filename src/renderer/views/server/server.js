@@ -2493,7 +2493,7 @@ export function showUserContextMenu(e, user, options = {}) {
     const volSlider = document.createElement('input');
     volSlider.type = 'range';
     volSlider.min = '0';
-    volSlider.max = '100';
+    volSlider.max = '200';
     volSlider.value = voiceService.getUserVolume(user.userId);
     volSlider.style.cssText = 'flex:1;cursor:pointer;accent-color:var(--accent)';
     volContainer.appendChild(volSlider);
@@ -2506,7 +2506,7 @@ export function showUserContextMenu(e, user, options = {}) {
     volSlider.addEventListener('input', () => {
       const vol = parseInt(volSlider.value, 10);
       volLabel.textContent = vol + '%';
-      volIcon.className = vol === 0 ? 'bi bi-volume-mute' : vol < 100 ? 'bi bi-volume-down' : 'bi bi-volume-up';
+      volIcon.className = vol === 0 ? 'bi bi-volume-mute' : vol <= 100 ? 'bi bi-volume-down' : 'bi bi-volume-up';
       voiceService.setUserVolume(user.userId, vol);
     });
 
