@@ -77,6 +77,8 @@ class ScreenShareService extends EventTarget {
       return;
     }
 
+    videoTrack.contentHint = 'motion';
+
     let audioTrack = null;
 
     if (this._wantAudio) {
