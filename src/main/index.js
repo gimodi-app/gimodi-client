@@ -340,11 +340,6 @@ ipcMain.handle('update:cancel', () => {
 // Accept self-signed certificates (needed for self-hosted servers with auto-generated certs)
 app.commandLine.appendSwitch('ignore-certificate-errors');
 
-// Enable PipeWire screen capture on Linux (Wayland support)
-if (process.platform === 'linux') {
-  app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer');
-}
-
 let mainWindow;
 let tray = null;
 

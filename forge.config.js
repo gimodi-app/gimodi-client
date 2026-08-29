@@ -46,6 +46,12 @@ module.exports = {
       /^\/src\/renderer\/app\.js$/, // source entry; dist/bundle.js is what's needed
       /^\/node_modules\/.bin/,
       /^\/out\//,
+      /^\/src-tauri\//,
+      /^\/tauri-dist\//,
+      /^\/scripts\//,
+      /^\/\.serena\//,
+      /^\/\.idea\//,
+      /^\/\.claude\//,
       // Dev/build tools not needed at runtime
       /^\/node_modules\/@electron-forge\//,
       /^\/node_modules\/@esbuild\//,
