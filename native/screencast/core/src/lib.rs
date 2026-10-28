@@ -4,3 +4,4 @@
 pub mod cpu;
 pub mod formats;
 pub mod geometry;
+pub mod gpu;
