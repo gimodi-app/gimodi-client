@@ -5,6 +5,29 @@ const MODULE_PATH = path.join(__dirname, '..', '..', 'native', 'screencast', 'sc
 const STOP_TIMEOUT_MS = 2000;
 
 /**
+ * Calls `onLoss` when the renderer reloads, crashes or is destroyed, so a
+ * capture never outlives the page that shows it.
+ * @param {import('electron').WebContents} webContents - Renderer receiving the frames.
+ * @param {() => void} onLoss - Called on renderer loss.
+ * @returns {() => void} Removes the listeners.
+ */
+function watchRenderer(webContents, onLoss) {
+  const onNavigation = (details) => {
+    if (details?.isMainFrame && !details.isSameDocument) {
+      onLoss();
+    }
+  };
+  webContents.on('did-start-navigation', onNavigation);
+  webContents.on('render-process-gone', onLoss);
+  webContents.on('destroyed', onLoss);
+  return () => {
+    webContents.removeListener('did-start-navigation', onNavigation);
+    webContents.removeListener('render-process-gone', onLoss);
+    webContents.removeListener('destroyed', onLoss);
+  };
+}
+
+/**
  * Creates the controller that runs the native Wayland screen capture in a
  * utility process and connects it to a renderer through a message port.
  * @param {object} deps
@@ -38,8 +61,9 @@ function createController({ fork, createChannel, env, platform, moduleExists }) 
    */
   function start(webContents, options) {
     stop();
-    const current = { worker: fork(WORKER_PATH), started: false, stopping: false, ended: false };
+    const current = { worker: fork(WORKER_PATH), started: false, stopping: false, ended: false, unwatch: () => {} };
     session = current;
+    current.unwatch = watchRenderer(webContents, () => shutdown(current));
     const { port1, port2 } = createChannel();
     return new Promise((resolve, reject) => {
       current.worker.on('message', (message) => {
@@ -54,6 +78,7 @@ function createController({ fork, createChannel, env, platform, moduleExists }) 
         }
       });
       current.worker.on('exit', () => {
+        current.unwatch();
         if (!current.started) {
           reject(new Error('error: capture worker exited'));
         }
@@ -92,6 +117,7 @@ function createController({ fork, createChannel, env, platform, moduleExists }) 
       return;
     }
     current.stopping = true;
+    current.unwatch();
     current.worker.postMessage({ type: 'stop' });
     const timer = setTimeout(() => current.worker.kill(), STOP_TIMEOUT_MS);
     current.worker.once('exit', () => clearTimeout(timer));

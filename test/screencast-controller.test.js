@@ -42,13 +42,30 @@ function setup(overrides = {}) {
 }
 
 /**
- * Fake webContents recording posted ports.
- * @returns {{posted: Array, postMessage: Function}}
+ * Fake webContents recording posted ports and emitting lifecycle events.
+ * @returns {EventEmitter & {posted: Array, postMessage: Function}}
  */
 function fakeWebContents() {
-  const posted = [];
-  return { posted, postMessage: (channel, message, ports) => posted.push({ channel, ports }) };
+  const webContents = new EventEmitter();
+  webContents.posted = [];
+  webContents.postMessage = (channel, message, ports) => webContents.posted.push({ channel, ports });
+  return webContents;
 }
+
+/**
+ * Starts a capture and waits until the worker reports it running.
+ * @returns {Promise<{controller: object, worker: EventEmitter, webContents: EventEmitter}>}
+ */
+async function startCapture() {
+  const { controller, workers } = setup();
+  const webContents = fakeWebContents();
+  const started = controller.start(webContents, { maxWidth: 1920, maxHeight: 1080, fps: 30 });
+  workers[0].emit('message', { type: 'started', info: {} });
+  await started;
+  return { controller, worker: workers[0], webContents };
+}
+
+const RENDERER_EVENTS = ['did-start-navigation', 'render-process-gone', 'destroyed'];
 
 test('is supported on a Linux Wayland session with the module present', () => {
   assert.strictEqual(setup().controller.isSupported(), true);
@@ -121,4 +138,32 @@ test('stop asks the worker to stop and kills it after 2000 ms', async (t) => {
   t.mock.timers.tick(1);
   assert.strictEqual(workers[0].killed, true);
   assert.deepStrictEqual(reasons, []);
+});
+
+test('stops the capture when the renderer reloads, crashes or is destroyed', async () => {
+  const losses = [['did-start-navigation', { isMainFrame: true, isSameDocument: false }], ['render-process-gone', {}, { reason: 'crashed' }], ['destroyed']];
+  for (const [event, ...args] of losses) {
+    const { worker, webContents } = await startCapture();
+    webContents.emit(event, ...args);
+    assert.deepStrictEqual(worker.messages.at(-1).message, { type: 'stop' }, event);
+  }
+});
+
+test('keeps capturing on same-document and subframe navigations', async () => {
+  const { worker, webContents } = await startCapture();
+  webContents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: true });
+  webContents.emit('did-start-navigation', { isMainFrame: false, isSameDocument: false });
+  assert.strictEqual(worker.messages.length, 1);
+});
+
+test('removes its renderer listeners once the capture stops or ends', async () => {
+  const stopped = await startCapture();
+  stopped.controller.stop();
+  const ended = await startCapture();
+  ended.worker.emit('message', { type: 'ended', reason: 'portal session closed' });
+  for (const { webContents } of [stopped, ended]) {
+    for (const event of RENDERER_EVENTS) {
+      assert.strictEqual(webContents.listenerCount(event), 0, event);
+    }
+  }
 });
