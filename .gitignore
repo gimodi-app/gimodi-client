@@ -2,3 +2,5 @@
 dist
 node_modules
 out
+native/screencast/target/
+native/screencast/*.node

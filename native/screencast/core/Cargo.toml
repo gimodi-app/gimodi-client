@@ -1,0 +1,15 @@
+[package]
+name = "gimodi-screencast-core"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "screencast"] }
+fast_image_resize = "6"
+futures-lite = "2"
+glow = "0.18"
+khronos-egl = { version = "6", features = ["dynamic"] }
+libloading = "0.9"
+pipewire = "0.10"
+yuvutils-rs = "0.8"
