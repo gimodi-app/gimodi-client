@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+ipcRenderer.on('screencast:port', (event) => {
+  globalThis.postMessage({ type: 'gimodi:screencast-port' }, '*', event.ports);
+});
+
 contextBridge.exposeInMainWorld('gimodi', {
   getVersion: () => ipcRenderer.invoke('get-version'),
   db: {
@@ -173,6 +177,19 @@ contextBridge.exposeInMainWorld('gimodi', {
     selectSource: (choice) => ipcRenderer.send('screen:source-selected', choice),
     removePickerListener: () => ipcRenderer.removeAllListeners('screen:show-picker'),
     getPlatform: () => ipcRenderer.invoke('screen:get-platform'),
+  },
+  screencast: {
+    isSupported: () => ipcRenderer.invoke('screencast:is-supported'),
+    start: async (options) => {
+      const result = await ipcRenderer.invoke('screencast:start', options);
+      if (!result.ok) {
+        throw new Error(result.message);
+      }
+      return result.info;
+    },
+    stop: () => ipcRenderer.invoke('screencast:stop'),
+    onEnded: (cb) => ipcRenderer.on('screencast:ended', (_, reason) => cb(reason)),
+    removeEndedListener: () => ipcRenderer.removeAllListeners('screencast:ended'),
   },
   venmic: {
     isAvailable: () => ipcRenderer.invoke('venmic:is-available'),

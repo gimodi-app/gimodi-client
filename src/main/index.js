@@ -1,10 +1,25 @@
-const { app, BrowserWindow, Menu, Tray, nativeImage, dialog, ipcMain, shell, Notification, desktopCapturer, session } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  Menu,
+  Tray,
+  nativeImage,
+  dialog,
+  ipcMain,
+  shell,
+  Notification,
+  desktopCapturer,
+  session,
+  utilityProcess,
+  MessageChannelMain,
+} = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
 const identity = require('./identity');
 const venmic = require('./venmic');
+const { createController: createScreencastController } = require('./screencast');
 
 // Database modules
 const database = require('./db/database');
@@ -924,6 +939,24 @@ ipcMain.on('popout:ready', () => {
 // --- Screen Share / Venmic ---
 
 ipcMain.handle('screen:get-platform', () => process.platform);
+
+const screencast = createScreencastController({
+  fork: (modulePath) => utilityProcess.fork(modulePath, [], { serviceName: 'Gimodi Screen Capture' }),
+  createChannel: () => new MessageChannelMain(),
+  env: process.env,
+  platform: process.platform,
+  moduleExists: fs.existsSync,
+});
+screencast.onEnded((reason) => sendToMain('screencast:ended', reason));
+
+ipcMain.handle('screencast:is-supported', () => screencast.isSupported());
+ipcMain.handle('screencast:start', (event, options) =>
+  screencast.start(event.sender, options).then(
+    (info) => ({ ok: true, info }),
+    (error) => ({ ok: false, message: error.message }),
+  ),
+);
+ipcMain.handle('screencast:stop', () => screencast.stop());
 
 /**
  * Get the Chromium "Audio Service" process PID.
