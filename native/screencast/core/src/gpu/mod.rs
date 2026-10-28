@@ -112,8 +112,7 @@ impl GpuConverter {
         result
     }
 
-    /// Converts an RGBA image uploaded as a 2D texture (tests the shader path).
-    #[cfg(test)]
+    /// Converts the crop region of a tightly packed RGBA image to I420.
     #[allow(clippy::too_many_arguments)]
     pub fn convert_rgba(
         &mut self,

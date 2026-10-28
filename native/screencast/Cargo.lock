@@ -546,6 +546,7 @@ dependencies = [
  "libloading 0.9.0",
  "pipewire",
  "yuvutils-rs",
+ "zbus",
 ]
 
 [[package]]

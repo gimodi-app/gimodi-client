@@ -40,7 +40,8 @@ type GbmDeviceDestroy = unsafe extern "C" fn(*mut c_void);
 
 /// `libgbm.so.1`, loaded at runtime so the module works without it.
 pub struct Gbm {
-    pub library: Library,
+    /// Keeps libgbm loaded while its entry points are in use.
+    pub _library: Library,
     create_device: GbmCreateDevice,
     device_destroy: GbmDeviceDestroy,
 }
@@ -56,7 +57,7 @@ impl Gbm {
             let device_destroy = *library
                 .get::<GbmDeviceDestroy>(b"gbm_device_destroy\0")
                 .map_err(|e| format!("gbm_device_destroy: {e}"))?;
-            Ok(Self { library, create_device, device_destroy })
+            Ok(Self { _library: library, create_device, device_destroy })
         }
     }
 }

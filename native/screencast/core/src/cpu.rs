@@ -168,6 +168,18 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
+    fn reports_conversion_time_for_1440p() {
+        let src = solid(2560, 1440, [10, 20, 30, 255]);
+        let mut out = Vec::new();
+        let started = std::time::Instant::now();
+        for _ in 0..10 {
+            convert_to_i420(&src, 2560 * 4, PixelFormat::Bgrx, Rect::full(2560, 1440), 1920, 1080, &mut out).unwrap();
+        }
+        println!("1440p -> 1080p: {:?} per frame", started.elapsed() / 10);
+    }
+
+    #[test]
     fn rejects_buffer_smaller_than_crop() {
         let mut out = Vec::new();
         let result = convert_to_i420(&solid(16, 16, [0; 4]), 16 * 4, PixelFormat::Bgrx, Rect::full(32, 32), 16, 16, &mut out);

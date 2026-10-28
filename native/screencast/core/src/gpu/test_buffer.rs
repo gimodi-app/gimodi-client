@@ -32,7 +32,7 @@ pub struct TestDmaBuf {
 impl TestDmaBuf {
     /// Allocates a buffer of `fourcc` and copies `pixels` (tightly packed) into it.
     pub fn new(egl: &Egl, fourcc: u32, width: u32, height: u32, pixels: &[u8]) -> Result<Self, String> {
-        let library = &egl.gbm.library;
+        let library = &egl.gbm._library;
         let symbol = |name: &[u8]| -> Result<*mut c_void, String> {
             unsafe { library.get::<*mut c_void>(name) }
                 .map(|s| *s)

@@ -4,3 +4,9 @@ resolver = "2"
 
 [profile.release]
 lto = "thin"
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev.package.gimodi-screencast-core]
+opt-level = 3
