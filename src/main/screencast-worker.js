@@ -24,7 +24,7 @@ function start(options, port) {
   framePort = port;
   framePort.on('message', (event) => {
     if (event.data?.type === 'ack') {
-      flow.release();
+      postFrame(flow.release());
     }
   });
   framePort.start();
@@ -43,12 +43,24 @@ function start(options, port) {
 }
 
 /**
- * Sends one I420 frame to the renderer unless too many are unacknowledged.
- * @param {{data: Buffer, width: number, height: number}} frame
+ * Hands a captured I420 frame to the flow control. The native module passes
+ * null when a newer frame was already delivered.
+ * @param {{data: Buffer, width: number, height: number}|null} frame
  * @returns {void}
  */
 function sendFrame(frame) {
-  if (!framePort || !flow.tryAcquire()) {
+  if (frame && framePort) {
+    postFrame(flow.offer(frame));
+  }
+}
+
+/**
+ * Posts a frame the flow control released to the renderer.
+ * @param {{data: Buffer, width: number, height: number}|null} frame
+ * @returns {void}
+ */
+function postFrame(frame) {
+  if (!frame || !framePort) {
     return;
   }
   frameSequence += 1;

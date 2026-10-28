@@ -6,5 +6,6 @@ pub mod cpu;
 pub mod formats;
 pub mod geometry;
 pub mod gpu;
+pub mod latest;
 mod portal;
 pub mod stream;

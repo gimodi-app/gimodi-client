@@ -3,10 +3,11 @@
 use std::sync::{Arc, Mutex};
 
 use gimodi_screencast_core::capture::{Capture, CaptureEvent, CaptureOptions, StartedInfo};
+use gimodi_screencast_core::latest::Latest;
 use gimodi_screencast_core::stream::Frame;
-use napi::bindgen_prelude::{AsyncTask, Buffer};
+use napi::bindgen_prelude::{AsyncTask, Buffer, Null, ToNapiValue};
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode, UnknownReturnValue};
-use napi::{Env, Error, Result, Status, Task};
+use napi::{sys, Env, Error, Result, Status, Task};
 use napi_derive::napi;
 
 /// Requested output limits.
@@ -41,7 +42,24 @@ pub struct StartResult {
     pub source_type: String,
 }
 
-type FrameCallback = ThreadsafeFunction<CaptureFrame, UnknownReturnValue, CaptureFrame, Status, false, false, 1>;
+/// Takes the newest captured frame when JavaScript runs the frame callback, so
+/// a full callback queue never holds back the latest picture. JavaScript gets
+/// `null` when an earlier call already delivered it.
+pub struct NewestFrame(Latest<Frame>);
+
+impl ToNapiValue for NewestFrame {
+    unsafe fn to_napi_value(env: sys::napi_env, value: Self) -> Result<sys::napi_value> {
+        match value.0.take() {
+            Some(frame) => {
+                let message = CaptureFrame { data: Buffer::from(frame.data), width: frame.width, height: frame.height };
+                unsafe { CaptureFrame::to_napi_value(env, message) }
+            }
+            None => unsafe { Null::to_napi_value(env, Null) },
+        }
+    }
+}
+
+type FrameCallback = ThreadsafeFunction<NewestFrame, UnknownReturnValue, NewestFrame, Status, false, false, 1>;
 type EventCallback = ThreadsafeFunction<CaptureEventMessage, UnknownReturnValue, CaptureEventMessage, Status, false>;
 
 /// Screen capture through the ScreenCast portal with an embedded cursor.
@@ -89,9 +107,10 @@ impl Task for StartTask {
     fn compute(&mut self) -> Result<StartedInfo> {
         let options = validate(&self.options)?;
         let (on_frame, on_event) = self.callbacks.take().ok_or_else(|| Error::from_reason("error: start task reused"))?;
+        let newest = Latest::default();
         let frame_sink = Box::new(move |frame: Frame| {
-            let message = CaptureFrame { data: Buffer::from(frame.data), width: frame.width, height: frame.height };
-            on_frame.call(message, ThreadsafeFunctionCallMode::NonBlocking);
+            newest.put(frame);
+            on_frame.call(NewestFrame(newest.clone()), ThreadsafeFunctionCallMode::NonBlocking);
         });
         let event_sink = Box::new(move |event: CaptureEvent| {
             let (kind, message) = match event {
