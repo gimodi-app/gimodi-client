@@ -7,7 +7,6 @@
   "scripts": {
     "postinstall": "electron-rebuild",
     "build": "esbuild src/renderer/app.js --bundle --outfile=dist/bundle.js --platform=browser --format=iife --external:electron",
-    "build:tauri-frontend": "npm run build && node scripts/build-tauri-frontend.js",
     "start": "npm run build && electron .",
     "package": "npm run build && electron-forge package",
     "make": "npm run build && electron-forge make",
@@ -44,14 +43,10 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@jitsi/rnnoise-wasm": "^0.2.1",
-    "@tauri-apps/api": "^2.11.1",
     "better-sqlite3": "^13.0.3",
     "bootstrap-icons": "^1.13.1",
     "electron-squirrel-startup": "^1.0.1",
@@ -72,7 +67,6 @@
     "@electron/rebuild": "^4.2.0",
     "@eslint/js": "^10.0.1",
     "@reforged/maker-appimage": "^5.2.0",
-    "@tauri-apps/cli": "^2.11.4",
     "electron": "43.2.0",
     "esbuild": "^0.27.3",
     "eslint": "^10.0.3",

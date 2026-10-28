@@ -46,8 +46,6 @@ module.exports = {
       /^\/src\/renderer\/app\.js$/, // source entry; dist/bundle.js is what's needed
       /^\/node_modules\/.bin/,
       /^\/out\//,
-      /^\/src-tauri\//,
-      /^\/tauri-dist\//,
       /^\/scripts\//,
       /^\/\.serena\//,
       /^\/\.idea\//,
