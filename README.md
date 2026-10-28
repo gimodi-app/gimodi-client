@@ -9,6 +9,14 @@ A cross-platform voice and video chat desktop application built with Electron.
 - [Node.js](https://nodejs.org/) (v18+)
 - npm
 
+On Linux, the Wayland screen capture module (`native/screencast`, Rust) additionally needs:
+
+- [Rust](https://rustup.rs/) (cargo)
+- clang, pkg-config and the PipeWire development files, e.g. on Debian/Ubuntu:
+  `sudo apt install clang pkg-config libpipewire-0.3-dev libspa-0.2-dev`
+
+Without cargo the module is skipped and screen sharing falls back to Chromium's capturer.
+
 ## Getting Started
 
 ```bash
@@ -24,6 +32,8 @@ This builds the renderer bundle and launches the app in development mode.
 | ----------------- | --------------------------------------------- |
 | `npm start`       | Build and run in development mode             |
 | `npm run build`   | Build the renderer bundle only                |
+| `npm run build:native` | Build the Linux screen capture module    |
+| `npm test`        | Run the unit tests                            |
 | `npm run package` | Package the app without creating an installer |
 | `npm run make`    | Create platform-specific installers           |
 

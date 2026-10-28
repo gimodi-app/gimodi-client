@@ -3,6 +3,12 @@ const fs = require('fs');
 
 module.exports = {
   hooks: {
+    packageAfterCopy: async (forgeConfig, buildPath, electronVersion, platform) => {
+      // The screen capture module is Linux only
+      if (platform !== 'linux') {
+        fs.rmSync(path.join(buildPath, 'native', 'screencast', 'screencast.node'), { force: true });
+      }
+    },
     postPackage: async (forgeConfig, options) => {
       // Remove unused locale files (keep only en-US)
       const localesDir = path.join(options.outputPaths[0], 'locales');
@@ -40,7 +46,9 @@ module.exports = {
     // Point to assets/icon.{ico,icns,png} - add those files for full icon support.
     // electron-packager picks the right extension per platform automatically.
     icon: 'assets/icon',
-    asar: true,
+    asar: {
+      unpack: '**/native/screencast/screencast.node',
+    },
     electronLanguages: ['en-US'],
     ignore: [
       /^\/src\/renderer\/app\.js$/, // source entry; dist/bundle.js is what's needed
@@ -50,6 +58,13 @@ module.exports = {
       /^\/\.serena\//,
       /^\/\.idea\//,
       /^\/\.claude\//,
+      /^\/\.superpowers\//,
+      /^\/\.worktrees\//,
+      /^\/docs\//,
+      /^\/test\//,
+      // Native module sources; only the built screencast.node ships
+      /^\/native\/screencast\/(core|node|target)\//,
+      /^\/native\/screencast\/Cargo\.(toml|lock)$/,
       // Dev/build tools not needed at runtime
       /^\/node_modules\/@electron-forge\//,
       /^\/node_modules\/@esbuild\//,
