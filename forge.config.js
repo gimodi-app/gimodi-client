@@ -58,12 +58,12 @@ module.exports = {
       /^\/\.serena\//,
       /^\/\.idea\//,
       /^\/\.claude\//,
-      /^\/\.superpowers\//,
-      /^\/\.worktrees\//,
-      /^\/docs\//,
-      /^\/test\//,
+      /^\/\.superpowers(\/|$)/,
+      /^\/\.worktrees(\/|$)/,
+      /^\/docs(\/|$)/,
+      /^\/test(\/|$)/,
       // Native module sources; only the built screencast.node ships
-      /^\/native\/screencast\/(core|node|target)\//,
+      /^\/native\/screencast\/(core|node|target)(\/|$)/,
       /^\/native\/screencast\/Cargo\.(toml|lock)$/,
       // Dev/build tools not needed at runtime
       /^\/node_modules\/@electron-forge\//,
