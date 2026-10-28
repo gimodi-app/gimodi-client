@@ -72,7 +72,7 @@ pub struct Egl {
     query_formats: QueryDmaBufFormats,
     query_modifiers: QueryDmaBufModifiers,
     image_target_texture: ImageTargetTexture2D,
-    _node: File,
+    node: File,
 }
 
 impl Egl {
@@ -99,7 +99,7 @@ impl Egl {
                         query_formats,
                         query_modifiers,
                         image_target_texture,
-                        _node: node,
+                        node,
                     })
                 }
                 Err(error) => last_error = format!("{path}: {error}"),
@@ -174,6 +174,11 @@ impl Egl {
                 std::mem::transmute::<extern "system" fn(), ImageTargetTexture2D>(lookup("glEGLImageTargetTexture2DOES")?),
             ))
         }
+    }
+
+    /// The DRM render node the display runs on.
+    pub fn node(&self) -> &File {
+        &self.node
     }
 
     /// Resolves a GL entry point for glow.

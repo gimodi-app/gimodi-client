@@ -2,6 +2,7 @@
 
 mod egl;
 mod shaders;
+mod syncobj;
 #[cfg(test)]
 mod test_buffer;
 
@@ -13,6 +14,7 @@ use crate::formats::PixelFormat;
 use crate::geometry::Rect;
 use egl::Egl;
 pub use egl::DRM_FORMAT_MOD_INVALID;
+pub use syncobj::Timelines;
 
 const TEXTURE_EXTERNAL_OES: u32 = 0x8D65;
 
@@ -76,6 +78,7 @@ pub struct GpuConverter {
     external_texture: glow::Texture,
     plain_texture: glow::Texture,
     targets: Option<Targets>,
+    timelines: Option<Timelines>,
     egl: Egl,
 }
 
@@ -91,12 +94,20 @@ impl GpuConverter {
         let plain = compile_program(&gl, &shaders::fragment_2d())?;
         let external_texture = create_source_texture(&gl, TEXTURE_EXTERNAL_OES)?;
         let plain_texture = create_source_texture(&gl, glow::TEXTURE_2D)?;
-        Ok(Self { gl, external, plain, external_texture, plain_texture, targets: None, egl })
+        let timelines = Timelines::new(egl.node())
+            .inspect_err(|error| eprintln!("[screencast] explicit sync unavailable: {error}"))
+            .ok();
+        Ok(Self { gl, external, plain, external_texture, plain_texture, targets: None, timelines, egl })
     }
 
     /// DRM modifiers this GPU can import for `format`.
     pub fn modifiers(&self, format: PixelFormat) -> Vec<u64> {
         self.egl.modifiers(format.drm_fourcc())
+    }
+
+    /// Syncobj access for explicit sync, when the DRM device supports it.
+    pub fn timelines(&self) -> Option<&Timelines> {
+        self.timelines.as_ref()
     }
 
     /// Converts the crop region of a DMA-BUF frame to I420 of the given size.

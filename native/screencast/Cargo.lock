@@ -544,6 +544,7 @@ dependencies = [
  "futures-lite",
  "glow",
  "khronos-egl",
+ "libc",
  "libloading 0.9.0",
  "pipewire",
  "yuvutils-rs",

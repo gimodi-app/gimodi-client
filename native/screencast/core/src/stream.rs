@@ -6,12 +6,14 @@ use std::collections::HashSet;
 use std::io::Cursor;
 use std::os::fd::{OwnedFd, RawFd};
 use std::rc::Rc;
+use std::time::Duration;
 
 use pipewire as pw;
+use pw::buffer::Buffer;
 use pw::properties::properties;
 use pw::spa;
 use pw::stream::{Stream, StreamBox, StreamFlags, StreamState};
-use spa::buffer::meta::{MetaHeader, MetaHeaderFlags, MetaVideoCrop};
+use spa::buffer::meta::{MetaHeader, MetaHeaderFlags, MetaVideoCrop, Metadata};
 use spa::buffer::{ChunkFlags, Data, DataType};
 use spa::param::format::{MediaSubtype, MediaType};
 use spa::param::format_utils;
@@ -30,6 +32,7 @@ use crate::gpu::{DmaBufFrame, DmaBufPlane, GpuConverter, DRM_FORMAT_MOD_INVALID}
 
 const MAX_DIMENSION: u32 = 8192;
 const BYTES_PER_PIXEL: usize = 4;
+const ACQUIRE_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// An I420 frame (Y, then U, then V plane, tightly packed).
 pub struct Frame {
@@ -91,6 +94,24 @@ struct NegotiatedFormat {
     modifier: Option<u64>,
 }
 
+/// `SPA_META_SyncTimeline`, read through pipewire-rs.
+#[repr(transparent)]
+struct SyncTimeline(sys::spa_meta_sync_timeline);
+
+impl Metadata for SyncTimeline {
+    const META_TYPE: u32 = sys::SPA_META_SyncTimeline;
+}
+
+/// Explicit-sync points of one buffer: wait for the acquire point before
+/// reading it, signal the release point when done with it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SyncPoints {
+    acquire_fd: RawFd,
+    acquire_point: u64,
+    release_fd: RawFd,
+    release_point: u64,
+}
+
 /// Per-stream state owned by the PipeWire listener.
 struct State {
     settings: StreamSettings,
@@ -98,6 +119,8 @@ struct State {
     gpu: Option<GpuConverter>,
     format: Option<NegotiatedFormat>,
     blacklist: HashSet<u64>,
+    synced_frames: u64,
+    early_frames: u64,
 }
 
 /// Connects to `node_id` and delivers converted frames until stopped or the
@@ -131,7 +154,7 @@ pub fn run_stream(
     let gpu = if settings.use_gpu { create_gpu() } else { None };
     let enum_formats = build_enum_formats(settings.fps, &|format| supported_modifiers(gpu.as_ref(), format), &HashSet::new());
     let end = Rc::new(RefCell::new(None));
-    let state = State { settings, on_frame, gpu, format: None, blacklist: HashSet::new() };
+    let state = State { settings, on_frame, gpu, format: None, blacklist: HashSet::new(), synced_frames: 0, early_frames: 0 };
 
     let _listener = stream
         .add_local_listener_with_user_data(state)
@@ -215,7 +238,8 @@ impl State {
         let modifier = has_modifier(param).then(|| info.modifier());
         let size = info.size();
         self.format = Some(NegotiatedFormat { pixel, width: size.width, height: size.height, modifier });
-        let buffers = buffer_params(modifier.is_some());
+        let explicit_sync = self.gpu.as_ref().is_some_and(|gpu| gpu.timelines().is_some());
+        let buffers = buffer_params(modifier.is_some(), explicit_sync);
         match pods(&buffers) {
             Ok(mut params) => {
                 if let Err(error) = stream.update_params(&mut params) {
@@ -226,23 +250,65 @@ impl State {
         }
     }
 
-    /// Converts the newest queued buffer and hands it to `on_frame`.
+    /// Converts the newest queued buffer that carries a picture and hands it
+    /// to `on_frame`. Signals the release point of every dequeued buffer, as
+    /// the producer reuses a buffer only after that.
     fn on_process(&mut self, stream: &Stream) {
-        let mut newest = None;
-        while let Some(buffer) = stream.dequeue_buffer() {
-            newest = Some(buffer);
+        let mut newest: Option<(Buffer, Option<SyncPoints>)> = None;
+        while let Some(mut buffer) = stream.dequeue_buffer() {
+            let points = buffer.find_meta::<SyncTimeline>().map(|meta| (meta.0.acquire_point, meta.0.release_point));
+            let sync = sync_points(points, buffer.datas_mut());
+            if buffer_has_content(&mut buffer) {
+                if let Some((_, older)) = newest.replace((buffer, sync)) {
+                    self.release(older);
+                }
+            } else {
+                self.release(sync);
+            }
         }
-        let (Some(mut buffer), Some(format)) = (newest, self.format) else { return };
-        if buffer.find_meta::<MetaHeader>().is_some_and(|header| header.flags().contains(MetaHeaderFlags::CORRUPTED)) {
+        let Some((mut buffer, sync)) = newest else { return };
+        if self.acquire(sync) {
+            self.convert(stream, &mut buffer);
+        }
+        self.release(sync);
+    }
+
+    /// Waits until the producer has finished writing a buffer. Returns false
+    /// when that failed and the buffer must not be read.
+    fn acquire(&mut self, sync: Option<SyncPoints>) -> bool {
+        let (Some(points), Some(timelines)) = (sync, self.gpu.as_ref().and_then(GpuConverter::timelines)) else {
+            return true;
+        };
+        match timelines.wait(points.acquire_fd, points.acquire_point, ACQUIRE_TIMEOUT) {
+            Ok(waited) => {
+                self.synced_frames += 1;
+                self.early_frames += u64::from(waited);
+                true
+            }
+            Err(error) => {
+                eprintln!("[screencast] frame dropped: {error}");
+                false
+            }
+        }
+    }
+
+    /// Tells the producer that a buffer is no longer read.
+    fn release(&self, sync: Option<SyncPoints>) {
+        let (Some(points), Some(timelines)) = (sync, self.gpu.as_ref().and_then(GpuConverter::timelines)) else {
             return;
+        };
+        if let Err(error) = timelines.signal(points.release_fd, points.release_point) {
+            eprintln!("[screencast] {error}");
         }
+    }
+
+    /// Converts the picture of a buffer and hands it to `on_frame`.
+    fn convert(&mut self, stream: &Stream, buffer: &mut Buffer) {
+        let Some(format) = self.format else { return };
         let crop = crop_rect(format.width, format.height, buffer.find_meta::<MetaVideoCrop>().and_then(crop_from_meta));
         let (out_width, out_height) = fit_output_size(crop.width, crop.height, self.settings.max_width, self.settings.max_height);
         let datas = buffer.datas_mut();
         let Some(first) = datas.first() else { return };
-        if first.chunk().flags().contains(ChunkFlags::CORRUPTED) {
-            return;
-        }
         let mut out = Vec::new();
         let converted = match first.type_() {
             DataType::DmaBuf => self.convert_dmabuf(stream, format, datas, crop, out_width, out_height, &mut out),
@@ -270,10 +336,7 @@ impl State {
         out: &mut Vec<u8>,
     ) -> Result<bool, String> {
         let gpu = self.gpu.as_mut().ok_or("DMA-BUF received without GPU converter")?;
-        let planes: Vec<DmaBufPlane> = datas
-            .iter()
-            .map(|data| DmaBufPlane { fd: data.fd() as RawFd, offset: data.chunk().offset(), stride: data.chunk().stride() as u32 })
-            .collect();
+        let planes = dmabuf_planes(datas);
         let modifier = format.modifier.unwrap_or(DRM_FORMAT_MOD_INVALID);
         let frame = DmaBufFrame { width: format.width, height: format.height, format: format.pixel, modifier, planes: &planes, crop };
         match gpu.convert_dmabuf(&frame, out_width, out_height, out) {
@@ -298,6 +361,18 @@ impl State {
                 }
             }
             Err(error) => eprintln!("[screencast] {error}"),
+        }
+    }
+}
+
+impl Drop for State {
+    /// Logs how often explicit sync kept a frame from being read too early.
+    fn drop(&mut self) {
+        if self.synced_frames > 0 {
+            eprintln!(
+                "[screencast] explicit sync: {} of {} frames arrived before the compositor finished writing them",
+                self.early_frames, self.synced_frames
+            );
         }
     }
 }
@@ -389,23 +464,57 @@ fn base_format_properties(format: PixelFormat, fps: u32) -> Vec<Property> {
     ]
 }
 
-/// `Buffers` and `Meta` params for the negotiated memory type.
-fn buffer_params(dmabuf: bool) -> Vec<Vec<u8>> {
+/// Whether a buffer carries a picture: producers queue buffers with an empty
+/// or corrupted chunk when only metadata changed or recording failed.
+fn has_content(header_corrupted: bool, chunk_flags: ChunkFlags, chunk_size: u32) -> bool {
+    !header_corrupted && !chunk_flags.contains(ChunkFlags::CORRUPTED) && chunk_size > 0
+}
+
+/// [`has_content`] for a dequeued buffer.
+fn buffer_has_content(buffer: &mut Buffer) -> bool {
+    let header_corrupted = buffer.find_meta::<MetaHeader>().is_some_and(|header| header.flags().contains(MetaHeaderFlags::CORRUPTED));
+    buffer.datas_mut().first().is_some_and(|first| has_content(header_corrupted, first.chunk().flags(), first.chunk().size()))
+}
+
+/// The image planes of a DMA-BUF buffer, without the syncobjs that explicit
+/// sync appends.
+fn dmabuf_planes(datas: &[Data]) -> Vec<DmaBufPlane> {
+    datas
+        .iter()
+        .filter(|data| data.type_() == DataType::DmaBuf)
+        .map(|data| DmaBufPlane { fd: data.fd(), offset: data.chunk().offset(), stride: data.chunk().stride() as u32 })
+        .collect()
+}
+
+/// Explicit-sync points of a buffer with `SyncTimeline` metadata; its acquire
+/// and release syncobjs are the last two datas, after at least one plane.
+fn sync_points(points: Option<(u64, u64)>, datas: &[Data]) -> Option<SyncPoints> {
+    let (acquire_point, release_point) = points?;
+    let [_, .., acquire, release] = datas else { return None };
+    Some(SyncPoints { acquire_fd: acquire.fd(), acquire_point, release_fd: release.fd(), release_point })
+}
+
+/// `Buffers` and `Meta` params for the negotiated memory type. With explicit
+/// sync, DMA-BUF streams also request `SyncTimeline`, so the producer adds
+/// acquire and release syncobjs to each buffer.
+fn buffer_params(dmabuf: bool, explicit_sync: bool) -> Vec<Vec<u8>> {
     let data_types = if dmabuf {
         1 << DataType::DmaBuf.as_raw() | 1 << DataType::MemFd.as_raw()
     } else {
         1 << DataType::MemFd.as_raw() | 1 << DataType::MemPtr.as_raw()
     };
-    let buffers = vec![
-        Property::new(
-            sys::SPA_PARAM_BUFFERS_buffers,
-            Value::Choice(ChoiceValue::Int(Choice(ChoiceFlags::empty(), ChoiceEnum::Range { default: 8, min: 1, max: 32 }))),
-        ),
-        Property::new(
-            sys::SPA_PARAM_BUFFERS_dataType,
-            Value::Choice(ChoiceValue::Int(Choice(ChoiceFlags::empty(), ChoiceEnum::Flags { default: data_types as i32, flags: Vec::new() }))),
-        ),
-    ];
+    let buffers = || {
+        vec![
+            Property::new(
+                sys::SPA_PARAM_BUFFERS_buffers,
+                Value::Choice(ChoiceValue::Int(Choice(ChoiceFlags::empty(), ChoiceEnum::Range { default: 8, min: 1, max: 32 }))),
+            ),
+            Property::new(
+                sys::SPA_PARAM_BUFFERS_dataType,
+                Value::Choice(ChoiceValue::Int(Choice(ChoiceFlags::empty(), ChoiceEnum::Flags { default: data_types as i32, flags: Vec::new() }))),
+            ),
+        ]
+    };
     let meta = |kind: u32, size: usize| {
         serialize(object(
             SpaTypes::ObjectParamMeta,
@@ -416,11 +525,25 @@ fn buffer_params(dmabuf: bool) -> Vec<Vec<u8>> {
             ],
         ))
     };
-    vec![
-        serialize(object(SpaTypes::ObjectParamBuffers, ParamType::Buffers, buffers)),
+    let mut params = Vec::new();
+    if dmabuf && explicit_sync {
+        let mut synced = buffers();
+        synced.push(Property {
+            key: sys::SPA_PARAM_BUFFERS_metaType,
+            flags: PropertyFlags::MANDATORY,
+            value: Value::Int(1 << sys::SPA_META_SyncTimeline),
+        });
+        params.push(serialize(object(SpaTypes::ObjectParamBuffers, ParamType::Buffers, synced)));
+    }
+    params.extend([
+        serialize(object(SpaTypes::ObjectParamBuffers, ParamType::Buffers, buffers())),
         meta(sys::SPA_META_Header, std::mem::size_of::<sys::spa_meta_header>()),
         meta(sys::SPA_META_VideoCrop, std::mem::size_of::<sys::spa_meta_region>()),
-    ]
+    ]);
+    if dmabuf && explicit_sync {
+        params.push(meta(sys::SPA_META_SyncTimeline, std::mem::size_of::<sys::spa_meta_sync_timeline>()));
+    }
+    params
 }
 
 /// Creates a pod object of the given type and id.
@@ -509,5 +632,95 @@ mod tests {
     fn no_modifiers_offers_shm_only() {
         let pods = build_enum_formats(30, &|_| Vec::new(), &HashSet::new());
         assert_eq!(pods.len(), 4);
+    }
+
+    fn requests_sync_timeline(pods: &[Vec<u8>]) -> bool {
+        pods.iter().map(|pod| parse(pod)).filter(|object| object.id == ParamType::Meta.as_raw()).any(|object| {
+            property(&object, sys::SPA_PARAM_META_type) == Some(&Value::Id(Id(sys::SPA_META_SyncTimeline)))
+                && property(&object, sys::SPA_PARAM_META_size) == Some(&Value::Int(24))
+        })
+    }
+
+    #[test]
+    fn sync_timeline_requested_only_for_dmabuf_with_explicit_sync() {
+        assert!(requests_sync_timeline(&buffer_params(true, true)));
+        assert!(!requests_sync_timeline(&buffer_params(true, false)));
+        assert!(!requests_sync_timeline(&buffer_params(false, true)));
+    }
+
+    fn buffers_params(pods: &[Vec<u8>]) -> Vec<Object> {
+        pods.iter().map(|pod| parse(pod)).filter(|object| object.id == ParamType::Buffers.as_raw()).collect()
+    }
+
+    fn mandatory_meta_type(object: &Object) -> Option<i32> {
+        object.properties.iter().find(|p| p.key == sys::SPA_PARAM_BUFFERS_metaType).map(|p| {
+            assert!(p.flags.contains(PropertyFlags::MANDATORY), "metaType must be mandatory");
+            match p.value {
+                Value::Int(types) => types,
+                ref other => panic!("unexpected metaType {other:?}"),
+            }
+        })
+    }
+
+    #[test]
+    fn explicit_sync_buffers_layout_is_offered_first() {
+        let buffers = buffers_params(&buffer_params(true, true));
+        assert_eq!(buffers.len(), 2);
+        assert_eq!(mandatory_meta_type(&buffers[0]), Some(1 << sys::SPA_META_SyncTimeline));
+        assert_eq!(mandatory_meta_type(&buffers[1]), None);
+        for params in [buffer_params(true, false), buffer_params(false, true)] {
+            let buffers = buffers_params(&params);
+            assert_eq!(buffers.len(), 1);
+            assert_eq!(mandatory_meta_type(&buffers[0]), None);
+        }
+    }
+
+    #[test]
+    fn empty_or_corrupted_buffers_have_no_picture() {
+        assert!(has_content(false, ChunkFlags::empty(), 4096));
+        assert!(!has_content(false, ChunkFlags::empty(), 0));
+        assert!(!has_content(false, ChunkFlags::CORRUPTED, 4096));
+        assert!(!has_content(true, ChunkFlags::empty(), 4096));
+    }
+
+    fn chunk(stride: i32) -> sys::spa_chunk {
+        sys::spa_chunk { offset: 0, size: 0, stride, flags: 0 }
+    }
+
+    fn raw_data(type_: u32, fd: i64, chunk: &mut sys::spa_chunk) -> sys::spa_data {
+        sys::spa_data { type_, flags: 0, fd, mapoffset: 0, maxsize: 0, data: std::ptr::null_mut(), chunk }
+    }
+
+    fn as_datas(raw: &mut [sys::spa_data]) -> &[Data] {
+        unsafe { std::slice::from_raw_parts(raw.as_ptr().cast::<Data>(), raw.len()) }
+    }
+
+    #[test]
+    fn sync_objects_are_not_image_planes() {
+        let mut chunks = [chunk(7680), chunk(0), chunk(0)];
+        let [image, acquire, release] = &mut chunks;
+        let mut raw = [
+            raw_data(sys::SPA_DATA_DmaBuf, 10, image),
+            raw_data(sys::SPA_DATA_SyncObj, 11, acquire),
+            raw_data(sys::SPA_DATA_SyncObj, 12, release),
+        ];
+        let planes = dmabuf_planes(as_datas(&mut raw));
+        assert_eq!(planes.len(), 1);
+        assert_eq!((planes[0].fd, planes[0].offset, planes[0].stride), (10, 0, 7680));
+    }
+
+    #[test]
+    fn sync_points_come_from_the_last_two_datas() {
+        let mut chunks = [chunk(7680), chunk(0), chunk(0)];
+        let [image, acquire, release] = &mut chunks;
+        let mut raw = [
+            raw_data(sys::SPA_DATA_DmaBuf, 10, image),
+            raw_data(sys::SPA_DATA_SyncObj, 11, acquire),
+            raw_data(sys::SPA_DATA_SyncObj, 12, release),
+        ];
+        let expected = SyncPoints { acquire_fd: 11, acquire_point: 5, release_fd: 12, release_point: 6 };
+        assert_eq!(sync_points(Some((5, 6)), as_datas(&mut raw)), Some(expected));
+        assert_eq!(sync_points(None, as_datas(&mut raw)), None);
+        assert_eq!(sync_points(Some((5, 6)), &as_datas(&mut raw)[..1]), None);
     }
 }

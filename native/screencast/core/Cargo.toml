@@ -11,6 +11,7 @@ fast_image_resize = "6"
 futures-lite = "2"
 glow = "0.18"
 khronos-egl = { version = "6", features = ["dynamic"] }
+libc = "0.2"
 libloading = "0.9"
 pipewire = "0.10"
 yuvutils-rs = "0.8"
