@@ -539,6 +539,7 @@ name = "gimodi-screencast-core"
 version = "0.1.0"
 dependencies = [
  "ashpd",
+ "async-channel",
  "fast_image_resize",
  "futures-lite",
  "glow",
