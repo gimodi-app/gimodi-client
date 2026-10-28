@@ -42,7 +42,7 @@
     "nightly:linux": "npm run nightly:linux:deb && npm run nightly:linux:appimage && npm run nightly:linux:zip",
     "nightly": "npm run nightly:linux && npm run nightly:win && npm run nightly:mac",
     "lint": "eslint .",
-    "test": "node --test test/",
+    "test": "node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

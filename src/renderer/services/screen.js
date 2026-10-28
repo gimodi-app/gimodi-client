@@ -1,5 +1,7 @@
 import connectionManager from './connectionManager.js';
 import voiceService from './voice.js';
+import { startPortalCapture } from './portal-capture.js';
+import { getScreenPreset, isCancelledCaptureError } from './screen-presets.js';
 
 const log = (...args) => console.log('[screen]', ...args);
 const err = (...args) => console.error('[screen]', ...args);
@@ -21,6 +23,12 @@ class ScreenShareService extends EventTarget {
     this._wantAudio = true;
     /** @type {string} */
     this._resolution = '1080';
+    /** @type {number} */
+    this._fps = 30;
+    /** @type {boolean} */
+    this.usesPortalCapture = false;
+    /** @type {{track: MediaStreamTrack, stop: () => void}|null} */
+    this._portalCapture = null;
   }
 
   /**
@@ -28,9 +36,10 @@ class ScreenShareService extends EventTarget {
    */
   async init() {
     this._platform = await window.gimodi.screen.getPlatform();
+    this.usesPortalCapture = Boolean(await window.gimodi.screencast?.isSupported());
     if (this._platform === 'linux') {
       this._venmicAvailable = await window.gimodi.venmic.isAvailable();
-      log('Platform: linux, venmic available:', this._venmicAvailable);
+      log('Platform: linux, venmic available:', this._venmicAvailable, 'portal capture:', this.usesPortalCapture);
     } else {
       log('Platform:', this._platform);
     }
@@ -55,25 +64,18 @@ class ScreenShareService extends EventTarget {
       return;
     }
 
+    const preset = getScreenPreset(this._resolution, this._fps);
+    let videoTrack;
     try {
-      const resolutions = { 720: [1280, 720], 1080: [1920, 1080], 1440: [2560, 1440], 2160: [3840, 2160] };
-      const [w, h] = resolutions[this._resolution] || resolutions[1080];
-      this.stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          frameRate: { ideal: 30 },
-          width: { ideal: w },
-          height: { ideal: h },
-        },
-        audio: true,
-      });
+      videoTrack = await this._captureVideo(preset);
     } catch (e) {
-      err('Failed to get display media:', e.message);
+      if (!isCancelledCaptureError(e)) {
+        err('Failed to capture the screen:', e.message);
+      }
       return;
     }
-
-    const videoTrack = this.stream.getVideoTracks()[0];
     if (!videoTrack) {
-      err('No video track from getDisplayMedia');
+      err('No video track from screen capture');
       return;
     }
 
@@ -89,8 +91,9 @@ class ScreenShareService extends EventTarget {
       }
     }
 
-    log('Got screen stream, video:', videoTrack?.label, 'audio:', audioTrack?.label);
+    log('Got screen stream, video:', videoTrack?.label, 'audio:', audioTrack?.label, 'preset:', preset);
 
+    videoTrack.contentHint = 'motion';
     videoTrack.onended = () => {
       log('Video track ended by user');
       this.stopSharing();
@@ -99,9 +102,12 @@ class ScreenShareService extends EventTarget {
     try {
       this.videoProducer = await voiceService.sendTransport.produce({
         track: videoTrack,
+        encodings: [{ maxBitrate: preset.maxBitrate, maxFramerate: preset.fps }],
+        codecOptions: { videoGoogleStartBitrate: preset.startBitrateKbps },
         appData: { screen: true },
       });
     } catch (e) {
+      this._stopPortalCapture();
       this.stream.getTracks().forEach((t) => t.stop());
       this.stream = null;
       if (this._platform === 'linux' && this._venmicAvailable) {
@@ -129,6 +135,57 @@ class ScreenShareService extends EventTarget {
 
     connectionManager.getVoice()?.send('screen:start', {});
     this.dispatchEvent(new CustomEvent('started', { detail: { videoTrack, audioTrack, stream: this.stream } }));
+  }
+
+  /**
+   * Captures the screen through the Wayland portal when available, otherwise
+   * (or when the portal path fails for another reason than a cancel) through
+   * `getDisplayMedia`. Sets `this.stream`.
+   * @private
+   * @param {{width: number, height: number, fps: number}} preset - Capture settings.
+   * @returns {Promise<MediaStreamTrack|undefined>}
+   * @throws {Error} When the capture fails or the user cancels the selection.
+   */
+  async _captureVideo(preset) {
+    if (this.usesPortalCapture) {
+      try {
+        this._portalCapture = await startPortalCapture({
+          maxWidth: preset.width,
+          maxHeight: preset.height,
+          fps: preset.fps,
+          onEnded: (reason) => {
+            log('Portal capture ended:', reason);
+            this.stopSharing();
+          },
+        });
+        this.stream = new MediaStream([this._portalCapture.track]);
+        return this._portalCapture.track;
+      } catch (e) {
+        if (isCancelledCaptureError(e)) {
+          throw e;
+        }
+        err('Portal capture failed, falling back to getDisplayMedia:', e.message);
+      }
+    }
+    this.stream = await navigator.mediaDevices.getDisplayMedia({
+      video: {
+        frameRate: { ideal: preset.fps },
+        width: { ideal: preset.width },
+        height: { ideal: preset.height },
+      },
+      audio: true,
+    });
+    return this.stream.getVideoTracks()[0];
+  }
+
+  /**
+   * Stops the portal capture, if one is running.
+   * @private
+   * @returns {void}
+   */
+  _stopPortalCapture() {
+    this._portalCapture?.stop();
+    this._portalCapture = null;
   }
 
   /**
@@ -171,6 +228,8 @@ class ScreenShareService extends EventTarget {
    * @returns {void}
    */
   stopSharing() {
+    this._stopPortalCapture();
+
     if (this.videoProducer) {
       const track = this.videoProducer.track;
       this.videoProducer.close();
