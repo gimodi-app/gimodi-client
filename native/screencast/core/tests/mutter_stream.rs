@@ -2,8 +2,9 @@
 //!
 //! Run on a GNOME session with something animating on the monitor:
 //! `cargo test --test mutter_stream -- --ignored --nocapture --test-threads=1`
-//! `SCREENCAST_TEST_CONNECTOR` picks the monitor (default `DP-1`) and
-//! `SCREENCAST_TEST_MIN_FRAMES` the frames required within 3 s (default 1).
+//! `SCREENCAST_TEST_CONNECTOR` picks the monitor (default `DP-1`),
+//! `SCREENCAST_TEST_MIN_FRAMES` the frames required within 3 s (default 1) and
+//! `SCREENCAST_TEST_FPS` the requested maximum frame rate (default 30).
 
 use std::collections::HashMap;
 use std::process::Command;
@@ -46,7 +47,8 @@ fn capture<T: Send + 'static>(use_gpu: bool, duration: Duration, inspect: fn(&Fr
     let frames = Arc::new(Mutex::new(Vec::new()));
     let sink = frames.clone();
     let (stop, receiver) = stop_pair();
-    let settings = StreamSettings { max_width: 1920, max_height: 1080, fps: 30, use_gpu };
+    let fps = std::env::var("SCREENCAST_TEST_FPS").ok().and_then(|v| v.parse().ok()).unwrap_or(30);
+    let settings = StreamSettings { max_width: 1920, max_height: 1080, fps, use_gpu };
     let worker = thread::spawn(move || {
         let on_frame = Box::new(move |frame: Frame| sink.lock().unwrap().push(inspect(&frame)));
         run_stream(Remote::Default, node_id, settings, on_frame, receiver)
