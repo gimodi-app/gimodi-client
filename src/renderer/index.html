@@ -313,8 +313,18 @@
               <option value="2160">2160p</option>
             </select>
           </label>
+          <label class="screen-resolution-option screen-fps-option">
+            Frame rate
+            <select id="select-screen-fps">
+              <option value="30" selected>30 fps</option>
+              <option value="60">60 fps</option>
+            </select>
+          </label>
         </div>
-        <button id="btn-cancel-screen" class="btn-secondary">Cancel</button>
+        <div class="modal-buttons">
+          <button id="btn-start-screen" class="btn-primary hidden">Share</button>
+          <button id="btn-cancel-screen" class="btn-secondary">Cancel</button>
+        </div>
       </div>
     </div>
 

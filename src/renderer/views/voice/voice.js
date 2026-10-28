@@ -74,8 +74,13 @@ const screenSourcesDiv = document.getElementById('screen-sources');
 const chkScreenAudio = document.getElementById('chk-screen-audio');
 const btnCancelScreen = document.getElementById('btn-cancel-screen');
 const selectScreenResolution = document.getElementById('select-screen-resolution');
+const selectScreenFps = document.getElementById('select-screen-fps');
+const btnStartScreen = document.getElementById('btn-start-screen');
 window.gimodi.db.getSetting('screenShareResolution').then((val) => {
   if (val) {selectScreenResolution.value = val;}
+});
+window.gimodi.db.getSetting('screenShareFps').then((val) => {
+  if (val) {selectScreenFps.value = val;}
 });
 
 let isMuted = false;
@@ -246,6 +251,7 @@ export function initVoiceView(initialClients = [], serverName = '') {
   // Set up screen picker IPC listener
   window.gimodi.screen.onShowPicker(showScreenPicker);
   btnCancelScreen.addEventListener('click', cancelScreenPicker);
+  btnStartScreen.addEventListener('click', startPortalScreenShare);
 
   // Init screen share service (detect platform, venmic)
   screenShareService.init();
@@ -302,6 +308,7 @@ export function cleanup() {
   window.removeEventListener('mouseup', onTileResizeUp);
   tileResizeTarget = null;
   btnCancelScreen.removeEventListener('click', cancelScreenPicker);
+  btnStartScreen.removeEventListener('click', startPortalScreenShare);
 
   // Remove service listeners
   voiceService.removeEventListener('new-consumer', consumerH.onNewConsumer);
@@ -1017,6 +1024,19 @@ async function handleScreenShareClick() {
     return;
   }
 
+  if (screenShareService.usesPortalCapture) {
+    showScreenOptions();
+    return;
+  }
+
+  await startScreenShare();
+}
+
+/**
+ * Starts sharing and reports failures other than a cancelled selection.
+ * @returns {Promise<void>}
+ */
+async function startScreenShare() {
   try {
     // The main process will intercept getDisplayMedia and show the picker.
     // We pass withAudio based on the checkbox state - the picker will set it.
@@ -1031,8 +1051,46 @@ async function handleScreenShareClick() {
   }
 }
 
+/**
+ * Opens the share dialog with options only; the source is picked in the
+ * system dialog of the screen cast portal afterwards.
+ * @returns {void}
+ */
+function showScreenOptions() {
+  screenSourcesDiv.innerHTML = '';
+  btnStartScreen.classList.remove('hidden');
+  modalScreenPicker.classList.remove('hidden');
+}
+
+/**
+ * Applies the dialog options and starts the portal screen share.
+ * @returns {Promise<void>}
+ */
+async function startPortalScreenShare() {
+  applyScreenPickerOptions();
+  btnStartScreen.classList.add('hidden');
+  modalScreenPicker.classList.add('hidden');
+  await startScreenShare();
+}
+
+/**
+ * Copies audio, resolution and frame rate from the dialog to the screen share
+ * service and stores resolution and frame rate.
+ * @returns {boolean} Whether audio should be shared.
+ */
+function applyScreenPickerOptions() {
+  const withAudio = chkScreenAudio.checked;
+  screenShareService._wantAudio = withAudio;
+  screenShareService._resolution = selectScreenResolution.value || '1080';
+  screenShareService._fps = Number(selectScreenFps.value) || 30;
+  window.gimodi.db.setSetting('screenShareResolution', screenShareService._resolution);
+  window.gimodi.db.setSetting('screenShareFps', String(screenShareService._fps));
+  return withAudio;
+}
+
 function showScreenPicker(sources) {
   screenSourcesDiv.innerHTML = '';
+  btnStartScreen.classList.add('hidden');
 
   // Separate screens and windows
   const screens = sources.filter((s) => s.id.startsWith('screen:'));
@@ -1083,12 +1141,7 @@ function createSourceItem(source) {
   item.appendChild(name);
 
   item.addEventListener('click', () => {
-    const withAudio = chkScreenAudio.checked;
-    // Tell the screen service whether the user wants audio before the main
-    // process resolves getDisplayMedia (needed for venmic on Linux)
-    screenShareService._wantAudio = withAudio;
-    screenShareService._resolution = selectScreenResolution.value || '1080';
-    window.gimodi.db.setSetting('screenShareResolution', screenShareService._resolution);
+    const withAudio = applyScreenPickerOptions();
     window.gimodi.screen.selectSource({ sourceId: source.id, withAudio });
     modalScreenPicker.classList.add('hidden');
   });
@@ -1098,6 +1151,7 @@ function createSourceItem(source) {
 
 function cancelScreenPicker() {
   window.gimodi.screen.selectSource({ sourceId: null });
+  btnStartScreen.classList.add('hidden');
   modalScreenPicker.classList.add('hidden');
 }
 
