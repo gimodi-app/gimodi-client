@@ -38,6 +38,12 @@ module.exports = {
       return makeResults;
     },
   },
+  // better-sqlite3 ships prebuilt binaries for every platform, and the app loads those.
+  // Rebuilding it from source fails on hosts with Visual Studio 18, which node-gyp does not support yet.
+  rebuildConfig: {
+    ignoreModules: ['better-sqlite3'],
+  },
+
   packagerConfig: {
     name: 'Gimodi',
     executableName: 'gimodi',
