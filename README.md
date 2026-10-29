@@ -45,6 +45,19 @@ npm run deploy:mac    # macOS installer
 npm run deploy:linux  # Linux packages (deb, AppImage)
 ```
 
+### Releases
+
+Releases are built and published by GitHub Actions (`.github/workflows/release.yml`). Bump the version, then push the commit and a matching tag:
+
+```bash
+npm version 1.11.0 --no-git-tag-version
+git commit -am "chore: bump version to 1.11.0"
+git tag v1.11.0
+git push origin main v1.11.0
+```
+
+The workflow builds Linux (deb, AppImage, zip), Windows (Squirrel, zip) and macOS (zip) installers, uploads them to a draft release and publishes it once all files are there. A tag with a suffix such as `v1.12.0-beta.1` becomes a prerelease. The client updater reads the GitHub releases API: the `stable` channel takes the highest release, `beta` and `nightly` also take prereleases.
+
 ## Tech Stack
 
 - **[Electron](https://www.electronjs.org/)** — Desktop application framework

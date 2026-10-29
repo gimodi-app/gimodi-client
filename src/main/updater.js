@@ -2,14 +2,16 @@ const { app, dialog, shell, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { isNewerVersion, selectRelease, findAsset } = require('./update-source');
 
-const GRS_URL = 'https://releases.gimodi.com';
+const RELEASES_API_URL = 'https://api.github.com/repos/gimodi-app/gimodi-client/releases?per_page=30';
 
 let updateChannel = 'stable';
 let updateNotifications = true;
 let getMainWindow = () => null;
 let sendToMainFn = () => {};
 let updateDownloadAbort = null;
+let offeredUpdate = null;
 
 /**
  * Returns the platform key used for update URL construction.
@@ -66,47 +68,60 @@ function getInstallType() {
 const installType = getInstallType();
 
 /**
- * Checks for application updates by querying the Gimodi Release Server.
+ * Looks up the newest release of the current update channel on GitHub and
+ * the file in it that matches this installation.
+ * @returns {Promise<{version: string, name: string, url: string, size: number}|{version: string, missing: true}|null>}
+ *   The update, a newer version without a matching file, or null when the running version is current.
+ * @throws {Error} When the GitHub API does not answer with a release list.
+ */
+async function findUpdate() {
+  const { net } = require('electron');
+  const response = await net.fetch(RELEASES_API_URL, { headers: { Accept: 'application/vnd.github+json' } });
+  if (!response.ok) {
+    throw new Error(`GitHub releases API answered HTTP ${response.status}`);
+  }
+  const release = selectRelease(await response.json(), updateChannel);
+  if (!release || !isNewerVersion(release.tag_name, app.getVersion())) {
+    return null;
+  }
+  return findAsset(release, getPlatformKey(), installType) ?? { version: release.tag_name.replace(/^v/, ''), missing: true };
+}
+
+/**
+ * Checks GitHub for a newer release of the current update channel.
  * If an update is available and the user accepts, triggers the download flow.
  * @param {boolean} [manual=false] - Whether the check was manually triggered (shows dialogs on no-update or error)
  * @returns {Promise<void>}
  */
 async function checkForUpdates(manual = false) {
-  const platform = getPlatformKey();
-  const url = `${GRS_URL}/v2/releases/${platform}/${updateChannel}/latest`;
   const mainWindow = getMainWindow();
   const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
   const showDialog = (opts) => (win ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts));
   try {
-    const { net } = require('electron');
-    const response = await net.fetch(url);
-    if (!response.ok) {
+    const update = await findUpdate();
+    if (!update) {
       if (manual) {
-        showDialog({ type: 'error', title: 'Update Check', message: 'Failed to check for updates.' });
+        showDialog({ type: 'info', title: 'Update Check', message: `You're up to date! (v${app.getVersion()})` });
       }
       return;
     }
-    const data = await response.json();
-    if (data.version && data.version !== app.getVersion()) {
-      if (!data.formats || !data.formats.includes(installType)) {
-        if (manual) {
-          showDialog({ type: 'info', title: 'Update Available', message: `Version ${data.version} is available, but no ${installType} package is provided yet.` });
-        }
-        return;
+    if (update.missing) {
+      if (manual) {
+        showDialog({ type: 'info', title: 'Update Available', message: `Version ${update.version} is available, but no ${installType} package is provided yet.` });
       }
-      const result = await showDialog({
-        type: 'info',
-        title: 'Update Available',
-        message: `Version ${data.version} is available! (current: v${app.getVersion()})`,
-        buttons: ['Download & Install', 'Later'],
-        defaultId: 0,
-        cancelId: 1,
-      });
-      if (result.response === 0) {
-        sendToMainFn('update:download-start', data.version);
-      }
-    } else if (manual) {
-      showDialog({ type: 'info', title: 'Update Check', message: `You're up to date! (v${app.getVersion()})` });
+      return;
+    }
+    offeredUpdate = update;
+    const result = await showDialog({
+      type: 'info',
+      title: 'Update Available',
+      message: `Version ${update.version} is available! (current: v${app.getVersion()})`,
+      buttons: ['Download & Install', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (result.response === 0) {
+      sendToMainFn('update:download-start', update.version);
     }
   } catch (err) {
     console.error('Update check failed:', err);
@@ -123,37 +138,30 @@ async function checkForUpdates(manual = false) {
  * @returns {Promise<void>}
  */
 async function downloadUpdate(version) {
-  const platform = getPlatformKey();
-  const url = `${GRS_URL}/v2/releases/${platform}/${updateChannel}/download/${version}/${installType}`;
-  console.log(`[update] Starting download: ${url}`);
-  console.log(`[update] Install type: ${installType}, platform: ${platform}, channel: ${updateChannel}`);
   const abortController = new AbortController();
   updateDownloadAbort = abortController;
   try {
     sendToMainFn('update:status', 'Downloading...');
+    const update = offeredUpdate?.version === version ? offeredUpdate : await findUpdate();
+    if (!update || update.missing || update.version !== version) {
+      console.error(`[update] Version ${version} is no longer offered for ${installType}`);
+      sendToMainFn('update:status', 'Download failed.');
+      return;
+    }
+    console.log(`[update] Starting download: ${update.url}`);
+    console.log(`[update] Install type: ${installType}, platform: ${getPlatformKey()}, channel: ${updateChannel}`);
     const { net } = require('electron');
-    const response = await net.fetch(url, { signal: abortController.signal });
+    const response = await net.fetch(update.url, { signal: abortController.signal });
     if (!response.ok) {
       console.error(`[update] Download failed: HTTP ${response.status}`);
       sendToMainFn('update:status', 'Download failed.');
       return;
     }
 
-    const disposition = response.headers.get('content-disposition') || '';
-    let filename = `gimodi-update-${version}`;
-    const match = disposition.match(/filename="?(.+?)"?$/i);
-    if (match) {
-      filename = match[1];
-    } else {
-      const extMap = { squirrel: '.exe', deb: '.deb', appimage: '.AppImage', zip: '.zip' };
-      filename += extMap[installType] || '';
-    }
-
-    const tmpDir = os.tmpdir();
-    const filePath = path.join(tmpDir, filename);
+    const filePath = path.join(os.tmpdir(), update.name);
     console.log(`[update] Saving to: ${filePath}`);
 
-    const total = parseInt(response.headers.get('content-length'), 10) || 0;
+    const total = parseInt(response.headers.get('content-length'), 10) || update.size || 0;
     const writer = fs.createWriteStream(filePath);
     let received = 0;
 
@@ -254,12 +262,15 @@ function registerIpcHandlers() {
 /**
  * Sets the update channel used when checking for and downloading updates.
  * @param {string} channel - One of 'stable', 'beta', or 'nightly'
+ * @returns {boolean} Whether the channel was valid and set.
  */
 function setUpdateChannel(channel) {
   const valid = ['stable', 'beta', 'nightly'];
-  if (valid.includes(channel)) {
-    updateChannel = channel;
+  if (!valid.includes(channel)) {
+    return false;
   }
+  updateChannel = channel;
+  return true;
 }
 
 /**

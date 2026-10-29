@@ -4,7 +4,6 @@ const {
   Menu,
   Tray,
   nativeImage,
-  dialog,
   ipcMain,
   shell,
   Notification,
@@ -15,12 +14,12 @@ const {
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 const crypto = require('crypto');
 const identity = require('./identity');
 const venmic = require('./venmic');
 const screenAudioLog = require('./screen-audio-log');
 const { createController: createScreencastController } = require('./screencast');
+const updater = require('./updater');
 
 // Database modules
 const database = require('./db/database');
@@ -32,9 +31,8 @@ const iconCacheDir = path.join(app.getPath('userData'), 'icon-cache');
 
 // --- Auto-Updater ---
 
-const GRS_URL = 'https://releases.gimodi.com';
-let updateChannel = 'stable';
-let updateNotifications = true;
+updater.init({ getMainWindow: () => mainWindow, sendToMain });
+updater.registerIpcHandlers();
 
 if (require('electron-squirrel-startup')) {
   app.quit();
@@ -137,220 +135,6 @@ if (!gotTheLock) {
 app.on('open-url', (event, url) => {
   event.preventDefault();
   handleProtocolUrl(url);
-});
-
-function getPlatformKey() {
-  switch (process.platform) {
-    case 'win32':
-      return 'win';
-    case 'darwin':
-      return 'darwin';
-    default:
-      return 'linux';
-  }
-}
-
-function getInstallType() {
-  const { execSync } = require('child_process');
-  const exe = process.execPath;
-
-  if (process.platform === 'win32') {
-    // Squirrel installs have Update.exe in the parent directory
-    const updateExe = path.join(path.dirname(exe), '..', 'Update.exe');
-    if (fs.existsSync(updateExe)) {
-      return 'squirrel';
-    }
-    return 'zip';
-  }
-
-  if (process.platform === 'darwin') {
-    return 'zip';
-  }
-
-  // Linux
-  // AppImage sets APPIMAGE env var pointing to the mounted image path
-  if (process.env.APPIMAGE) {
-    return 'appimage';
-  }
-
-  // Check if installed via dpkg (deb package)
-  if (exe.startsWith('/usr/') || exe.startsWith('/opt/')) {
-    try {
-      execSync(`dpkg -S "${exe}" 2>/dev/null`, { stdio: 'pipe' });
-      return 'deb';
-    } catch {
-      /* ignored */
-    }
-  }
-
-  return 'zip';
-}
-
-const installType = getInstallType();
-
-async function checkForUpdates(manual = false) {
-  const platform = getPlatformKey();
-  const url = `${GRS_URL}/v2/releases/${platform}/${updateChannel}/latest`;
-  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-  const showDialog = (opts) => (win ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts));
-  try {
-    const { net } = require('electron');
-    const response = await net.fetch(url);
-    if (!response.ok) {
-      if (manual) {
-        showDialog({ type: 'error', title: 'Update Check', message: 'Failed to check for updates.' });
-      }
-      return;
-    }
-    const data = await response.json();
-    if (data.version && data.version !== app.getVersion()) {
-      // Check if our install format is available
-      if (!data.formats || !data.formats.includes(installType)) {
-        if (manual) {
-          showDialog({ type: 'info', title: 'Update Available', message: `Version ${data.version} is available, but no ${installType} package is provided yet.` });
-        }
-        return;
-      }
-      const result = await showDialog({
-        type: 'info',
-        title: 'Update Available',
-        message: `Version ${data.version} is available! (current: v${app.getVersion()})`,
-        buttons: ['Download & Install', 'Later'],
-        defaultId: 0,
-        cancelId: 1,
-      });
-      if (result.response === 0) {
-        sendToMain('update:download-start', data.version);
-      }
-    } else if (manual) {
-      showDialog({ type: 'info', title: 'Update Check', message: `You're up to date! (v${app.getVersion()})` });
-    }
-  } catch (err) {
-    console.error('Update check failed:', err);
-    if (manual) {
-      showDialog({ type: 'error', title: 'Update Check', message: 'Failed to check for updates.' });
-    }
-  }
-}
-
-let updateDownloadAbort = null;
-
-ipcMain.handle('update:download', async (event, version) => {
-  const platform = getPlatformKey();
-  const url = `${GRS_URL}/v2/releases/${platform}/${updateChannel}/download/${version}/${installType}`;
-  console.log(`[update] Starting download: ${url}`);
-  console.log(`[update] Install type: ${installType}, platform: ${platform}, channel: ${updateChannel}`);
-  const abortController = new AbortController();
-  updateDownloadAbort = abortController;
-  try {
-    sendToMain('update:status', 'Downloading...');
-    const { net } = require('electron');
-    const response = await net.fetch(url, { signal: abortController.signal });
-    if (!response.ok) {
-      console.error(`[update] Download failed: HTTP ${response.status}`);
-      sendToMain('update:status', 'Download failed.');
-      return;
-    }
-
-    // Determine filename from content-disposition or fallback
-    const disposition = response.headers.get('content-disposition') || '';
-    let filename = `gimodi-update-${version}`;
-    const match = disposition.match(/filename="?(.+?)"?$/i);
-    if (match) {
-      filename = match[1];
-    } else {
-      const extMap = { squirrel: '.exe', deb: '.deb', appimage: '.AppImage', zip: '.zip' };
-      filename += extMap[installType] || '';
-    }
-
-    const tmpDir = os.tmpdir();
-    const filePath = path.join(tmpDir, filename);
-    console.log(`[update] Saving to: ${filePath}`);
-
-    const total = parseInt(response.headers.get('content-length'), 10) || 0;
-    const writer = fs.createWriteStream(filePath);
-    let received = 0;
-
-    for await (const chunk of response.body) {
-      if (abortController.signal.aborted) {
-        writer.destroy();
-        try {
-          fs.unlinkSync(filePath);
-        } catch {
-          /* ignored */
-        }
-        return;
-      }
-      received += chunk.length;
-      writer.write(chunk);
-      if (total > 0) {
-        const percent = Math.round((received / total) * 100);
-        sendToMain('update:download-progress', { received, total, percent });
-      }
-    }
-    await new Promise((resolve, reject) => {
-      writer.on('finish', resolve);
-      writer.on('error', reject);
-      writer.end();
-    });
-
-    console.log(`[update] Download complete: ${received} bytes`);
-
-    if (installType === 'appimage' && process.env.APPIMAGE) {
-      // Replace the running AppImage with the downloaded one and relaunch
-      sendToMain('update:status', 'Updating AppImage...');
-      const appImagePath = process.env.APPIMAGE;
-      console.log(`[update] Replacing AppImage: ${appImagePath}`);
-      // Linux allows unlinking an open file — remove first, then move the new one into place
-      try {
-        fs.unlinkSync(appImagePath);
-      } catch (e) {
-        console.log(`[update] Unlink old AppImage: ${e.message}`);
-      }
-      // renameSync fails across filesystems (e.g. /tmp → /home), so fall back to copy+delete
-      try {
-        fs.renameSync(filePath, appImagePath);
-        console.log('[update] Renamed temp file to AppImage path');
-      } catch (e) {
-        console.log(`[update] Rename failed (${e.message}), falling back to copy`);
-        fs.copyFileSync(filePath, appImagePath);
-        fs.unlinkSync(filePath);
-      }
-      fs.chmodSync(appImagePath, 0o755);
-      // Relaunch from the updated AppImage
-      console.log('[update] Relaunching AppImage...');
-      const { spawn } = require('child_process');
-      spawn(appImagePath, [], { detached: true, stdio: 'ignore' }).unref();
-      app.isQuitting = true;
-      app.quit();
-    } else if (installType === 'zip') {
-      // Just show the downloaded file in the file manager
-      sendToMain('update:status', 'Opening download...');
-      shell.showItemInFolder(filePath);
-    } else {
-      sendToMain('update:status', 'Opening installer...');
-      await shell.openPath(filePath);
-      app.isQuitting = true;
-      app.quit();
-    }
-  } catch (err) {
-    if (abortController.signal.aborted) {
-      console.log('[update] Download cancelled by user');
-      return;
-    }
-    console.error('[update] Download error:', err);
-    sendToMain('update:status', 'Download failed.');
-  } finally {
-    updateDownloadAbort = null;
-  }
-});
-
-ipcMain.handle('update:cancel', () => {
-  if (updateDownloadAbort) {
-    updateDownloadAbort.abort();
-    updateDownloadAbort = null;
-    sendToMain('update:status', 'Download cancelled.');
-  }
 });
 
 // Accept self-signed certificates (needed for self-hosted servers with auto-generated certs)
@@ -613,11 +397,11 @@ app.whenReady().then(async () => {
   }
   const updateChannelSetting = appSettingsRepo.getAppSetting('updateChannel');
   if (updateChannelSetting) {
-    updateChannel = updateChannelSetting;
+    updater.setUpdateChannel(updateChannelSetting);
   }
   const updateNotifSetting = appSettingsRepo.getAppSetting('updateNotifications');
   if (updateNotifSetting === '0') {
-    updateNotifications = false;
+    updater.setUpdateNotifications(false);
   }
   const notifModeSetting = appSettingsRepo.getAppSetting('notificationMode');
   if (notifModeSetting) {
@@ -642,7 +426,7 @@ app.whenReady().then(async () => {
   // Check for updates once the window is ready
   mainWindow.webContents.once('did-finish-load', () => {
     buildMenu(false, false);
-    if (updateNotifications) {checkForUpdates();}
+    if (updater.getUpdateNotifications()) {updater.checkForUpdates();}
 
     // Flush any protocol URL received before the window was ready
     if (pendingProtocolUrl) {
@@ -708,7 +492,7 @@ ipcMain.on('menu:action', (_, action, data) => {
       sendToMain('menu:open-unified-settings');
       break;
     case 'check-updates':
-      checkForUpdates(true).catch(() => {});
+      updater.checkForUpdates(true).catch(() => {});
       break;
     case 'disconnect':
       sendToMain('menu:disconnect');
@@ -754,15 +538,13 @@ ipcMain.handle('settings:set-dev-mode', (_, enabled) => {
 });
 
 ipcMain.handle('settings:set-update-channel', (_, channel) => {
-  const valid = ['stable', 'beta', 'nightly'];
-  if (valid.includes(channel)) {
-    updateChannel = channel;
+  if (updater.setUpdateChannel(channel)) {
     appSettingsRepo.setAppSetting('updateChannel', channel);
   }
 });
 
 ipcMain.handle('settings:set-update-notifications', (_, enabled) => {
-  updateNotifications = !!enabled;
+  updater.setUpdateNotifications(enabled);
   appSettingsRepo.setAppSetting('updateNotifications', enabled ? '1' : '0');
 });
 

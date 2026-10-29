@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to build and release, e.g. v1.11.0
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+  NODE_VERSION: '24'
+
+jobs:
+  linux:
+    name: Linux (deb, AppImage, zip)
+    runs-on: ubuntu-24.04
+    # The screen capture module needs PipeWire >= 1.2 headers (SPA_META_SyncTimeline).
+    container: ubuntu:26.04
+    steps:
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates curl git build-essential python3 pkg-config clang libclang-dev \
+            libpipewire-0.3-dev libspa-0.2-dev dpkg-dev fakeroot squashfs-tools file zip unzip xz-utils
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Check that the tag matches package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          test "v$version" = "$TAG" || { echo "::error::Tag $TAG does not match package.json version $version"; exit 1; }
+      - run: npm ci
+      - run: npm test
+      - run: npm run build && npm run build:native
+      - run: npx electron-forge make --platform linux --arch x64 --targets @electron-forge/maker-deb,@reforged/maker-appimage,@electron-forge/maker-zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux
+          if-no-files-found: error
+          path: |
+            out/make/deb/x64/*.deb
+            out/make/AppImage/x64/*.AppImage
+            out/make/zip/linux/x64/*.zip
+
+  windows:
+    name: Windows (Squirrel, zip)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx electron-forge make --platform win32 --arch x64 --targets @electron-forge/maker-squirrel,@electron-forge/maker-zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          if-no-files-found: error
+          path: |
+            out/make/squirrel.windows/x64/*Setup.exe
+            out/make/zip/win32/x64/*.zip
+
+  macos:
+    name: macOS (zip)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx electron-forge make --platform darwin --arch x64 --targets @electron-forge/maker-zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos
+          if-no-files-found: error
+          path: out/make/zip/darwin/x64/*.zip
+
+  release:
+    name: Publish GitHub release
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: Create the release as a draft, upload, then publish
+        run: |
+          mapfile -t files < <(find artifacts -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*.zip' -o -name '*Setup.exe' \) | sort)
+          printf 'Asset: %s\n' "${files[@]}"
+          test "${#files[@]}" -eq 6 || { echo "::error::Expected 6 release files, found ${#files[@]}"; exit 1; }
+          prerelease=()
+          if [[ "$TAG" == *-* ]]; then prerelease=(--prerelease); fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${files[@]}" --clobber
+          else
+            gh release create "$TAG" "${files[@]}" --draft --verify-tag --title "Gimodi ${TAG#v}" --generate-notes "${prerelease[@]}"
+          fi
+          gh release edit "$TAG" --draft=false
