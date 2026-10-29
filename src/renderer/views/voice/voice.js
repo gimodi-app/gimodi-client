@@ -99,6 +99,8 @@ let screenAudioGain = parseInt(rangeScreenVolume.value, 10); // screen audio gai
 let voiceAudioCtx = null; // shared AudioContext for voice consumers (enables boost above 100%)
 let isScreenMaximized = false;
 let isScreenResized = false;
+let pendingScreenClickTimer = null;
+const SCREEN_DOUBLE_CLICK_WINDOW_MS = 300;
 
 const consumerH = createConsumerHandlers({
   audioElements,
@@ -206,6 +208,7 @@ export function initVoiceView(initialClients = [], serverName = '') {
 
   // Screen share viewer controls
   screenVideo.addEventListener('click', onScreenVideoClick);
+  screenVideo.addEventListener('dblclick', onScreenVideoDblClick);
   btnBackToGrid.addEventListener('click', onScreenBackClick);
   btnMaximizeScreen.addEventListener('click', toggleMaximizeScreen);
   btnPopoutScreen.addEventListener('click', togglePopout);
@@ -293,6 +296,8 @@ export function cleanup() {
   btnMaximizeWebcam.removeEventListener('click', toggleMaximizeWebcam);
   btnPopoutWebcam.removeEventListener('click', onPopoutWebcamClick);
   screenVideo.removeEventListener('click', onScreenVideoClick);
+  screenVideo.removeEventListener('dblclick', onScreenVideoDblClick);
+  clearTimeout(pendingScreenClickTimer);
   btnBackToGrid.removeEventListener('click', onScreenBackClick);
   btnMaximizeScreen.removeEventListener('click', toggleMaximizeScreen);
   btnPopoutScreen.removeEventListener('click', togglePopout);
@@ -1255,11 +1260,14 @@ function createScreenTile(clientId, nickname, track, isLocal) {
   addTileResizeHandle(tile);
 
   tile.addEventListener('click', (e) => {
-    const rect = tile.getBoundingClientRect();
-    if (e.clientY > rect.top + rect.height * 0.8) {
-      return;
+    if (!isInScreenTileResizeZone(tile, e)) {
+      deferScreenSingleClick(e, () => focusScreenTile(clientId));
     }
-    focusScreenTile(clientId);
+  });
+  tile.addEventListener('dblclick', (e) => {
+    if (!isInScreenTileResizeZone(tile, e)) {
+      openScreenTileMaximized(clientId);
+    }
   });
 
   mediaGrid.appendChild(tile);
@@ -1300,8 +1308,43 @@ function clearScreenGrid() {
   updateMediaGridVisibility();
 }
 
+/**
+ * Checks whether a pointer event hit the bottom strip of a screen tile reserved for resizing.
+ * @param {HTMLElement} tile - The screen tile element
+ * @param {MouseEvent} e - The pointer event
+ * @returns {boolean} True if the event is inside the resize zone
+ */
+function isInScreenTileResizeZone(tile, e) {
+  const rect = tile.getBoundingClientRect();
+  return e.clientY > rect.top + rect.height * 0.8;
+}
+
+/**
+ * Schedules a single-click action after the double-click window, cancelling any pending one.
+ * A second click of a double-click only cancels, so the dblclick handler alone decides.
+ * @param {MouseEvent} e - The click event
+ * @param {Function} action - The single-click action to run
+ * @returns {void}
+ */
+function deferScreenSingleClick(e, action) {
+  clearTimeout(pendingScreenClickTimer);
+  pendingScreenClickTimer = e.detail === 1 ? setTimeout(action, SCREEN_DOUBLE_CLICK_WINDOW_MS) : null;
+}
+
 function focusScreenTile(clientId) {
   focusStream('screen', clientId);
+}
+
+/**
+ * Opens a screen share from the grid directly in the maximized viewer.
+ * @param {string} clientId - The sharing client's ID, or '__local__' for the own screen
+ * @returns {void}
+ */
+function openScreenTileMaximized(clientId) {
+  focusScreenTile(clientId);
+  if (focusMode) {
+    toggleMaximizeScreen();
+  }
 }
 
 function updateScreenButtons() {
@@ -1331,13 +1374,38 @@ function toggleMaximizeScreen() {
   updateScreenButtons();
 }
 
-function onScreenVideoClick() {
+/**
+ * Handles a click on the screen viewer video, deferred so a double-click does not trigger it.
+ * @param {MouseEvent} e - The click event
+ * @returns {void}
+ */
+function onScreenVideoClick(e) {
+  deferScreenSingleClick(e, applyScreenVideoClick);
+}
+
+/**
+ * Applies the single-click action of the screen viewer: leave fullscreen, restore, or return to the grid.
+ * @returns {void}
+ */
+function applyScreenVideoClick() {
   if (isInBrowserFullscreen(screenShareContainer)) {
     exitBrowserFullscreen();
   } else if (isScreenMaximized) {
     toggleMaximizeScreen();
   } else {
     unfocus();
+  }
+}
+
+/**
+ * Toggles the maximized screen viewer on double-click, or leaves browser fullscreen.
+ * @returns {void}
+ */
+function onScreenVideoDblClick() {
+  if (isInBrowserFullscreen(screenShareContainer)) {
+    exitBrowserFullscreen();
+  } else {
+    toggleMaximizeScreen();
   }
 }
 
