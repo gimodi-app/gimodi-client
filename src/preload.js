@@ -197,7 +197,9 @@ contextBridge.exposeInMainWorld('gimodi', {
     start: (include, exclude) => ipcRenderer.invoke('venmic:start', include, exclude),
     startSystem: (exclude) => ipcRenderer.invoke('venmic:start-system', exclude),
     stop: () => ipcRenderer.invoke('venmic:stop'),
+    diagnose: () => ipcRenderer.invoke('venmic:diagnose'),
   },
+  screenAudioLog: (scope, message, data) => ipcRenderer.send('screen-audio:log', scope, message, data),
   iconCache: {
     get: (address, hash) => ipcRenderer.invoke('icon-cache:get', address, hash),
     save: (address, hash, buffer) => ipcRenderer.invoke('icon-cache:save', address, hash, buffer),

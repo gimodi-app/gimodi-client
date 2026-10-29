@@ -69,6 +69,55 @@ export function createConsumerHandlers(deps) {
   }
 
   /**
+   * Writes the life cycle of a received screen share audio stream to the
+   * diagnostics log, plus its receive stats every 30 seconds until the
+   * consumer closes.
+   *
+   * @param {import('mediasoup-client').Consumer} consumer - Screen audio consumer
+   * @param {AudioContext} audioCtx - Context that plays the stream
+   * @param {string} nickname - Nickname of the sharing user
+   * @returns {void}
+   */
+  function watchScreenAudio(consumer, audioCtx, nickname) {
+    const logEvent = (message, data) => window.gimodi.screenAudioLog?.('viewer', message, { nickname, consumerId: consumer.id, ...data });
+    const track = consumer.track;
+    logEvent('Receiving screen audio', { contextState: audioCtx.state, sinkId: audioCtx.sinkId });
+    track.addEventListener('mute', () => logEvent('Track muted'));
+    track.addEventListener('unmute', () => logEvent('Track unmuted'));
+    track.addEventListener('ended', () => logEvent('Track ended'));
+    audioCtx.addEventListener('statechange', () => logEvent('Audio context state changed', { state: audioCtx.state }));
+    consumer.observer.on('pause', () => logEvent('Consumer paused'));
+    consumer.observer.on('resume', () => logEvent('Consumer resumed'));
+
+    let previous = null;
+    const timer = setInterval(async () => {
+      if (consumer.closed) {
+        clearInterval(timer);
+        logEvent('Consumer closed');
+        return;
+      }
+      try {
+        const stats = [...(await consumer.getStats()).values()].find((stat) => stat.type === 'inbound-rtp') ?? {};
+        const current = { bytes: stats.bytesReceived ?? 0, packets: stats.packetsReceived ?? 0, energy: stats.totalAudioEnergy ?? 0 };
+        const base = previous ?? current;
+        previous = current;
+        logEvent('Receive stats', {
+          bytesDelta: current.bytes - base.bytes,
+          packetsDelta: current.packets - base.packets,
+          energyDelta: Number((current.energy - base.energy).toFixed(6)),
+          packetsLost: stats.packetsLost ?? 0,
+          audioLevel: stats.audioLevel ?? null,
+          contextState: audioCtx.state,
+          trackState: track.readyState,
+          trackMuted: track.muted,
+        });
+      } catch (e) {
+        logEvent('Receive stats failed', { message: e.message });
+      }
+    }, 30000);
+  }
+
+  /**
    * Handles a new mediasoup consumer event. Routes the consumer to the appropriate
    * handler based on its kind (audio/video) and type (voice, screen, webcam, screenAudio).
    *
@@ -123,6 +172,7 @@ export function createConsumerHandlers(deps) {
       }
 
       audioElements.set(consumer.id, { clientId, track, screenAudio: true, audioCtx, gainNode, source });
+      watchScreenAudio(consumer, audioCtx, nickname);
 
       const watchingId = getWatchingScreenClientId();
       if (watchingId && watchingId !== '__local__') {

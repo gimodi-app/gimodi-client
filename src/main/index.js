@@ -19,6 +19,7 @@ const os = require('os');
 const crypto = require('crypto');
 const identity = require('./identity');
 const venmic = require('./venmic');
+const screenAudioLog = require('./screen-audio-log');
 const { createController: createScreencastController } = require('./screencast');
 
 // Database modules
@@ -958,16 +959,43 @@ ipcMain.handle('screencast:start', (event, options) =>
 );
 ipcMain.handle('screencast:stop', () => screencast.stop());
 
+let lastAudioServicePid = null;
+
 /**
  * Get the Chromium "Audio Service" process PID.
  * This is the process that actually outputs audio via PipeWire/PulseAudio.
  * Excluding this PID from venmic capture prevents voice chat echo.
- * (Equibop uses the same approach.)
+ * (Equibop uses the same approach.) Logs when the PID changes, which means
+ * the audio service was restarted.
+ * @returns {string}
  */
 function getAudioServicePid() {
   const metrics = app.getAppMetrics();
   const audioService = metrics.find((proc) => proc.name === 'Audio Service');
-  return audioService?.pid?.toString() ?? '';
+  const pid = audioService?.pid?.toString() ?? '';
+  if (pid !== lastAudioServicePid) {
+    screenAudioLog.log('main', 'Audio Service PID changed', { from: lastAudioServicePid, to: pid });
+    lastAudioServicePid = pid;
+  }
+  return pid;
+}
+
+let lastGraphReport = '';
+
+/**
+ * Inspects the PipeWire graph for the screen share audio and logs the result
+ * whenever it differs from the previous inspection.
+ * @returns {Promise<{problems: string[], summary?: object, error?: string}>}
+ */
+async function diagnoseScreenAudio() {
+  const result = await venmic.inspectGraph(getAudioServicePid());
+  const report = { problems: result.problems ?? [], ...result };
+  const serialized = JSON.stringify(report);
+  if (serialized !== lastGraphReport) {
+    screenAudioLog.log('venmic-graph', report.problems.length ? 'Problems found' : 'Graph changed', report);
+    lastGraphReport = serialized;
+  }
+  return report;
 }
 
 ipcMain.handle('venmic:is-available', () => venmic.isAvailable());
@@ -989,7 +1017,16 @@ ipcMain.handle('venmic:start-system', (_, exclude) => {
   return venmic.startSystem(exclude || [], pid);
 });
 
-ipcMain.handle('venmic:stop', () => venmic.stop());
+ipcMain.handle('venmic:stop', () => {
+  lastGraphReport = '';
+  venmic.stop();
+});
+
+ipcMain.handle('venmic:diagnose', () => diagnoseScreenAudio());
+
+ipcMain.on('screen-audio:log', (_, scope, message, data) => screenAudioLog.log(`renderer:${scope}`, message, data));
+
+app.on('child-process-gone', (_, details) => screenAudioLog.log('main', 'Child process gone', details));
 
 // Desktop notifications
 ipcMain.handle('show-notification', (event, options) => {
