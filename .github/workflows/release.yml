@@ -3,6 +3,8 @@ name: Release
 on:
   push:
     tags: ['v*']
+    # Build-only runs for testing the workflow, without a release.
+    branches: ['ci/**']
   workflow_dispatch:
     inputs:
       tag:
@@ -18,7 +20,12 @@ concurrency:
 
 env:
   TAG: ${{ inputs.tag || github.ref_name }}
+  IS_RELEASE: ${{ github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' }}
   NODE_VERSION: '24'
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   linux:
@@ -44,20 +51,17 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - name: Check that the tag matches package.json
+        if: env.IS_RELEASE == 'true'
         run: |
           version="$(node -p "require('./package.json').version")"
           test "v$version" = "$TAG" || { echo "::error::Tag $TAG does not match package.json version $version"; exit 1; }
-      - run: npm ci
-      - run: npm test
-      - run: npm run build && npm run build:native
-      - run: npx electron-forge make --platform linux --arch x64 --targets @electron-forge/maker-deb,@reforged/maker-appimage,@electron-forge/maker-zip
-      - name: Report the npm log
+      - run: npm ci 2>&1 | tee -a ci.log
+      - run: npm test 2>&1 | tee -a ci.log
+      - run: (npm run build && npm run build:native) 2>&1 | tee -a ci.log
+      - run: npx electron-forge make --platform linux --arch x64 --targets @electron-forge/maker-deb,@reforged/maker-appimage,@electron-forge/maker-zip 2>&1 | tee -a ci.log
+      - name: Report the build log
         if: failure()
-        shell: bash
-        run: |
-          log="$(ls -t "$(npm config get cache)"/_logs/*.log 2>/dev/null | head -1)"
-          test -n "$log" || exit 0
-          echo "::error title=npm log::$(tail -n 40 "$log" | cut -c1-240 | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')"
+        run: echo "::error title=Build log::$(tail -n 60 ci.log | cut -c1-240 | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')"
       - uses: actions/upload-artifact@v7
         with:
           name: linux
@@ -81,20 +85,17 @@ jobs:
       # The postinstall electron-rebuild compiles better-sqlite3 from source, which fails on the
       # Windows runner; the app loads the prebuilt binary that better-sqlite3 ships instead.
       - name: npm ci
-        shell: bash
         run: |
-          npm ci --ignore-scripts
-          node node_modules/electron/install.js
-          (cd node_modules/electron-winstaller && node script/select-7z-arch.js)
-      - run: npm run build
-      - run: npx electron-forge make --platform win32 --arch x64 --targets @electron-forge/maker-squirrel,@electron-forge/maker-zip
-      - name: Report the npm log
+          {
+            npm ci --ignore-scripts
+            node node_modules/electron/install.js
+            (cd node_modules/electron-winstaller && node script/select-7z-arch.js)
+          } 2>&1 | tee -a ci.log
+      - run: npm run build 2>&1 | tee -a ci.log
+      - run: npx electron-forge make --platform win32 --arch x64 --targets @electron-forge/maker-squirrel,@electron-forge/maker-zip 2>&1 | tee -a ci.log
+      - name: Report the build log
         if: failure()
-        shell: bash
-        run: |
-          log="$(ls -t "$(npm config get cache)"/_logs/*.log 2>/dev/null | head -1)"
-          test -n "$log" || exit 0
-          echo "::error title=npm log::$(tail -n 40 "$log" | cut -c1-240 | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')"
+        run: echo "::error title=Build log::$(tail -n 60 ci.log | cut -c1-240 | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')"
       - uses: actions/upload-artifact@v7
         with:
           name: windows
@@ -114,16 +115,12 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
-      - run: npm run build
-      - run: npx electron-forge make --platform darwin --arch x64 --targets @electron-forge/maker-zip
-      - name: Report the npm log
+      - run: npm ci 2>&1 | tee -a ci.log
+      - run: npm run build 2>&1 | tee -a ci.log
+      - run: npx electron-forge make --platform darwin --arch x64 --targets @electron-forge/maker-zip 2>&1 | tee -a ci.log
+      - name: Report the build log
         if: failure()
-        shell: bash
-        run: |
-          log="$(ls -t "$(npm config get cache)"/_logs/*.log 2>/dev/null | head -1)"
-          test -n "$log" || exit 0
-          echo "::error title=npm log::$(tail -n 40 "$log" | cut -c1-240 | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')"
+        run: echo "::error title=Build log::$(tail -n 60 ci.log | cut -c1-240 | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')"
       - uses: actions/upload-artifact@v7
         with:
           name: macos
@@ -133,6 +130,7 @@ jobs:
   release:
     name: Publish GitHub release
     needs: [linux, windows, macos]
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ github.token }}
