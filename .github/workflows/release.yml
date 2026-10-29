@@ -51,6 +51,13 @@ jobs:
       - run: npm test
       - run: npm run build && npm run build:native
       - run: npx electron-forge make --platform linux --arch x64 --targets @electron-forge/maker-deb,@reforged/maker-appimage,@electron-forge/maker-zip
+      - name: Report the npm log
+        if: failure()
+        shell: bash
+        run: |
+          log="$(ls -t "$(npm config get cache)"/_logs/*.log 2>/dev/null | head -1)"
+          test -n "$log" || exit 0
+          echo "::error title=npm log::$(tail -n 40 "$log" | cut -c1-240 | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')"
       - uses: actions/upload-artifact@v7
         with:
           name: linux
@@ -71,9 +78,23 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
+      # The postinstall electron-rebuild compiles better-sqlite3 from source, which fails on the
+      # Windows runner; the app loads the prebuilt binary that better-sqlite3 ships instead.
+      - name: npm ci
+        shell: bash
+        run: |
+          npm ci --ignore-scripts
+          node node_modules/electron/install.js
+          (cd node_modules/electron-winstaller && node script/select-7z-arch.js)
       - run: npm run build
       - run: npx electron-forge make --platform win32 --arch x64 --targets @electron-forge/maker-squirrel,@electron-forge/maker-zip
+      - name: Report the npm log
+        if: failure()
+        shell: bash
+        run: |
+          log="$(ls -t "$(npm config get cache)"/_logs/*.log 2>/dev/null | head -1)"
+          test -n "$log" || exit 0
+          echo "::error title=npm log::$(tail -n 40 "$log" | cut -c1-240 | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')"
       - uses: actions/upload-artifact@v7
         with:
           name: windows
@@ -96,6 +117,13 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx electron-forge make --platform darwin --arch x64 --targets @electron-forge/maker-zip
+      - name: Report the npm log
+        if: failure()
+        shell: bash
+        run: |
+          log="$(ls -t "$(npm config get cache)"/_logs/*.log 2>/dev/null | head -1)"
+          test -n "$log" || exit 0
+          echo "::error title=npm log::$(tail -n 40 "$log" | cut -c1-240 | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')"
       - uses: actions/upload-artifact@v7
         with:
           name: macos
