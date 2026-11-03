@@ -5,6 +5,7 @@ import { customAlert, customConfirm } from '../../services/dialogs.js';
 import { getFeedbackVolume } from '../server/server.js';
 import { createConsumerHandlers } from './voice-consumers.js';
 import createWebcamHandlers from './voice-webcam.js';
+import { attachVideoZoom } from './screen-zoom.js';
 
 const log = (...args) => console.log('[voice-view]', ...args);
 
@@ -100,6 +101,7 @@ let voiceAudioCtx = null; // shared AudioContext for voice consumers (enables bo
 let isScreenMaximized = false;
 let isScreenResized = false;
 let pendingScreenClickTimer = null;
+let screenZoom = null;
 const SCREEN_DOUBLE_CLICK_WINDOW_MS = 300;
 
 const consumerH = createConsumerHandlers({
@@ -214,6 +216,8 @@ export function initVoiceView(initialClients = [], serverName = '') {
   btnPopoutScreen.addEventListener('click', togglePopout);
   rangeScreenVolume.addEventListener('input', onScreenVolumeChange);
   screenResizeHandle.addEventListener('mousedown', onResizeHandleMouseDown);
+  screenZoom?.detach();
+  screenZoom = attachVideoZoom(screenVideo, () => isInBrowserFullscreen(screenShareContainer));
 
   // Webcam viewer controls
   webcamViewerVideo.addEventListener('click', onWebcamViewerVideoClick);
@@ -228,6 +232,7 @@ export function initVoiceView(initialClients = [], serverName = '') {
 
   // Update buttons when exiting browser fullscreen (e.g. via Escape)
   document.addEventListener('fullscreenchange', () => {
+    screenZoom?.reset();
     updateScreenButtons();
     updateWebcamButtons();
     webcamH.repositionSelfPreviewForFullscreen();
@@ -303,6 +308,8 @@ export function cleanup() {
   btnPopoutScreen.removeEventListener('click', togglePopout);
   rangeScreenVolume.removeEventListener('input', onScreenVolumeChange);
   screenResizeHandle.removeEventListener('mousedown', onResizeHandleMouseDown);
+  screenZoom?.detach();
+  screenZoom = null;
   window.removeEventListener('mousemove', onResizeHandleMouseMove);
   window.removeEventListener('mouseup', onResizeHandleMouseUp);
   webcamResizeHandle.removeEventListener('mousedown', onWebcamResizeHandleMouseDown);

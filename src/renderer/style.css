@@ -2451,6 +2451,14 @@ label:has(input[type='checkbox']) {
   object-fit: contain;
 }
 
+#screen-share-container:fullscreen video.zoomed {
+  cursor: grab;
+}
+
+#screen-share-container:fullscreen video.zoomed.panning {
+  cursor: grabbing;
+}
+
 #screen-share-container.popped-out video {
   display: none;
 }
