@@ -206,7 +206,8 @@ export function attachVideoZoom(video, isActive) {
   video.addEventListener('dblclick', swallowClickAfterDrag, true);
   video.addEventListener('resize', reclamp);
   video.addEventListener('loadstart', reset);
-  window.addEventListener('resize', reclamp);
+  const elementResizeObserver = new ResizeObserver(reclamp);
+  elementResizeObserver.observe(video);
 
   const detach = () => {
     reset();
@@ -216,7 +217,7 @@ export function attachVideoZoom(video, isActive) {
     video.removeEventListener('dblclick', swallowClickAfterDrag, true);
     video.removeEventListener('resize', reclamp);
     video.removeEventListener('loadstart', reset);
-    window.removeEventListener('resize', reclamp);
+    elementResizeObserver.disconnect();
   };
 
   return { reset, detach };

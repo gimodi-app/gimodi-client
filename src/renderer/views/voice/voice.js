@@ -217,7 +217,7 @@ export function initVoiceView(initialClients = [], serverName = '') {
   rangeScreenVolume.addEventListener('input', onScreenVolumeChange);
   screenResizeHandle.addEventListener('mousedown', onResizeHandleMouseDown);
   screenZoom?.detach();
-  screenZoom = attachVideoZoom(screenVideo, () => isInBrowserFullscreen(screenShareContainer));
+  screenZoom = attachVideoZoom(screenVideo, () => !screenShareContainer.classList.contains('popped-out'));
 
   // Webcam viewer controls
   webcamViewerVideo.addEventListener('click', onWebcamViewerVideoClick);

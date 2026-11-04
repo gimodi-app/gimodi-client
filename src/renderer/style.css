@@ -2451,11 +2451,11 @@ label:has(input[type='checkbox']) {
   object-fit: contain;
 }
 
-#screen-share-container:fullscreen video.zoomed {
+#screen-share-container video.zoomed {
   cursor: grab;
 }
 
-#screen-share-container:fullscreen video.zoomed.panning {
+#screen-share-container video.zoomed.panning {
   cursor: grabbing;
 }
 
